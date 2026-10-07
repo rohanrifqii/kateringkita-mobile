@@ -10,6 +10,9 @@ import 'providers/cart_provider.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/signup_screen.dart';
+import 'screens/forgot_password_screen.dart';
+import 'screens/verify_code_screen.dart';
+import 'screens/reset_password_screen.dart';
 import 'screens/main_navigation_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/search_screen.dart';
@@ -57,6 +60,9 @@ class KateringKitaApp extends StatelessWidget {
         AppRoutes.splash: (context) => const SplashScreen(),
         AppRoutes.login: (context) => const LoginScreen(),
         AppRoutes.signUp: (context) => const SignUpScreen(),
+                AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
+        AppRoutes.verifyCode: (context) => const VerifyCodeScreen(),
+        AppRoutes.resetPassword: (context) => const ResetPasswordScreen(),
         AppRoutes.mainNav: (context) => const MainNavigationScreen(),
         AppRoutes.home: (context) => const HomeScreen(),
         AppRoutes.search: (context) => const SearchScreen(),

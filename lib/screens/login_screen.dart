@@ -88,9 +88,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Center(
                 child: TextButton(
                   onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Fitur reset password via email UB')),
-                    );
+                    Navigator.pushNamed(context, AppRoutes.forgotPassword);
                   },
                   child: Text(
                     'Forgot Password?',

@@ -17,10 +17,10 @@ class CustomBottomNavbar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-      height: 72,
+      height: 74,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(36),
+        color: Colors.white.withValues(alpha: 0.92),
+        borderRadius: BorderRadius.circular(37),
         border: Border.all(
           color: Colors.white.withValues(alpha: 0.9),
           width: 1.5,
@@ -39,7 +39,7 @@ class CustomBottomNavbar extends StatelessWidget {
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(36),
+        borderRadius: BorderRadius.circular(37),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
           child: Padding(
@@ -49,27 +49,48 @@ class CustomBottomNavbar extends StatelessWidget {
               children: [
                 _buildNavItem(
                   index: 0,
-                  icon: Icons.home_rounded,
                   label: 'Home',
+                  iconBuilder: (color, size) => FigmaHomeIcon(
+                    color: color,
+                    size: size,
+                  ),
                 ),
                 _buildNavItem(
                   index: 1,
-                  icon: Icons.receipt_long_rounded,
                   label: 'Orders',
+                  iconBuilder: (color, size) => Icon(
+                    Icons.assignment_outlined,
+                    color: color,
+                    size: size,
+                  ),
                 ),
-                _buildAiNavItem(
+                _buildNavItem(
                   index: 2,
-                  label: 'AI Assistant',
+                  label: 'AI',
+                  iconBuilder: (color, size) => FigmaAiIcon(
+                    color: color,
+                    size: size,
+                  ),
                 ),
                 _buildNavItem(
                   index: 3,
-                  icon: Icons.favorite_rounded,
                   label: 'Liked',
+                  iconBuilder: (color, size) => Icon(
+                    currentIndex == 3
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    color: color,
+                    size: size,
+                  ),
                 ),
                 _buildNavItem(
                   index: 4,
-                  icon: Icons.person_rounded,
                   label: 'Profile',
+                  iconBuilder: (color, size) => Icon(
+                    Icons.account_circle_outlined,
+                    color: color,
+                    size: size,
+                  ),
                 ),
               ],
             ),
@@ -81,103 +102,230 @@ class CustomBottomNavbar extends StatelessWidget {
 
   Widget _buildNavItem({
     required int index,
-    required IconData icon,
     required String label,
+    required Widget Function(Color color, double size) iconBuilder,
   }) {
     final isSelected = currentIndex == index;
-    return GestureDetector(
-      onTap: () => onTap(index),
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        padding: isSelected
-            ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
-            : const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        decoration: isSelected
-            ? BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(20),
-              )
-            : null,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: isSelected ? AppColors.primary : AppColors.textSecondary.withValues(alpha: 0.7),
-            ),
-            if (isSelected) ...[
-              const SizedBox(height: 3),
-              Text(
-                label,
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: AppColors.primary,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 11,
+    const inactiveColor = Color(0xFF2E2A27);
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => onTap(index),
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          alignment: Alignment.center,
+          child: isSelected
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withValues(alpha: 0.35),
+                            blurRadius: 8,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: iconBuilder(Colors.white, 20),
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                )
+              : Container(
+                  height: 56,
+                  alignment: Alignment.center,
+                  child: iconBuilder(inactiveColor, 24),
                 ),
-              ),
-            ],
-          ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildAiNavItem({
-    required int index,
-    required String label,
-  }) {
-    final isSelected = currentIndex == index;
-    return GestureDetector(
-      onTap: () => onTap(index),
-      behavior: HitTestBehavior.opaque,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              gradient: isSelected
-                  ? AppColors.primaryGradient
-                  : const LinearGradient(
-                      colors: [AppColors.secondaryBg, AppColors.secondaryBg],
-                    ),
-              shape: BoxShape.circle,
-              boxShadow: isSelected
-                  ? [
-                      BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.4),
-                        blurRadius: 10,
-                        offset: const Offset(0, 3),
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Icon(
-              Icons.auto_awesome,
-              size: 20,
-              color: isSelected
-                  ? Colors.white
-                  : AppColors.textSecondary.withValues(alpha: 0.7),
-            ),
-          ),
-          if (isSelected) ...[
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.primary,
-                fontWeight: FontWeight.w700,
-                fontSize: 10,
-              ),
-            ),
-          ],
-        ],
+/// Custom vector painter representing the exact Home icon from Figma
+class FigmaHomeIcon extends StatelessWidget {
+  final Color color;
+  final double size;
+
+  const FigmaHomeIcon({
+    super.key,
+    required this.color,
+    this.size = 24,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        size: Size(size, size),
+        painter: _FigmaHomeIconPainter(color: color),
       ),
     );
+  }
+}
+
+class _FigmaHomeIconPainter extends CustomPainter {
+  final Color color;
+
+  _FigmaHomeIconPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.9
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final w = size.width;
+    final h = size.height;
+
+    final sx = w / 24.0;
+    final sy = h / 24.0;
+
+    // 1. Top curved arc
+    final topArc = Path();
+    topArc.moveTo(7.5 * sx, 4.2 * sy);
+    topArc.quadraticBezierTo(12.0 * sx, 1.8 * sy, 16.5 * sx, 4.2 * sy);
+    canvas.drawPath(topArc, paint);
+
+    // 2. Main dome structure with arched door notch at the bottom center
+    final body = Path();
+    body.moveTo(10.0 * sx, 20.5 * sy);
+    body.lineTo(5.5 * sx, 20.5 * sy);
+    body.lineTo(5.5 * sx, 12.0 * sy);
+    body.quadraticBezierTo(5.5 * sx, 6.8 * sy, 12.0 * sx, 6.8 * sy);
+    body.quadraticBezierTo(18.5 * sx, 6.8 * sy, 18.5 * sy, 12.0 * sy);
+    body.lineTo(18.5 * sx, 20.5 * sy);
+    body.lineTo(14.0 * sx, 20.5 * sy);
+    body.lineTo(14.0 * sx, 17.5 * sy);
+    body.quadraticBezierTo(12.0 * sx, 15.5 * sy, 10.0 * sx, 17.5 * sy);
+    body.lineTo(10.0 * sx, 20.5 * sy);
+
+    canvas.drawPath(body, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _FigmaHomeIconPainter oldDelegate) {
+    return oldDelegate.color != color;
+  }
+}
+
+/// Custom vector painter representing the upright, centered AI lightbulb icon with '+' sparkle
+class FigmaAiIcon extends StatelessWidget {
+  final Color color;
+  final double size;
+
+  const FigmaAiIcon({
+    super.key,
+    required this.color,
+    this.size = 24,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        size: Size(size, size),
+        painter: _FigmaAiIconPainter(color: color),
+      ),
+    );
+  }
+}
+
+class _FigmaAiIconPainter extends CustomPainter {
+  final Color color;
+
+  _FigmaAiIconPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.9
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final w = size.width;
+    final h = size.height;
+
+    final sx = w / 24.0;
+    final sy = h / 24.0;
+
+    // Centered bulb body: cx = 11.2 keeps the whole composition (bulb + plus sign) centered at 12.0
+    const cx = 11.2;
+    const r = 4.8;
+
+    // 1. Bulb dome and neck
+    final bulbPath = Path();
+    bulbPath.moveTo((cx - 2.2) * sx, 15.6 * sy);
+    bulbPath.lineTo((cx - 2.6) * sx, 12.8 * sy);
+    bulbPath.arcToPoint(
+      Offset((cx + 2.6) * sx, 12.8 * sy),
+      radius: Radius.circular(r * sx),
+      largeArc: true,
+      clockwise: true,
+    );
+    bulbPath.lineTo((cx + 2.2) * sx, 15.6 * sy);
+    bulbPath.lineTo((cx - 2.2) * sx, 15.6 * sy);
+    canvas.drawPath(bulbPath, paint);
+
+    // 2. Base screw ridge
+    canvas.drawLine(
+      Offset((cx - 1.6) * sx, 17.6 * sy),
+      Offset((cx + 1.6) * sx, 17.6 * sy),
+      paint,
+    );
+
+    // 3. Bottom rounded cap
+    final cap = Path();
+    cap.moveTo((cx - 1.0) * sx, 19.3 * sy);
+    cap.quadraticBezierTo(cx * sx, 20.6 * sy, (cx + 1.0) * sx, 19.3 * sy);
+    canvas.drawPath(cap, paint);
+
+    // 4. Upright '+' sparkle at top-right
+    const plusX = 17.6;
+    const plusY = 5.2;
+    canvas.drawLine(
+      Offset((plusX - 1.8) * sx, plusY * sy),
+      Offset((plusX + 1.8) * sx, plusY * sy),
+      paint,
+    );
+    canvas.drawLine(
+      Offset(plusX * sx, (plusY - 1.8) * sy),
+      Offset(plusX * sx, (plusY + 1.8) * sy),
+      paint,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _FigmaAiIconPainter oldDelegate) {
+    return oldDelegate.color != color;
   }
 }

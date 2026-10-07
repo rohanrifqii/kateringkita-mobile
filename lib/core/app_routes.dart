@@ -2,6 +2,9 @@ class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
   static const String signUp = '/sign-up';
+    static const String forgotPassword = '/forgot-password';
+  static const String verifyCode = '/verify-code';
+  static const String resetPassword = '/reset-password';
   static const String mainNav = '/main-nav';
   static const String home = '/home';
   static const String search = '/search';
