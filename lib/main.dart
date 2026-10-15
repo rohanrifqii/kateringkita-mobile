@@ -60,7 +60,7 @@ class KateringKitaApp extends StatelessWidget {
         AppRoutes.splash: (context) => const SplashScreen(),
         AppRoutes.login: (context) => const LoginScreen(),
         AppRoutes.signUp: (context) => const SignUpScreen(),
-                AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
+        AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
         AppRoutes.verifyCode: (context) => const VerifyCodeScreen(),
         AppRoutes.resetPassword: (context) => const ResetPasswordScreen(),
         AppRoutes.mainNav: (context) => const MainNavigationScreen(),
