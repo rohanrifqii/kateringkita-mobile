@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import '../core/app_colors.dart';
-import '../core/app_routes.dart';
-import '../core/app_text_styles.dart';
-import '../models/product_model.dart';
-import '../widgets/primary_button.dart';
+import '../../core/app_colors.dart';
+import '../../core/app_routes.dart';
+import '../../core/app_text_styles.dart';
+import '../../data/liked_store.dart';
+import '../../models/product_model.dart';
+import '../../widgets/primary_button.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final ProductModel? product;
@@ -17,7 +18,6 @@ class ProductDetailScreen extends StatefulWidget {
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late ProductModel _product;
   int _selectedOptionIndex = 0;
-  bool _isLiked = true;
 
   @override
   void didChangeDependencies() {
@@ -146,12 +146,16 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            Text(
-                              '${_product.rating} (${_product.reviewCount} reviews) • Terlaris Danus UB',
-                              style: AppTextStyles.bodySmall.copyWith(
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
+                            Expanded(
+                              child: Text(
+                                '${_product.rating} (${_product.reviewCount} reviews) • Terlaris Danus UB',
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12,
+                                ),
                               ),
                             ),
                           ],
@@ -280,16 +284,34 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                       ],
                     ),
-                    child: IconButton(
-                      icon: Icon(
-                        _isLiked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                        size: 20,
-                        color: _isLiked ? AppColors.danger : AppColors.textPrimary,
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _isLiked = !_isLiked;
-                        });
+                    child: ValueListenableBuilder<Set<String>>(
+                      valueListenable: LikedStore.likedNotifier,
+                      builder: (context, likedIds, child) {
+                        final isLiked = likedIds.contains(_product.id);
+                        return IconButton(
+                          icon: Icon(
+                            isLiked
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                            size: 20,
+                            color: isLiked
+                                ? AppColors.danger
+                                : AppColors.textPrimary,
+                          ),
+                          onPressed: () async {
+                            final nowLiked =
+                                await LikedStore.toggleLike(_product.id);
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(nowLiked
+                                    ? 'Ditambahkan ke favorit: ${_product.name}'
+                                    : 'Dihapus dari favorit: ${_product.name}'),
+                                duration: const Duration(seconds: 1),
+                              ),
+                            );
+                          },
+                        );
                       },
                     ),
                   ),

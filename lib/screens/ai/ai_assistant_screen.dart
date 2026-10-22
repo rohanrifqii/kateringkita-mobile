@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import '../core/app_colors.dart';
-import '../core/app_routes.dart';
-import '../core/app_text_styles.dart';
-import '../models/product_model.dart';
-import '../widgets/primary_button.dart';
+import 'package:provider/provider.dart';
+import '../../core/app_colors.dart';
+import '../../core/app_routes.dart';
+import '../../core/app_text_styles.dart';
+import '../../data/app_database.dart';
+import '../../data/auth_repository.dart';
+import '../../models/product_model.dart';
+import '../../widgets/primary_button.dart';
 
 class AIAssistantScreen extends StatefulWidget {
   const AIAssistantScreen({super.key});
@@ -15,6 +18,23 @@ class AIAssistantScreen extends StatefulWidget {
 class _AIAssistantScreenState extends State<AIAssistantScreen> {
   final TextEditingController _promptController = TextEditingController();
   int _selectedChipIndex = 0;
+  String _userName = 'Mahasiswa';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserName();
+  }
+
+  Future<void> _loadUserName() async {
+    final user = await AuthRepository(context.read<AppDb>()).currentUser();
+    if (!mounted) return;
+    if (user != null && user.fullName.isNotEmpty) {
+      setState(() {
+        _userName = user.fullName;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -82,7 +102,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Halo Abdurrahim! ✨',
+                            'Halo $_userName! ✨',
                             style: AppTextStyles.h4.copyWith(
                               fontSize: 15,
                               color: AppColors.textPrimary,
@@ -101,63 +121,66 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    // Quick Chips
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => setState(() => _selectedChipIndex = 0),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: _selectedChipIndex == 0
-                                  ? AppColors.primary
-                                  : AppColors.surface,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
+                    // Quick Chips (scrollable horizontal on small devices)
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          GestureDetector(
+                            onTap: () => setState(() => _selectedChipIndex = 0),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
                                 color: _selectedChipIndex == 0
                                     ? AppColors.primary
-                                    : AppColors.cardBorder,
+                                    : AppColors.surface,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: _selectedChipIndex == 0
+                                      ? AppColors.primary
+                                      : AppColors.cardBorder,
+                                ),
                               ),
-                            ),
-                            child: Text(
-                              'Paket Danus 50 Porsi',
-                              style: AppTextStyles.bodySmall.copyWith(
-                                color: _selectedChipIndex == 0
-                                    ? Colors.white
-                                    : AppColors.textPrimary,
-                                fontWeight: FontWeight.w600,
+                              child: Text(
+                                'Paket Danus 50 Porsi',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: _selectedChipIndex == 0
+                                      ? Colors.white
+                                      : AppColors.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        GestureDetector(
-                          onTap: () => setState(() => _selectedChipIndex = 1),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: _selectedChipIndex == 1
-                                  ? AppColors.primary
-                                  : AppColors.surface,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
+                          const SizedBox(width: 8),
+                          GestureDetector(
+                            onTap: () => setState(() => _selectedChipIndex = 1),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
                                 color: _selectedChipIndex == 1
                                     ? AppColors.primary
-                                    : AppColors.cardBorder,
+                                    : AppColors.surface,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: _selectedChipIndex == 1
+                                      ? AppColors.primary
+                                      : AppColors.cardBorder,
+                                ),
                               ),
-                            ),
-                            child: Text(
-                              'Hitung HPP & Untung',
-                              style: AppTextStyles.bodySmall.copyWith(
-                                color: _selectedChipIndex == 1
-                                    ? Colors.white
-                                    : AppColors.textPrimary,
-                                fontWeight: FontWeight.w600,
+                              child: Text(
+                                'Hitung HPP & Untung',
+                                style: AppTextStyles.bodySmall.copyWith(
+                                  color: _selectedChipIndex == 1
+                                      ? Colors.white
+                                      : AppColors.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 18),
 
@@ -183,10 +206,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(
-                                'Rekomendasi Paket Danus #1',
-                                style: AppTextStyles.h4.copyWith(fontSize: 14),
+                              Expanded(
+                                child: Text(
+                                  'Rekomendasi Paket Danus #1',
+                                  style: AppTextStyles.h4.copyWith(fontSize: 14),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
+                              const SizedBox(width: 8),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
@@ -374,6 +401,11 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                                   fontSize: 13,
                                 ),
                                 border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                errorBorder: InputBorder.none,
+                                disabledBorder: InputBorder.none,
+                                filled: false,
                                 contentPadding: EdgeInsets.zero,
                               ),
                             ),

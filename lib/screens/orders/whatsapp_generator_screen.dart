@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../core/app_colors.dart';
-import '../core/app_routes.dart';
-import '../core/app_text_styles.dart';
-import '../widgets/primary_button.dart';
+import '../../core/app_colors.dart';
+import '../../core/app_routes.dart';
+import '../../core/app_text_styles.dart';
+import '../../models/product_model.dart';
+import '../../widgets/primary_button.dart';
 
 class WhatsAppGeneratorScreen extends StatefulWidget {
   final Map<String, dynamic>? orderDetails;
@@ -16,20 +17,48 @@ class WhatsAppGeneratorScreen extends StatefulWidget {
 
 class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
   late TextEditingController _messageController;
+  bool _initialized = false;
+  ProductModel? _product;
 
   @override
   void initState() {
     super.initState();
-    _messageController = TextEditingController(
-      text: 'Halo Admin KateringKita! \n\n'
+    _messageController = TextEditingController();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      final map = (args is Map<String, dynamic>)
+          ? args
+          : (widget.orderDetails ?? <String, dynamic>{});
+
+      final prod = map['product'] as ProductModel? ?? ProductData.defaultProduct;
+      final qty = map['quantity'] as int? ?? 1;
+      final tot = (map['total'] as num?)?.toDouble() ?? prod.price;
+      final code = map['orderCode'] as String? ?? '#KK-2026-089';
+      final name = map['name'] as String? ?? 'Mahasiswa UB';
+      final phone = map['phone'] as String? ?? '-';
+      final location = map['location'] as String? ?? 'Gedung Vokasi UB (Lt. 2)';
+      final note = map['note'] as String? ?? '-';
+
+      _product = prod;
+
+      _messageController.text =
+          'Halo Admin KateringKita! 👋\n\n'
           'Saya ingin konfirmasi pesanan:\n'
-          '• Menu: Lumpia Diego (1 Porsi)\n'
-          '• Total: \$129.99\n'
-          '• Pemesan: Abdurrahim (0812-3456-7890)\n'
-          '• Lokasi: Gedung Vokasi UB Lt. 1\n'
-          '• Catatan: Sambal dipisah ya\n\n'
-          'Mohon diproses ya kak, terima kasih! 🙏',
-    );
+          '• Kode Pesanan: $code\n'
+          '• Menu: ${prod.name} ($qty Porsi)\n'
+          '• Total: \$${tot.toStringAsFixed(2)}\n'
+          '• Pemesan: $name ($phone)\n'
+          '• Titik Temu: $location\n'
+          '• Catatan: $note\n\n'
+          'Mohon segera diproses ya kak, terima kasih! 🙏';
+
+      _initialized = true;
+    }
   }
 
   @override
@@ -165,6 +194,57 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+
+              if (_product != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppColors.cardBorder),
+                  ),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Image.asset(
+                          _product!.image,
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            width: 48,
+                            height: 48,
+                            color: AppColors.secondaryBg,
+                            child: const Icon(Icons.fastfood, size: 24, color: AppColors.textMuted),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _product!.name,
+                              style: AppTextStyles.h4.copyWith(fontSize: 14),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Penjual: ${_product!.vendor}',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: AppColors.textSecondary,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
 
               // Preview Card
               Text(

@@ -1,13 +1,39 @@
 import 'package:flutter/material.dart';
-import '../core/app_colors.dart';
-import '../core/app_routes.dart';
-import '../core/app_text_styles.dart';
+import 'package:provider/provider.dart';
+import '../../core/app_colors.dart';
+import '../../core/app_routes.dart';
+import '../../core/app_text_styles.dart';
+import '../../data/app_database.dart';
+import '../../data/auth_repository.dart';
+import '../../data/settings_store.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
   @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  User? _user;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final user = await AuthRepository(context.read<AppDb>()).currentUser();
+    if (!mounted) return;
+    setState(() => _user = user);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final name = _user?.fullName ?? '...';
+    final email = _user?.email ?? '';
+    final phone = _user?.phone ?? '';
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -61,12 +87,12 @@ class ProfileScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Abdurrahim',
+                            name,
                             style: AppTextStyles.h3.copyWith(fontSize: 16),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Mahasiswa Vokasi TI • Univ Brawijaya',
+                            email,
                             style: AppTextStyles.bodySmall.copyWith(
                               color: AppColors.textSecondary,
                               fontSize: 11,
@@ -80,7 +106,7 @@ class ProfileScreen extends StatelessWidget {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              'Danus Coordinator',
+                              phone,
                               style: AppTextStyles.badge.copyWith(
                                 color: AppColors.primary,
                                 fontSize: 10,
@@ -102,7 +128,7 @@ class ProfileScreen extends StatelessWidget {
                 icon: Icons.person_outline_rounded,
                 onTap: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Akun: Abdurrahim (0812-3456-7890)')),
+                    SnackBar(content: Text('Akun: $name ($phone) • $email')),
                   );
                 },
               ),
@@ -110,9 +136,32 @@ class ProfileScreen extends StatelessWidget {
               _buildMenuItem(
                 title: 'Titik Temu Kampus Favorit',
                 icon: Icons.location_on_outlined,
-                onTap: () {
+                onTap: () async {
+                  const options = [
+                    'Gedung Vokasi UB (Lt. 2)',
+                    'Perpustakaan Pusat UB',
+                    'Kantin Vokasi',
+                  ];
+                  final current = await SettingsStore.loadMeetingPoint();
+                  if (!context.mounted) return;
+                  final picked = await showDialog<String>(
+                    context: context,
+                    builder: (ctx) => SimpleDialog(
+                      title: const Text('Titik Temu Favorit'),
+                      children: [
+                        for (final o in options)
+                          SimpleDialogOption(
+                            onPressed: () => Navigator.pop(ctx, o),
+                            child: Text(o == current ? '✓ $o' : o),
+                          ),
+                      ],
+                    ),
+                  );
+                  if (picked == null) return;
+                  await SettingsStore.saveMeetingPoint(picked);
+                  if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Titik temu aktif: Gedung Vokasi UB (Lt. 2)')),
+                    SnackBar(content: Text('Titik temu aktif: $picked')),
                   );
                 },
               ),
@@ -170,10 +219,12 @@ class ProfileScreen extends StatelessWidget {
                             backgroundColor: AppColors.danger,
                             foregroundColor: Colors.white,
                           ),
-                          onPressed: () {
-                            Navigator.pop(context);
-                            Navigator.pushNamedAndRemoveUntil(
-                              context,
+                          onPressed: () async {
+                            final nav = Navigator.of(context);
+                            final repo = AuthRepository(context.read<AppDb>());
+                            await repo.logout(); // hapus sesi dari secure storage
+                            nav.pop();
+                            nav.pushNamedAndRemoveUntil(
                               AppRoutes.login,
                               (route) => false,
                             );

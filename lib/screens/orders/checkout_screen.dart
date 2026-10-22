@@ -1,14 +1,18 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
-import '../core/app_colors.dart';
-import '../core/app_routes.dart';
-import '../core/app_text_styles.dart';
-import '../models/product_model.dart';
-import '../widgets/dashed_border_box.dart';
-import '../widgets/payment_method_tile.dart';
-import '../widgets/primary_button.dart';
+import '../../data/app_database.dart';
+import '../../data/auth_repository.dart';
+import '../../data/settings_store.dart';
+import '../../core/app_colors.dart';
+import '../../core/app_routes.dart';
+import '../../core/app_text_styles.dart';
+import '../../models/product_model.dart';
+import '../../widgets/dashed_border_box.dart';
+import '../../widgets/payment_method_tile.dart';
+import '../../widgets/primary_button.dart';
 
 class CheckoutScreen extends StatefulWidget {
   final ProductModel? product;
@@ -59,14 +63,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final ValueNotifier<int> _secondsLeft = ValueNotifier<int>(299); // 04:59
   Timer? _timer;
 
-  final TextEditingController _nameController =
-      TextEditingController(text: 'Abdurrahim');
-  final TextEditingController _phoneController =
-      TextEditingController(text: '0812-3456-7890');
-  final TextEditingController _locationController =
-      TextEditingController(text: 'Gedung Vokasi UB (Lantai 2)');
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _locationController = TextEditingController();
   final TextEditingController _noteController =
-      TextEditingController(text: 'Sambal dipisah ya, diambil jam 12.15');
+      TextEditingController(text: 'Sambal dipisah ya, diambil jam istirahat');
+  bool _userDataLoaded = false;
 
   @override
   void initState() {
@@ -93,6 +95,25 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     } else {
       _product = widget.product ?? ProductData.defaultProduct;
     }
+    if (!_userDataLoaded) {
+      _loadUserData();
+      _userDataLoaded = true;
+    }
+  }
+
+  Future<void> _loadUserData() async {
+    final repo = AuthRepository(context.read<AppDb>());
+    final user = await repo.currentUser();
+    final meeting = await SettingsStore.loadMeetingPoint();
+    if (!mounted) return;
+    if (user != null) {
+      _nameController.text = user.fullName;
+      _phoneController.text = user.phone;
+    } else {
+      _nameController.text = 'Mahasiswa UB';
+      _phoneController.text = '08xx-xxxx-xxxx';
+    }
+    _locationController.text = meeting;
   }
 
   @override
@@ -123,6 +144,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   void _confirmOrder(double total) {
+    // Ambil db SEBELUM ada await, supaya tidak memakai context setelah jeda async.
+    final db = context.read<AppDb>();
+
     showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -149,8 +173,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(dialogContext);
+
+              final orderCode =
+                  '#KK-${DateTime.now().year}-${(DateTime.now().millisecondsSinceEpoch % 900 + 100)}';
+              // Tulis ke database lokal dulu (synced = false secara default).
+              await db.addOrder(
+                orderCode: orderCode,
+                productName: _product.name,
+                quantity: _quantity,
+                totalPrice: total,
+              );
+              debugPrint('Isi tabel orders: ${await db.watchOrders().first}');
+
+              if (!mounted) return;
               Navigator.pushNamed(
                 context,
                 AppRoutes.whatsappGenerator,
@@ -158,6 +195,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   'product': _product,
                   'quantity': _quantity,
                   'total': total,
+                  'orderCode': orderCode,
+                  'name': _nameController.text.trim(),
+                  'phone': _phoneController.text.trim(),
+                  'location': _locationController.text.trim(),
+                  'note': _noteController.text.trim(),
                 },
               );
             },

@@ -37,15 +37,19 @@ class FoodGridCard extends StatelessWidget {
             Expanded(
               child: Stack(
                 children: [
-                  ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                    child: Image.asset(
-                      product.image,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: AppColors.secondaryBg,
-                        child: const Icon(Icons.fastfood, color: AppColors.textMuted),
+                  Positioned.fill(
+                    child: ClipRRect(
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                      child: Image.asset(
+                        product.image,
+                        width: double.infinity,
+                        height: double.infinity,
+                        fit: BoxFit.cover,
+                        alignment: Alignment.center,
+                        errorBuilder: (context, error, stackTrace) => Container(
+                          color: AppColors.secondaryBg,
+                          child: const Icon(Icons.fastfood, color: AppColors.textMuted),
+                        ),
                       ),
                     ),
                   ),

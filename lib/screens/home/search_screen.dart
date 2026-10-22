@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../core/app_colors.dart';
-import '../core/app_routes.dart';
-import '../core/app_text_styles.dart';
-import '../models/product_model.dart';
+import '../../core/app_colors.dart';
+import '../../core/app_routes.dart';
+import '../../core/app_text_styles.dart';
+import '../../models/product_model.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -115,6 +115,11 @@ class _SearchScreenState extends State<SearchScreen> {
                       child: const Icon(Icons.tune_rounded, size: 16, color: AppColors.textPrimary),
                     ),
                     border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    errorBorder: InputBorder.none,
+                    disabledBorder: InputBorder.none,
+                    filled: false,
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   ),
                 ),

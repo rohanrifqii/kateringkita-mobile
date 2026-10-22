@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../core/app_colors.dart';
-import '../core/app_routes.dart';
-import '../core/app_text_styles.dart';
-import '../widgets/auth_scaffold.dart';
-import '../widgets/otp_input.dart';
-import '../widgets/primary_button.dart';
+import '../../core/app_colors.dart';
+import '../../core/app_routes.dart';
+import '../../core/app_text_styles.dart';
+import '../../widgets/auth_scaffold.dart';
+import '../../widgets/otp_input.dart';
+import '../../widgets/primary_button.dart';
 
 class VerifyCodeScreen extends StatefulWidget {
   const VerifyCodeScreen({super.key});

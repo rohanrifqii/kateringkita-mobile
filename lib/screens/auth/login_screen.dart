@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
-import '../core/app_colors.dart';
-import '../core/app_routes.dart';
-import '../core/app_text_styles.dart';
-import '../widgets/custom_text_field.dart';
-import '../widgets/primary_button.dart';
+import 'package:provider/provider.dart';
+import '../../core/app_colors.dart';
+import '../../core/app_routes.dart';
+import '../../core/app_text_styles.dart';
+import '../../data/app_database.dart';
+import '../../data/auth_repository.dart';
+import '../../widgets/custom_text_field.dart';
+import '../../widgets/primary_button.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -13,11 +16,22 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController =
-      TextEditingController(text: 'abdurrahim@student.ub.ac.id');
-  final TextEditingController _passwordController =
-      TextEditingController(text: 'password123');
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
   bool _obscurePassword = true;
+  bool _loading = false;
+  bool _argsLoaded = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Email dikirim dari halaman SignUp setelah register berhasil.
+    if (!_argsLoaded) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is String) _emailController.text = args;
+      _argsLoaded = true;
+    }
+  }
 
   @override
   void dispose() {
@@ -26,8 +40,27 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _onLogin() {
-    Navigator.pushReplacementNamed(context, AppRoutes.mainNav);
+  Future<void> _onLogin() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    if (email.isEmpty || password.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email dan password wajib diisi.')),
+      );
+      return;
+    }
+
+    setState(() => _loading = true);
+    final repo = AuthRepository(context.read<AppDb>());
+    final error = await repo.login(email: email, password: password);
+    if (!mounted) return;
+    setState(() => _loading = false);
+
+    if (error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      return;
+    }
+    Navigator.pushNamedAndRemoveUntil(context, AppRoutes.mainNav, (r) => false);
   }
 
   @override
@@ -80,8 +113,8 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 32),
               // Login Button
               PrimaryButton(
-                text: 'Login',
-                onPressed: _onLogin,
+                text: _loading ? 'Memeriksa...' : 'Login',
+                onPressed: _loading ? null : _onLogin,
               ),
               const SizedBox(height: 20),
               // Forgot Password link

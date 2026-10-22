@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import '../core/app_colors.dart';
-import '../widgets/custom_bottom_navbar.dart';
-import 'home_screen.dart';
-import 'orders_screen.dart';
-import 'ai_assistant_screen.dart';
-import 'liked_screen.dart';
-import 'profile_screen.dart';
+import '../../core/app_colors.dart';
+import '../../widgets/custom_bottom_navbar.dart';
+import '../ai/ai_assistant_screen.dart';
+import '../home/home_screen.dart';
+import '../liked/liked_screen.dart';
+import '../orders/orders_screen.dart';
+import '../profile/profile_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   final int initialIndex;
