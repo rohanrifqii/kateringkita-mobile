@@ -139,7 +139,7 @@ class ActiveOrdersScreen extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const Divider(height: 24, color: AppColors.cardBorder),
+                      Divider(height: 24, color: AppColors.cardBorder),
                       Row(
                         children: [
                           ClipRRect(

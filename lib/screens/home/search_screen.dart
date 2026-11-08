@@ -113,7 +113,7 @@ class _SearchScreenState extends State<SearchScreen> {
                         color: AppColors.secondaryBg,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(Icons.tune_rounded, size: 16, color: AppColors.textPrimary),
+                      child: Icon(Icons.tune_rounded, size: 16, color: AppColors.textPrimary),
                     ),
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,

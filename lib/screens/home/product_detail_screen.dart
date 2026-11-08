@@ -87,7 +87,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             errorBuilder: (context, error, stackTrace) => Container(
                               height: 340,
                               color: AppColors.secondaryBg,
-                              child: const Icon(Icons.fastfood, size: 64, color: AppColors.textMuted),
+                              child: Icon(Icons.fastfood, size: 64, color: AppColors.textMuted),
                             ),
                           );
                         },

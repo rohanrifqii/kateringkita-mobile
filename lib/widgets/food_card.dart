@@ -49,7 +49,7 @@ class FoodGridCard extends StatelessWidget {
                         alignment: Alignment.center,
                         errorBuilder: (context, error, stackTrace) => Container(
                           color: AppColors.secondaryBg,
-                          child: const Icon(Icons.fastfood, color: AppColors.textMuted),
+                          child: Icon(Icons.fastfood, color: AppColors.textMuted),
                         ),
                       ),
                     ),

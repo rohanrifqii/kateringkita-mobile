@@ -506,7 +506,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           // Active Order Actions (Tandai Selesai / Batalkan)
           if (isOrderActive) ...[
             const SizedBox(height: 12),
-            const Divider(height: 1, color: AppColors.cardBorder),
+            Divider(height: 1, color: AppColors.cardBorder),
             const SizedBox(height: 8),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,

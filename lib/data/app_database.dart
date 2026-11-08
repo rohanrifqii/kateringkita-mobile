@@ -56,6 +56,23 @@ class AppDb extends _$AppDb {
         createdAt: DateTime.now().toUtc().millisecondsSinceEpoch,
       ));
 
+  Future<void> updateUserProfile({
+    required int id,
+    required String fullName,
+    required String phone,
+    String? email,
+  }) async {
+    await (update(users)..where((t) => t.id.equals(id))).write(
+      UsersCompanion(
+        fullName: Value(fullName.trim()),
+        phone: Value(phone.trim()),
+        email: email != null
+            ? Value(email.trim().toLowerCase())
+            : const Value.absent(),
+      ),
+    );
+  }
+
   // ---------------- ORDERS ----------------
 
   Stream<List<Order>> watchOrders() => (select(orders)

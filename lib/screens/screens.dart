@@ -26,6 +26,7 @@ export 'ai/ai_assistant_screen.dart';
 export 'liked/liked_screen.dart';
 
 // Profile
+export 'profile/edit_profile_screen.dart';
 export 'profile/profile_screen.dart';
 
 // Navigation & Splash

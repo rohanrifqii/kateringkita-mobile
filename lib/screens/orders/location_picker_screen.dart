@@ -1467,7 +1467,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen>
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _locationHistory.length,
               separatorBuilder: (context, index) =>
-                  const Divider(height: 16, color: AppColors.cardBorder),
+                  Divider(height: 16, color: AppColors.cardBorder),
               itemBuilder: (context, index) {
                 final item = _locationHistory[index];
                 final isSelected = _selectedLocation.name.toLowerCase() ==
@@ -1642,7 +1642,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen>
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _onlineSearchResults.length,
               separatorBuilder: (context, index) =>
-                  const Divider(height: 16, color: AppColors.cardBorder),
+                  Divider(height: 16, color: AppColors.cardBorder),
               itemBuilder: (context, index) {
                 final item = _onlineSearchResults[index];
                 final isSelected = _selectedLocation.id == item.id;

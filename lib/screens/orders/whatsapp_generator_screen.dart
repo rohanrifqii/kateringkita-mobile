@@ -217,7 +217,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
                             width: 48,
                             height: 48,
                             color: AppColors.secondaryBg,
-                            child: const Icon(Icons.fastfood, size: 24, color: AppColors.textMuted),
+                            child: Icon(Icons.fastfood, size: 24, color: AppColors.textMuted),
                           ),
                         ),
                       ),
@@ -284,7 +284,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
                 children: [
                   Expanded(
                     child: OutlinedButton.icon(
-                      icon: const Icon(Icons.copy_rounded, size: 16, color: AppColors.textPrimary),
+                      icon: Icon(Icons.copy_rounded, size: 16, color: AppColors.textPrimary),
                       label: Text(
                         'Salin Pesan',
                         style: AppTextStyles.bodyMedium.copyWith(
@@ -294,7 +294,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
                       ),
                       style: OutlinedButton.styleFrom(
                         backgroundColor: AppColors.surface,
-                        side: const BorderSide(color: AppColors.cardBorder),
+                        side: BorderSide(color: AppColors.cardBorder),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
@@ -304,7 +304,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: OutlinedButton.icon(
-                      icon: const Icon(Icons.edit_note_rounded, size: 18, color: AppColors.textPrimary),
+                      icon: Icon(Icons.edit_note_rounded, size: 18, color: AppColors.textPrimary),
                       label: Text(
                         'Edit Pesan',
                         style: AppTextStyles.bodyMedium.copyWith(
@@ -314,7 +314,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
                       ),
                       style: OutlinedButton.styleFrom(
                         backgroundColor: AppColors.surface,
-                        side: const BorderSide(color: AppColors.cardBorder),
+                        side: BorderSide(color: AppColors.cardBorder),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),

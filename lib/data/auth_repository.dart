@@ -69,5 +69,51 @@ class AuthRepository {
     return null;
   }
 
+  /// Update data nama, nomor WhatsApp, dan email user yang sedang login.
+  Future<User?> updateProfile({
+    required int userId,
+    required String oldEmail,
+    required String fullName,
+    required String phone,
+    required String newEmail,
+  }) async {
+    final cleanOld = oldEmail.trim().toLowerCase();
+    final cleanNew = newEmail.trim().toLowerCase();
+
+    await _db.updateUserProfile(
+      id: userId,
+      fullName: fullName,
+      phone: phone,
+      email: cleanNew,
+    );
+
+    if (cleanNew != cleanOld) {
+      final oldPwd = await TokenStore.readPassword(cleanOld);
+      if (oldPwd != null) {
+        await TokenStore.savePassword(cleanNew, oldPwd);
+      }
+      final token = await TokenStore.readToken() ??
+          'dev-token-${DateTime.now().millisecondsSinceEpoch}';
+      await TokenStore.saveSession(token, cleanNew);
+    }
+
+    return _db.findUserByEmail(cleanNew);
+  }
+
+  /// Ubah password akun dengan verifikasi password lama.
+  Future<String?> changePassword({
+    required String email,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    final saved = await TokenStore.readPassword(cleanEmail);
+    if (saved != null && saved != currentPassword) {
+      return 'Password saat ini tidak sesuai.';
+    }
+    await TokenStore.savePassword(cleanEmail, newPassword);
+    return null;
+  }
+
   Future<void> logout() => TokenStore.logout();
 }

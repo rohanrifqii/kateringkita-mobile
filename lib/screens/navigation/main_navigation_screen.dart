@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../core/app_colors.dart';
 import '../../widgets/custom_bottom_navbar.dart';
 import '../ai/ai_assistant_screen.dart';
 import '../home/home_screen.dart';
@@ -44,7 +43,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     ];
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
           // Current Tab Page

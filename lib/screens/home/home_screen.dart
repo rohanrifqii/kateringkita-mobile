@@ -338,7 +338,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.search, color: AppColors.textMuted, size: 20),
+                    Icon(Icons.search, color: AppColors.textMuted, size: 20),
                     const SizedBox(width: 12),
                     Expanded(
                       child: GestureDetector(
@@ -642,7 +642,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.symmetric(vertical: 40),
                   child: Column(
                     children: [
-                      const Icon(Icons.search_off_rounded, size: 48, color: AppColors.textMuted),
+                      Icon(Icons.search_off_rounded, size: 48, color: AppColors.textMuted),
                       const SizedBox(height: 12),
                       Text(
                         'Tidak ada menu dalam kategori ini',

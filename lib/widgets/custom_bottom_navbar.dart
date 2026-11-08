@@ -15,19 +15,25 @@ class CustomBottomNavbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
       height: 74,
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
+        color: isDark
+            ? AppColors.darkSurface.withValues(alpha: 0.94)
+            : Colors.white.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(37),
         border: Border.all(
-          color: Colors.white.withValues(alpha: 0.9),
+          color: isDark
+              ? AppColors.darkCardBorder
+              : Colors.white.withValues(alpha: 0.9),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: Colors.black.withValues(alpha: isDark ? 0.35 : 0.08),
             blurRadius: 24,
             offset: const Offset(0, 8),
           ),
@@ -48,6 +54,7 @@ class CustomBottomNavbar extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildNavItem(
+                  isDark: isDark,
                   index: 0,
                   label: 'Home',
                   iconBuilder: (color, size) => FigmaHomeIcon(
@@ -56,6 +63,7 @@ class CustomBottomNavbar extends StatelessWidget {
                   ),
                 ),
                 _buildNavItem(
+                  isDark: isDark,
                   index: 1,
                   label: 'Orders',
                   iconBuilder: (color, size) => Icon(
@@ -65,6 +73,7 @@ class CustomBottomNavbar extends StatelessWidget {
                   ),
                 ),
                 _buildNavItem(
+                  isDark: isDark,
                   index: 2,
                   label: 'AI',
                   iconBuilder: (color, size) => FigmaAiIcon(
@@ -73,6 +82,7 @@ class CustomBottomNavbar extends StatelessWidget {
                   ),
                 ),
                 _buildNavItem(
+                  isDark: isDark,
                   index: 3,
                   label: 'Liked',
                   iconBuilder: (color, size) => Icon(
@@ -84,6 +94,7 @@ class CustomBottomNavbar extends StatelessWidget {
                   ),
                 ),
                 _buildNavItem(
+                  isDark: isDark,
                   index: 4,
                   label: 'Profile',
                   iconBuilder: (color, size) => Icon(
@@ -101,12 +112,15 @@ class CustomBottomNavbar extends StatelessWidget {
   }
 
   Widget _buildNavItem({
+    required bool isDark,
     required int index,
     required String label,
     required Widget Function(Color color, double size) iconBuilder,
   }) {
     final isSelected = currentIndex == index;
-    const inactiveColor = Color(0xFF2E2A27);
+    final inactiveColor = isDark
+        ? AppColors.darkTextSecondary
+        : const Color(0xFF2E2A27);
 
     return Expanded(
       child: GestureDetector(
