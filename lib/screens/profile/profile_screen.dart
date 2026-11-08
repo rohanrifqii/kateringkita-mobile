@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../data/app_database.dart';
 import '../../data/auth_repository.dart';
 import '../../data/settings_store.dart';
+import '../../widgets/app_modal_dialog.dart';
+import '../orders/location_picker_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -27,6 +31,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = await AuthRepository(context.read<AppDb>()).currentUser();
     if (!mounted) return;
     setState(() => _user = user);
+  }
+
+  Future<void> _openCustomerSupportWhatsApp() async {
+    const phone = '6285852157352';
+    const message =
+        'Halo Admin Costumer Service KateringKita! 👋\nSaya butuh bantuan terkait pesanan / layanan katering.';
+    final whatsappUrl =
+        Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(message)}');
+
+    try {
+      final launched = await launchUrl(
+        whatsappUrl,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched) {
+        await Clipboard.setData(const ClipboardData(text: '085852157352'));
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Nomor WhatsApp CS (0858-5215-7352) berhasil disalin ke clipboard!'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+    } catch (_) {
+      await Clipboard.setData(const ClipboardData(text: '085852157352'));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Nomor WhatsApp CS (0858-5215-7352) berhasil disalin ke clipboard!'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    }
   }
 
   @override
@@ -128,58 +168,52 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 icon: Icons.person_outline_rounded,
                 onTap: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Akun: $name ($phone) • $email')),
+                    SnackBar(content: Text('Akun: $name ($phone) â€¢ $email')),
                   );
                 },
               ),
               const SizedBox(height: 10),
               _buildMenuItem(
-                title: 'Titik Temu Kampus Favorit',
+                title: 'Alamat & Lokasi Pengantaran',
                 icon: Icons.location_on_outlined,
                 onTap: () async {
-                  const options = [
-                    'Gedung Vokasi UB (Lt. 2)',
-                    'Perpustakaan Pusat UB',
-                    'Kantin Vokasi',
-                  ];
                   final current = await SettingsStore.loadMeetingPoint();
                   if (!context.mounted) return;
-                  final picked = await showDialog<String>(
-                    context: context,
-                    builder: (ctx) => SimpleDialog(
-                      title: const Text('Titik Temu Favorit'),
-                      children: [
-                        for (final o in options)
-                          SimpleDialogOption(
-                            onPressed: () => Navigator.pop(ctx, o),
-                            child: Text(o == current ? '✓ $o' : o),
-                          ),
-                      ],
+                  final picked = await Navigator.push<DeliveryLocation>(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => LocationPickerScreen(
+                        currentLocationName: current,
+                      ),
                     ),
                   );
                   if (picked == null) return;
-                  await SettingsStore.saveMeetingPoint(picked);
+                  await SettingsStore.saveMeetingPoint(picked.name);
                   if (!context.mounted) return;
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Titik temu aktif: $picked')),
+                    SnackBar(
+                      content: Text('Lokasi pengantaran aktif: ${picked.name}'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
                   );
                 },
               ),
               const SizedBox(height: 10),
               _buildMenuItem(
-                title: 'Riwayat Holding Kuota 5 Menit',
-                icon: Icons.history_rounded,
+                title: 'Riwayat Pesanan Saya',
+                icon: Icons.receipt_long_rounded,
                 onTap: () {
                   Navigator.pushNamed(context, AppRoutes.orders);
                 },
               ),
               const SizedBox(height: 10),
               _buildMenuItem(
-                title: 'Pusat Bantuan WhatsApp Katering',
-                icon: Icons.help_outline_rounded,
+                title: 'Pusat Bantuan',
+                icon: Icons.support_agent_rounded,
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Menghubungkan ke Admin CS KateringKita...')),
+                  AppModalDialog.showCustomerSupport(
+                    context,
+                    onWhatsAppPressed: _openCustomerSupportWhatsApp,
                   );
                 },
               ),
@@ -203,36 +237,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               // Logout Button
               GestureDetector(
                 onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      title: const Text('Keluar dari Akun?'),
-                      content: const Text('Apakah Anda yakin ingin logout dari KateringKita?'),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text('Batal'),
-                        ),
-                        ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.danger,
-                            foregroundColor: Colors.white,
-                          ),
-                          onPressed: () async {
-                            final nav = Navigator.of(context);
-                            final repo = AuthRepository(context.read<AppDb>());
-                            await repo.logout(); // hapus sesi dari secure storage
-                            nav.pop();
-                            nav.pushNamedAndRemoveUntil(
-                              AppRoutes.login,
-                              (route) => false,
-                            );
-                          },
-                          child: const Text('Keluar'),
-                        ),
-                      ],
-                    ),
+                  AppModalDialog.showLogout(
+                    context,
+                    onConfirm: () async {
+                      final nav = Navigator.of(context);
+                      final repo = AuthRepository(context.read<AppDb>());
+                      await repo.logout(); // hapus sesi dari secure storage
+                      nav.pushNamedAndRemoveUntil(
+                        AppRoutes.login,
+                        (route) => false,
+                      );
+                    },
                   );
                 },
                 child: Container(

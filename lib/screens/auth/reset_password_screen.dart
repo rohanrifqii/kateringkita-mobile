@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
 
+import 'package:provider/provider.dart';
+
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
+import '../../data/app_database.dart';
+import '../../data/auth_repository.dart';
+import '../../data/token_store.dart';
+import '../../widgets/app_modal_dialog.dart';
 import '../../widgets/auth_scaffold.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/primary_button.dart';
@@ -47,10 +53,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     return null;
   }
 
-  void _backToLogin() {
-    Navigator.popUntil(
+  void _backToLogin([String? email]) {
+    Navigator.pushNamedAndRemoveUntil(
       context,
-      (route) => route.settings.name == AppRoutes.login || route.isFirst,
+      AppRoutes.login,
+      (route) => false,
+      arguments: email,
     );
   }
 
@@ -68,15 +76,27 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     }
 
     setState(() => _isLoading = true);
-    // Dummy: simulasi request ke backend.
-    await Future<void>.delayed(const Duration(milliseconds: 900));
-    if (!mounted) return;
 
-    // Messenger diambil sebelum pop agar SnackBar tetap tampil di halaman login.
-    final messenger = ScaffoldMessenger.of(context);
-    _backToLogin();
-    messenger.showSnackBar(
-      const SnackBar(content: Text('Password berhasil diubah. Silakan login.')),
+    // Ambil email dari arguments rute (atau sesi tersimpan/default)
+    final args = ModalRoute.of(context)?.settings.arguments;
+    final email = (args is String && args.isNotEmpty)
+        ? args.trim()
+        : (await TokenStore.readSessionEmail() ?? 'abdurrahim@student.ub.ac.id');
+
+    // Simpan password baru ke Drift SQLite & Secure Storage
+    if (!mounted) return;
+    final repo = AuthRepository(context.read<AppDb>());
+    await repo.resetPassword(
+      email: email,
+      newPassword: _newController.text,
+    );
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    AppModalDialog.showPasswordResetSuccess(
+      context,
+      onConfirm: () => _backToLogin(email),
     );
   }
 
@@ -156,7 +176,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           const SizedBox(height: 12),
           Center(
             child: TextButton(
-              onPressed: _backToLogin,
+              onPressed: () => _backToLogin(),
               child: Text(
                 'Cancel and Return to Login',
                 style: AppTextStyles.bodySmall.copyWith(

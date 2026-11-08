@@ -10,6 +10,7 @@ class AppRoutes {
   static const String search = '/search';
   static const String productDetail = '/product-detail';
   static const String checkout = '/checkout';
+  static const String payment = '/payment';
   static const String whatsappGenerator = '/whatsapp-generator';
   static const String aiAssistant = '/ai-assistant';
   static const String orders = '/orders';
@@ -17,4 +18,5 @@ class AppRoutes {
   static const String completedOrders = '/completed-orders';
   static const String liked = '/liked';
   static const String profile = '/profile';
+  static const String notifications = '/notifications';
 }

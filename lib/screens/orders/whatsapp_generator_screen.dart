@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../models/product_model.dart';
@@ -51,7 +52,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
           'Saya ingin konfirmasi pesanan:\n'
           '• Kode Pesanan: $code\n'
           '• Menu: ${prod.name} ($qty Porsi)\n'
-          '• Total: \$${tot.toStringAsFixed(2)}\n'
+          '• Total: ${AppCurrency.format(tot)}\n'
           '• Pemesan: $name ($phone)\n'
           '• Titik Temu: $location\n'
           '• Catatan: $note\n\n'

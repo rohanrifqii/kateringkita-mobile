@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
+import '../core/app_currency.dart';
 import '../core/app_text_styles.dart';
 import '../models/product_model.dart';
 
@@ -85,32 +86,47 @@ class FoodGridCard extends StatelessWidget {
             ),
             // Info
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     product.name,
-                    style: AppTextStyles.h4.copyWith(fontSize: 14),
+                    style: AppTextStyles.h4.copyWith(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text(
-                        '\$${product.price.toStringAsFixed(2)}',
-                        style: AppTextStyles.price.copyWith(fontSize: 14),
+                      Flexible(
+                        child: Text(
+                          AppCurrency.format(product.price),
+                          style: AppTextStyles.price.copyWith(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
+                      const SizedBox(width: 4),
                       Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.star_rounded, color: AppColors.warning, size: 16),
+                          const Icon(Icons.star_rounded, color: AppColors.warning, size: 14),
                           const SizedBox(width: 2),
                           Text(
-                            '${product.rating} (${product.reviewCount})',
+                            product.rating.toStringAsFixed(1),
                             style: AppTextStyles.bodySmall.copyWith(
                               fontSize: 11,
+                              fontWeight: FontWeight.w700,
                               color: AppColors.textSecondary,
                             ),
                           ),

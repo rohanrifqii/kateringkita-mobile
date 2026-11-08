@@ -66,7 +66,7 @@ class ProductData {
   static const ProductModel defaultProduct = ProductModel(
     id: 'prod-001',
     name: 'Lumpia Diego',
-    price: 129.99,
+    price: 25000,
     rating: 4.6,
     reviewCount: 120,
     image: 'assets/images/lumpia_diego.png',
@@ -85,7 +85,7 @@ class ProductData {
     const ProductModel(
       id: 'prod-002',
       name: 'Martabak Manis',
-      price: 79.00,
+      price: 35000,
       rating: 4.8,
       reviewCount: 85,
       image: 'assets/images/martabak.png',
@@ -100,7 +100,7 @@ class ProductData {
     const ProductModel(
       id: 'prod-003',
       name: 'Nasi Kuning Slamet',
-      price: 94.00,
+      price: 20000,
       rating: 4.9,
       reviewCount: 210,
       image: 'assets/images/nasi_kuning.png',
@@ -115,7 +115,7 @@ class ProductData {
     const ProductModel(
       id: 'prod-004',
       name: 'Donat Surgawi',
-      price: 109.00,
+      price: 15000,
       rating: 4.7,
       reviewCount: 95,
       image: 'assets/images/donat_surgawi.png',
@@ -130,7 +130,7 @@ class ProductData {
     const ProductModel(
       id: 'prod-005',
       name: 'Risoles Bu Tima',
-      price: 124.00,
+      price: 18000,
       rating: 4.8,
       reviewCount: 110,
       image: 'assets/images/risoles.png',

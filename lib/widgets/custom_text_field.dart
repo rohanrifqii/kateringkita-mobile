@@ -45,9 +45,7 @@ class CustomTextField extends StatelessWidget {
         ],
         Container(
           decoration: BoxDecoration(
-            color: AppColors.surface,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.cardBorder),
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withValues(alpha: 0.02),
@@ -65,6 +63,8 @@ class CustomTextField extends StatelessWidget {
             validator: validator,
             style: AppTextStyles.bodyLarge.copyWith(fontSize: 14),
             decoration: InputDecoration(
+              filled: true,
+              fillColor: AppColors.surface,
               hintText: hint,
               hintStyle: AppTextStyles.bodyMedium.copyWith(
                 color: AppColors.textMuted,
@@ -72,8 +72,14 @@ class CustomTextField extends StatelessWidget {
               prefixIcon: prefixIcon,
               suffixIcon: suffixIcon,
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              border: InputBorder.none,
-              enabledBorder: InputBorder.none,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.cardBorder),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: const BorderSide(color: AppColors.cardBorder),
+              ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(14),
                 borderSide: const BorderSide(color: AppColors.primary, width: 1.5),

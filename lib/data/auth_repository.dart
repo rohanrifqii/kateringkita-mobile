@@ -50,5 +50,24 @@ class AuthRepository {
     return _db.findUserByEmail(email);
   }
 
+  /// Reset password: simpan password baru ke secure storage
+  /// dan pastikan akun user ada di database SQLite.
+  Future<String?> resetPassword({
+    required String email,
+    required String newPassword,
+  }) async {
+    final cleanEmail = email.trim().toLowerCase();
+    var user = await _db.findUserByEmail(cleanEmail);
+    if (user == null) {
+      await _db.addUser(
+        fullName: cleanEmail.split('@').first,
+        email: cleanEmail,
+        phone: '085852157352',
+      );
+    }
+    await TokenStore.savePassword(cleanEmail, newPassword);
+    return null;
+  }
+
   Future<void> logout() => TokenStore.logout();
 }

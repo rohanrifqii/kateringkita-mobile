@@ -6,6 +6,7 @@ import '../../core/app_text_styles.dart';
 import '../../data/settings_store.dart';
 import '../../models/product_model.dart';
 import '../../widgets/food_card.dart';
+import '../orders/location_picker_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final Function(int)? onTabChange;
@@ -28,10 +29,46 @@ class _HomeScreenState extends State<HomeScreen> {
     '🍱 Paket',
   ];
 
+  int _currentBannerIndex = 0;
+  final PageController _bannerController = PageController();
+
+  static const List<Map<String, dynamic>> _promoBanners = [
+    {
+      'tag': 'SPECIAL PROMO',
+      'title': 'Summer Sale',
+      'subtitle': 'Diskon s/d 50% untuk Danusan',
+      'cta': 'Pesan Sekarang →',
+      'image': 'assets/images/banner_promo.png',
+      'productIndex': 1,
+    },
+    {
+      'tag': 'GRATIS ONGKIR',
+      'title': 'Antar Seluruh UB',
+      'subtitle': 'Bebas biaya kirim ke semua fakultas',
+      'cta': 'Klaim Promo →',
+      'image': 'assets/images/nasi_kuning.png',
+      'productIndex': 2,
+    },
+    {
+      'tag': 'PAKET DANUSAN',
+      'title': 'Paket Rapat Hemat',
+      'subtitle': 'Catering snack & makan siang organisasi',
+      'cta': 'Pilih Menu →',
+      'image': 'assets/images/lumpia_diego.png',
+      'productIndex': 0,
+    },
+  ];
+
   @override
   void initState() {
     super.initState();
     _loadMeetingPoint();
+  }
+
+  @override
+  void dispose() {
+    _bannerController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadMeetingPoint() async {
@@ -41,28 +78,26 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _pickMeetingPoint() async {
-    const options = [
-      'Gedung Vokasi UB (Lt. 2)',
-      'Perpustakaan Pusat UB',
-      'Kantin Vokasi UB',
-      'Gazebo Fakultas Ilmu Komputer',
-    ];
-    final picked = await showDialog<String>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Pilih Titik Temu Pengambilan'),
-        children: [
-          for (final o in options)
-            SimpleDialogOption(
-              onPressed: () => Navigator.pop(ctx, o),
-              child: Text(o == _meetingPoint ? '✓ $o' : o),
-            ),
-        ],
+    final (lat, lng) = await SettingsStore.loadMeetingCoordinates();
+    if (!mounted) return;
+    final result = await Navigator.push<DeliveryLocation>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => LocationPickerScreen(
+          currentLocationName: _meetingPoint,
+          initialLat: lat,
+          initialLng: lng,
+        ),
       ),
     );
-    if (picked != null) {
-      await SettingsStore.saveMeetingPoint(picked);
-      setState(() => _meetingPoint = picked);
+    if (result != null) {
+      await SettingsStore.saveMeetingPoint(
+        result.name,
+        fullAddress: result.fullAddress,
+        latitude: result.latitude,
+        longitude: result.longitude,
+      );
+      setState(() => _meetingPoint = result.name);
     }
   }
 
@@ -238,42 +273,48 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   // Notification icon with badge dot
-                  Stack(
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.cardBorder.withValues(alpha: 0.8)),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.04),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                        child: const Icon(
-                          Icons.notifications_outlined,
-                          color: AppColors.textPrimary,
-                          size: 22,
-                        ),
-                      ),
-                      Positioned(
-                        top: 10,
-                        right: 12,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: AppColors.danger,
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      Navigator.pushNamed(context, AppRoutes.notifications);
+                    },
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
                             shape: BoxShape.circle,
+                            border: Border.all(color: AppColors.cardBorder.withValues(alpha: 0.8)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.04),
+                                blurRadius: 8,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.notifications_outlined,
+                            color: AppColors.textPrimary,
+                            size: 22,
                           ),
                         ),
-                      ),
-                    ],
+                        Positioned(
+                          top: 10,
+                          right: 12,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: AppColors.danger,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -410,130 +451,165 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 20),
 
-              // ---------------- PROMO BANNER (FIGMA) ----------------
-              Container(
+              // ---------------- PROMO BANNER CAROUSEL (FIGMA) ----------------
+              SizedBox(
                 width: double.infinity,
-                height: 160,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 16,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  children: [
-                    // Background Image
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Image.asset(
-                        'assets/images/banner_promo.png',
-                        width: double.infinity,
-                        height: 160,
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ),
-                    // Dark/Orange Gradient Overlay
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.centerLeft,
-                            end: Alignment.centerRight,
-                            colors: [
-                              const Color(0xFF1A130D).withValues(alpha: 0.92),
-                              const Color(0xFF1A130D).withValues(alpha: 0.65),
-                              Colors.transparent,
-                            ],
+                height: 172,
+                child: PageView.builder(
+                  controller: _bannerController,
+                  itemCount: _promoBanners.length,
+                  onPageChanged: (index) {
+                    setState(() => _currentBannerIndex = index);
+                  },
+                  itemBuilder: (context, index) {
+                    final banner = _promoBanners[index];
+                    final targetProduct = ProductData.mockProducts[banner['productIndex'] as int];
+
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
                           ),
-                        ),
+                        ],
                       ),
-                    ),
-                    // Banner Content
-                    Padding(
-                      padding: const EdgeInsets.all(18),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      child: Stack(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: AppColors.primary,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              'SPECIAL PROMO',
-                              style: AppTextStyles.badge.copyWith(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.5,
+                          // Background Image
+                          Positioned.fill(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: Image.asset(
+                                banner['image'] as String,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  color: AppColors.primary,
+                                ),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Summer Sale',
-                            style: AppTextStyles.h2.copyWith(
-                              color: Colors.white,
-                              fontSize: 22,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Diskon s/d 50% untuk Danusan',
-                            style: AppTextStyles.bodySmall.copyWith(
-                              color: const Color(0xFFFEF3C7),
-                              fontWeight: FontWeight.w500,
-                              fontSize: 12,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          GestureDetector(
-                            onTap: () {
-                              Navigator.pushNamed(
-                                context,
-                                AppRoutes.productDetail,
-                                arguments: ProductData.mockProducts[1], // Martabak Manis
-                              );
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(16),
+                          // Dark/Orange Gradient Overlay
+                          Positioned.fill(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                    colors: [
+                                      const Color(0xFF1A130D).withValues(alpha: 0.92),
+                                      const Color(0xFF1A130D).withValues(alpha: 0.65),
+                                      Colors.transparent,
+                                    ],
+                                  ),
+                                ),
                               ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'Pesan Sekarang →',
-                                    style: AppTextStyles.bodySmall.copyWith(
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 11,
+                            ),
+                          ),
+                          // Banner Content
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Text(
+                                    banner['tag'] as String,
+                                    style: AppTextStyles.badge.copyWith(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.5,
                                     ),
                                   ),
-                                ],
-                              ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  banner['title'] as String,
+                                  style: AppTextStyles.h2.copyWith(
+                                    color: Colors.white,
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  banner['subtitle'] as String,
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: const Color(0xFFFEF3C7),
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.pushNamed(
+                                      context,
+                                      AppRoutes.productDetail,
+                                      arguments: targetProduct,
+                                    );
+                                  },
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          banner['cta'] as String,
+                                          style: AppTextStyles.bodySmall.copyWith(
+                                            color: AppColors.primary,
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 10),
+              // Dots Indicator
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: List.generate(_promoBanners.length, (index) {
+                  final isSelected = _currentBannerIndex == index;
+                  return AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: isSelected ? 20 : 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: isSelected ? AppColors.primary : AppColors.cardBorder,
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  );
+                }),
+              ),
+              const SizedBox(height: 18),
 
               // ---------------- DAFTAR MENU HEADER ----------------
               Row(
@@ -587,7 +663,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   itemCount: products.length,
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 2,
-                    childAspectRatio: 0.78,
+                    childAspectRatio: 0.76,
                     crossAxisSpacing: 14,
                     mainAxisSpacing: 16,
                   ),

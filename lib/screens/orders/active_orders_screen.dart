@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../data/app_database.dart';
@@ -168,7 +169,7 @@ class ActiveOrdersScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  '${order.quantity} Porsi • Total \$${order.totalPrice.toStringAsFixed(2)}',
+                                  '${order.quantity} Porsi • Total ${AppCurrency.format(order.totalPrice)}',
                                   style: AppTextStyles.bodyMedium.copyWith(
                                     color: AppColors.textSecondary,
                                     fontSize: 13,

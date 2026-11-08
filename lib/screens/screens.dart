@@ -14,7 +14,9 @@ export 'home/search_screen.dart';
 export 'orders/active_orders_screen.dart';
 export 'orders/checkout_screen.dart';
 export 'orders/completed_orders_screen.dart';
+export 'orders/location_picker_screen.dart';
 export 'orders/orders_screen.dart';
+export 'orders/payment_screen.dart';
 export 'orders/whatsapp_generator_screen.dart';
 
 // AI Assistant

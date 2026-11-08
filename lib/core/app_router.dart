@@ -15,7 +15,9 @@ import '../screens/orders/active_orders_screen.dart';
 import '../screens/orders/checkout_screen.dart';
 import '../screens/orders/completed_orders_screen.dart';
 import '../screens/orders/orders_screen.dart';
+import '../screens/orders/payment_screen.dart';
 import '../screens/orders/whatsapp_generator_screen.dart';
+import '../screens/home/notification_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/splash/splash_screen.dart';
 import 'app_routes.dart';
@@ -38,6 +40,7 @@ class AppRouter {
     AppRoutes.search: (context) => const SearchScreen(),
     AppRoutes.productDetail: (context) => const ProductDetailScreen(),
     AppRoutes.checkout: (context) => const CheckoutScreen(),
+    AppRoutes.payment: (context) => const PaymentScreen(),
     AppRoutes.whatsappGenerator: (context) => const WhatsAppGeneratorScreen(),
     AppRoutes.aiAssistant: (context) => const AIAssistantScreen(),
     AppRoutes.orders: (context) => const OrdersScreen(),
@@ -45,5 +48,6 @@ class AppRouter {
     AppRoutes.completedOrders: (context) => const CompletedOrdersScreen(),
     AppRoutes.liked: (context) => const LikedScreen(),
     AppRoutes.profile: (context) => const ProfileScreen(),
+    AppRoutes.notifications: (context) => const NotificationScreen(),
   };
 }

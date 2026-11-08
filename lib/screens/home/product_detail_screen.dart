@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../data/liked_store.dart';
@@ -18,6 +19,24 @@ class ProductDetailScreen extends StatefulWidget {
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late ProductModel _product;
   int _selectedOptionIndex = 0;
+  int _currentImageIndex = 0;
+  final PageController _imagePageController = PageController();
+
+  List<String> get _galleryImages {
+    final allImages = [
+      'assets/images/lumpia_diego.png',
+      'assets/images/nasi_kuning.png',
+      'assets/images/martabak.png',
+      'assets/images/donat_surgawi.png',
+      'assets/images/risoles.png',
+    ];
+    final others = allImages.where((img) => img != _product.image).toList();
+    return [
+      _product.image,
+      if (others.isNotEmpty) others[0],
+      if (others.length > 1) others[1],
+    ];
+  }
 
   @override
   void didChangeDependencies() {
@@ -31,6 +50,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   }
 
   @override
+  void dispose() {
+    _imagePageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -41,18 +66,31 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Hero Image
+                // Hero Image Carousel
                 Stack(
                   children: [
-                    Image.asset(
-                      _product.image,
-                      width: double.infinity,
+                    SizedBox(
                       height: 340,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        height: 340,
-                        color: AppColors.secondaryBg,
-                        child: const Icon(Icons.fastfood, size: 64, color: AppColors.textMuted),
+                      width: double.infinity,
+                      child: PageView.builder(
+                        controller: _imagePageController,
+                        itemCount: _galleryImages.length,
+                        onPageChanged: (index) {
+                          setState(() => _currentImageIndex = index);
+                        },
+                        itemBuilder: (context, index) {
+                          return Image.asset(
+                            _galleryImages[index],
+                            width: double.infinity,
+                            height: 340,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => Container(
+                              height: 340,
+                              color: AppColors.secondaryBg,
+                              child: const Icon(Icons.fastfood, size: 64, color: AppColors.textMuted),
+                            ),
+                          );
+                        },
                       ),
                     ),
                     // Carousel Indicators
@@ -62,34 +100,27 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       right: 0,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 20,
+                        children: List.generate(_galleryImages.length, (index) {
+                          final isSelected = _currentImageIndex == index;
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            width: isSelected ? 22 : 6,
                             height: 6,
                             decoration: BoxDecoration(
-                              color: AppColors.primary,
+                              color: isSelected
+                                  ? AppColors.primary
+                                  : Colors.white.withValues(alpha: 0.75),
                               borderRadius: BorderRadius.circular(3),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.15),
+                                  blurRadius: 4,
+                                ),
+                              ],
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ],
+                          );
+                        }),
                       ),
                     ),
                   ],
@@ -125,7 +156,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         const SizedBox(height: 6),
                         // Price
                         Text(
-                          '\$${_product.price.toStringAsFixed(2)} / porsi (isi 5)',
+                          '${AppCurrency.format(_product.price)} / porsi (isi 5)',
                           style: AppTextStyles.price.copyWith(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,

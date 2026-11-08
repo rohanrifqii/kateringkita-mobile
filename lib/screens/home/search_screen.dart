@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../models/product_model.dart';
@@ -18,35 +19,35 @@ class _SearchScreenState extends State<SearchScreen> {
   final List<Map<String, dynamic>> _searchResults = [
     {
       'name': 'Martabak Pecenongan',
-      'price': 79.0,
+      'price': 35000.0,
       'rating': 4.8,
       'image': 'assets/images/martabak.png',
       'product': ProductData.mockProducts[1],
     },
     {
       'name': 'Nasi Kuning Slamet',
-      'price': 94.0,
+      'price': 20000.0,
       'rating': 4.9,
       'image': 'assets/images/nasi_kuning.png',
       'product': ProductData.mockProducts[2],
     },
     {
       'name': 'Donat Surgawi',
-      'price': 109.0,
+      'price': 15000.0,
       'rating': 4.7,
       'image': 'assets/images/donat_surgawi.png',
       'product': ProductData.mockProducts[3],
     },
     {
       'name': 'Risoles Bu Tima',
-      'price': 124.0,
+      'price': 18000.0,
       'rating': 4.8,
       'image': 'assets/images/risoles.png',
       'product': ProductData.mockProducts[4],
     },
     {
       'name': 'Lumpia Diego',
-      'price': 139.0,
+      'price': 25000.0,
       'rating': 4.6,
       'image': 'assets/images/lumpia_diego.png',
       'product': ProductData.mockProducts[0],
@@ -180,7 +181,7 @@ class _SearchScreenState extends State<SearchScreen> {
                                 Row(
                                   children: [
                                     Text(
-                                      '\$${(item['price'] as double).toStringAsFixed(0)}',
+                                      AppCurrency.format(item['price'] as double),
                                       style: AppTextStyles.price.copyWith(fontSize: 14),
                                     ),
                                     const SizedBox(width: 12),

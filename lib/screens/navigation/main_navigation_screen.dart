@@ -33,6 +33,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isKeyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+
     final List<Widget> screens = [
       HomeScreen(onTabChange: _onTabTapped),
       const OrdersScreen(),
@@ -51,16 +53,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             children: screens,
           ),
 
-          // Liquid Glass Bottom Navigation Bar
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: CustomBottomNavbar(
-              currentIndex: _currentIndex,
-              onTap: _onTabTapped,
+          // Sembunyikan Bottom Navbar saat keyboard muncul (user sedang mengetik),
+          // dan tampilkan kembali saat selesai mengetik / tekan enter.
+          if (!isKeyboardOpen)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: CustomBottomNavbar(
+                currentIndex: _currentIndex,
+                onTap: _onTabTapped,
+              ),
             ),
-          ),
         ],
       ),
     );

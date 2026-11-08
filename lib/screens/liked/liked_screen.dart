@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../data/liked_store.dart';
@@ -134,7 +135,7 @@ class LikedScreen extends StatelessWidget {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      '\$${product.price.toStringAsFixed(2)}',
+                                      AppCurrency.format(product.price),
                                       style: AppTextStyles.price
                                           .copyWith(fontSize: 14),
                                     ),

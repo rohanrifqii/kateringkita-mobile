@@ -48,3 +48,7 @@ app.*.map.json
 .widget_preview/
 
 mcp.json
+# API Keys & Local Secrets
+.env
+.env.*
+lib/core/gemini_env.dart

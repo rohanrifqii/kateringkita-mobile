@@ -1,18 +1,23 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import '../../data/app_database.dart';
 import '../../data/auth_repository.dart';
 import '../../data/settings_store.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../models/product_model.dart';
-import '../../widgets/dashed_border_box.dart';
+import '../../services/map_service.dart';
+import '../../widgets/app_modal_dialog.dart';
 import '../../widgets/payment_method_tile.dart';
 import '../../widgets/primary_button.dart';
+import 'location_picker_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
   final ProductModel? product;
@@ -68,6 +73,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final TextEditingController _locationController = TextEditingController();
   final TextEditingController _noteController =
       TextEditingController(text: 'Sambal dipisah ya, diambil jam istirahat');
+  final MapController _miniMapController = MapController();
+  String _selectedLocationAddress =
+      'Dinoyo, Jalan Mt Haryono Gang 5 No 273B, LOWOKWARU, KOTA MALANG, JAWA TIMUR';
+  double _selectedLat = SettingsStore.defaultLat;
+  double _selectedLng = SettingsStore.defaultLng;
   bool _userDataLoaded = false;
 
   @override
@@ -105,6 +115,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final repo = AuthRepository(context.read<AppDb>());
     final user = await repo.currentUser();
     final meeting = await SettingsStore.loadMeetingPoint();
+    final savedAddress = await SettingsStore.loadMeetingAddress();
+    final (lat, lng) = await SettingsStore.loadMeetingCoordinates();
     if (!mounted) return;
     if (user != null) {
       _nameController.text = user.fullName;
@@ -113,7 +125,50 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _nameController.text = 'Mahasiswa UB';
       _phoneController.text = '08xx-xxxx-xxxx';
     }
-    _locationController.text = meeting;
+    setState(() {
+      _locationController.text = meeting;
+      _selectedLocationAddress = savedAddress;
+      _selectedLat = lat;
+      _selectedLng = lng;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        try {
+          _miniMapController.move(LatLng(_selectedLat, _selectedLng), 15.8);
+        } catch (_) {}
+      }
+    });
+  }
+
+  Future<void> _openLocationPicker() async {
+    final result = await Navigator.push<DeliveryLocation>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => LocationPickerScreen(
+          currentLocationName: _locationController.text.trim(),
+          initialLat: _selectedLat,
+          initialLng: _selectedLng,
+        ),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        _locationController.text = result.name;
+        _selectedLocationAddress = result.fullAddress;
+        _selectedLat = result.latitude;
+        _selectedLng = result.longitude;
+      });
+      try {
+        _miniMapController.move(LatLng(_selectedLat, _selectedLng), 15.8);
+      } catch (_) {}
+      await SettingsStore.saveMeetingPoint(
+        result.name,
+        fullAddress: result.fullAddress,
+        latitude: result.latitude,
+        longitude: result.longitude,
+      );
+    }
   }
 
   @override
@@ -124,6 +179,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _phoneController.dispose();
     _locationController.dispose();
     _noteController.dispose();
+    _miniMapController.dispose();
     super.dispose();
   }
 
@@ -133,80 +189,46 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return '$m:$s';
   }
 
-  String _price(double value) => '\$${value.toStringAsFixed(2)}';
+  String _price(double value) => AppCurrency.format(value);
 
-  void _showPromoInfo() {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('Kode MHSKENYANG sudah diterapkan')),
-      );
+
+  String _paymentLabel(PaymentMethod method) {
+    switch (method) {
+      case PaymentMethod.qris:
+        return 'QRIS / Instant E-Wallet';
+      case PaymentMethod.virtualAccount:
+        return 'Transfer Virtual Account';
+      case PaymentMethod.cod:
+        return 'Tunai saat Pengambilan (COD)';
+    }
   }
 
   void _confirmOrder(double total) {
-    // Ambil db SEBELUM ada await, supaya tidak memakai context setelah jeda async.
-    final db = context.read<AppDb>();
+    AppModalDialog.showPaymentConfirmation(
+      context,
+      total: total,
+      onConfirm: () {
+        final orderCode =
+            '#KK-${DateTime.now().year}-${(DateTime.now().millisecondsSinceEpoch % 900 + 100)}';
 
-    showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(
-          'Konfirmasi Pesanan',
-          style: AppTextStyles.h3.copyWith(fontSize: 18),
-        ),
-        content: Text(
-          'Apakah Anda yakin ingin mengonfirmasi pesanan ini? '
-          'Selanjutnya Anda akan melanjutkan konfirmasi pembayaran melalui WhatsApp.',
-          style: AppTextStyles.bodyMedium,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Tidak'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            onPressed: () async {
-              Navigator.pop(dialogContext);
-
-              final orderCode =
-                  '#KK-${DateTime.now().year}-${(DateTime.now().millisecondsSinceEpoch % 900 + 100)}';
-              // Tulis ke database lokal dulu (synced = false secara default).
-              await db.addOrder(
-                orderCode: orderCode,
-                productName: _product.name,
-                quantity: _quantity,
-                totalPrice: total,
-              );
-              debugPrint('Isi tabel orders: ${await db.watchOrders().first}');
-
-              if (!mounted) return;
-              Navigator.pushNamed(
-                context,
-                AppRoutes.whatsappGenerator,
-                arguments: {
-                  'product': _product,
-                  'quantity': _quantity,
-                  'total': total,
-                  'orderCode': orderCode,
-                  'name': _nameController.text.trim(),
-                  'phone': _phoneController.text.trim(),
-                  'location': _locationController.text.trim(),
-                  'note': _noteController.text.trim(),
-                },
-              );
-            },
-            child: const Text('Ya'),
-          ),
-        ],
-      ),
+        Navigator.pushNamed(
+          context,
+          AppRoutes.payment,
+          arguments: {
+            'product': _product,
+            'quantity': _quantity,
+            'total': total,
+            'orderCode': orderCode,
+            'paymentMethod': _selectedPayment,
+            'paymentLabel': _paymentLabel(_selectedPayment),
+            'name': _nameController.text.trim(),
+            'phone': _phoneController.text.trim(),
+            'location': _locationController.text.trim(),
+            'locationAddress': _selectedLocationAddress,
+            'note': _noteController.text.trim(),
+          },
+        );
+      },
     );
   }
 
@@ -256,9 +278,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     onTap: () => setState(() => _selectedPayment = option.method),
                   ),
                 ),
-              const SizedBox(height: 2),
-              _buildPromoCard(),
-              const SizedBox(height: 16),
+              const SizedBox(height: 6),
               _buildSummaryCard(subtotal, total),
             ],
           ),
@@ -474,15 +494,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        _OrderField(
-          label: 'Lokasi Pengambilan / Drop Point',
-          controller: _locationController,
-          trailing: const Icon(
-            Icons.location_on_outlined,
-            size: 20,
-            color: AppColors.textSecondary,
-          ),
-        ),
+        _buildLocationSelectorCard(),
         const SizedBox(height: 12),
         _OrderField(
           label: 'Catatan Khusus',
@@ -492,6 +504,204 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           action: TextInputAction.done,
         ),
       ],
+    );
+  }
+
+  Widget _buildLocationSelectorCard() {
+    final title = _locationController.text.trim().isEmpty
+        ? 'Pilih Lokasi Pengantaran'
+        : _locationController.text.trim();
+    final targetLatLng = LatLng(_selectedLat, _selectedLng);
+    final etaText = MapService.estimateEta(targetLatLng);
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _openLocationPicker,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: AppColors.cardBorder,
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Lokasi Pengambilan / Pengantaran',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      fontSize: 11,
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.primarySoft,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.25),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Buka Peta',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 10.5,
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 14,
+                        color: AppColors.primary,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Mini Live Map Preview di Halaman Checkout (OpenStreetMap Resmi)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
+                height: 110,
+                width: double.infinity,
+                child: Stack(
+                  children: [
+                    IgnorePointer(
+                      child: FlutterMap(
+                        mapController: _miniMapController,
+                        options: MapOptions(
+                          initialCenter: targetLatLng,
+                          initialZoom: 16.0,
+                        ),
+                        children: [
+                          TileLayer(
+                            urlTemplate: MapService.osmStandardTileUrl,
+                            userAgentPackageName:
+                                MapService.userAgentPackageName,
+                          ),
+                          MarkerLayer(
+                            markers: [
+                              Marker(
+                                point: targetLatLng,
+                                width: 38,
+                                height: 38,
+                                alignment: Alignment.topCenter,
+                                child: const Icon(
+                                  Icons.location_on_rounded,
+                                  size: 34,
+                                  color: Color(0xFFE53935),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    Positioned(
+                      left: 8,
+                      bottom: 6,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.92),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          'Estimasi Pengantaran $etaText',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF1E293B),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEE2E2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(
+                    Icons.location_on,
+                    color: Color(0xFFE53935),
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                      if (_selectedLocationAddress.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          _selectedLocationAddress,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.textSecondary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -518,69 +728,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           color: AppColors.successDark,
           fontWeight: FontWeight.w700,
           fontSize: 10,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPromoCard() {
-    return InkWell(
-      borderRadius: BorderRadius.circular(14),
-      onTap: _showPromoInfo,
-      child: DashedBorderBox(
-        radius: 14,
-        borderColor: AppColors.warning,
-        fillColor: AppColors.warningLight.withValues(alpha: 0.5),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        child: Row(
-          children: [
-            const Icon(
-              Icons.sell_outlined,
-              size: 18,
-              color: AppColors.primaryDark,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(
-                          text: 'KODE: ',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 11,
-                          ),
-                        ),
-                        TextSpan(
-                          text: 'MHSKENYANG',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            fontFamily: 'monospace',
-                            color: AppColors.primaryDark,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Gratis biaya admin katering kampus',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            _pill('Terpakai'),
-          ],
         ),
       ),
     );
@@ -613,7 +760,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               Text('Biaya Layanan', style: AppTextStyles.bodyMedium),
               Flexible(
                 child: Text(
-                  '\$0.00 (Gratis Mahasiswa)',
+                  'Rp 0 (Gratis Mahasiswa)',
                   textAlign: TextAlign.end,
                   style: AppTextStyles.bodyMedium.copyWith(
                     color: AppColors.success,
@@ -746,7 +893,17 @@ class _OrderFieldState extends State<_OrderField> {
                       fontWeight: FontWeight.w600,
                       fontSize: 13,
                     ),
-                    decoration: const InputDecoration.collapsed(hintText: ''),
+                    decoration: const InputDecoration(
+                      isDense: true,
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      errorBorder: InputBorder.none,
+                      disabledBorder: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                      hintText: '',
+                    ),
                   ),
                 ),
                 if (widget.trailing != null) ...[
