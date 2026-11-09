@@ -9,6 +9,7 @@ import '../screens/auth/verify_code_screen.dart';
 import '../screens/home/home_screen.dart';
 import '../screens/home/product_detail_screen.dart';
 import '../screens/home/search_screen.dart';
+import '../screens/home/store_profile_screen.dart';
 import '../screens/liked/liked_screen.dart';
 import '../screens/navigation/main_navigation_screen.dart';
 import '../screens/orders/active_orders_screen.dart';
@@ -39,6 +40,7 @@ class AppRouter {
     AppRoutes.home: (context) => const HomeScreen(),
     AppRoutes.search: (context) => const SearchScreen(),
     AppRoutes.productDetail: (context) => const ProductDetailScreen(),
+    AppRoutes.storeProfile: (context) => const StoreProfileScreen(),
     AppRoutes.checkout: (context) => const CheckoutScreen(),
     AppRoutes.payment: (context) => const PaymentScreen(),
     AppRoutes.whatsappGenerator: (context) => const WhatsAppGeneratorScreen(),

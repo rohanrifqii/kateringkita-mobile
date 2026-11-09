@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -6,13 +10,15 @@ import '../../core/app_colors.dart';
 import '../../core/app_text_styles.dart';
 import '../../data/app_database.dart';
 import '../../data/auth_repository.dart';
+import '../../providers/theme_provider.dart';
 
 /// Data tambahan profil pengguna yang disimpan di SharedPreferences
 class UserProfileExtras {
   final String bio;
   final String gender;
   final String birthDate;
-  final int avatarIndex; // 0 = foto default, 1 = ikon pria, 2 = ikon wanita, 3 = inisial
+  final int avatarIndex; // 0 = foto default, 3 = inisial
+  final String avatarPath; // Path file foto profil hasil upload dari Galeri / Kamera
   final bool isPhoneVerified;
   final bool isEmailVerified;
 
@@ -21,6 +27,7 @@ class UserProfileExtras {
     this.gender = 'Pria',
     this.birthDate = '',
     this.avatarIndex = 0,
+    this.avatarPath = '',
     this.isPhoneVerified = true,
     this.isEmailVerified = false,
   });
@@ -30,6 +37,7 @@ class UserProfileExtras {
     String? gender,
     String? birthDate,
     int? avatarIndex,
+    String? avatarPath,
     bool? isPhoneVerified,
     bool? isEmailVerified,
   }) {
@@ -38,6 +46,7 @@ class UserProfileExtras {
       gender: gender ?? this.gender,
       birthDate: birthDate ?? this.birthDate,
       avatarIndex: avatarIndex ?? this.avatarIndex,
+      avatarPath: avatarPath ?? this.avatarPath,
       isPhoneVerified: isPhoneVerified ?? this.isPhoneVerified,
       isEmailVerified: isEmailVerified ?? this.isEmailVerified,
     );
@@ -57,6 +66,7 @@ class UserProfileExtras {
     final gender = await _prefs.getString('prof_gender_$s') ?? 'Pria';
     final birthDate = await _prefs.getString('prof_birth_$s') ?? '';
     final avatarIndex = await _prefs.getInt('prof_avatar_$s') ?? 0;
+    final avatarPath = await _prefs.getString('prof_avatar_path_$s') ?? '';
     final phoneVer = await _prefs.getBool('prof_phone_ver_$s') ?? true;
     final emailVer = await _prefs.getBool('prof_email_ver_$s') ?? false;
 
@@ -65,6 +75,7 @@ class UserProfileExtras {
       gender: gender,
       birthDate: birthDate,
       avatarIndex: avatarIndex,
+      avatarPath: avatarPath,
       isPhoneVerified: phoneVer,
       isEmailVerified: emailVer,
     );
@@ -76,6 +87,7 @@ class UserProfileExtras {
     await _prefs.setString('prof_gender_$s', data.gender);
     await _prefs.setString('prof_birth_$s', data.birthDate);
     await _prefs.setInt('prof_avatar_$s', data.avatarIndex);
+    await _prefs.setString('prof_avatar_path_$s', data.avatarPath);
     await _prefs.setBool('prof_phone_ver_$s', data.isPhoneVerified);
     await _prefs.setBool('prof_email_ver_$s', data.isEmailVerified);
   }
@@ -179,13 +191,45 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   // ---------------- MODAL EDIT TIAP FIELD ----------------
 
+  Future<void> _pickAndSaveImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 800,
+        maxHeight: 800,
+      );
+      if (pickedFile == null) return;
+
+      final appDir = await getApplicationDocumentsDirectory();
+      final ext = pickedFile.path.contains('.')
+          ? pickedFile.path.substring(pickedFile.path.lastIndexOf('.'))
+          : '.jpg';
+      final savedPath =
+          '${appDir.path}/avatar_${DateTime.now().millisecondsSinceEpoch}$ext';
+      await File(pickedFile.path).copy(savedPath);
+
+      if (!mounted) return;
+      setState(() {
+        _extras = _extras.copyWith(
+          avatarPath: savedPath,
+          avatarIndex: 0,
+        );
+      });
+      await _persistChanges();
+      _showSuccessToast('Foto profil berhasil diunggah & diperbarui!');
+    } catch (e) {
+      if (!mounted) return;
+      _showSuccessToast(
+        'Gagal membuka galeri/kamera. Pastikan aplikasi sudah di-restart penuh.',
+      );
+    }
+  }
+
   void _showAvatarPickerSheet() {
-    final options = [
-      (0, 'Foto Profil Default', Icons.photo_camera_front_rounded),
-      (1, 'Avatar Mahasiswa (Pria)', Icons.face_6_rounded),
-      (2, 'Avatar Mahasiswi (Wanita)', Icons.face_3_rounded),
-      (3, 'Inisial Nama KateringKita', Icons.text_fields_rounded),
-    ];
+    final hasCustomPhoto =
+        _extras.avatarPath.isNotEmpty && File(_extras.avatarPath).existsSync();
 
     showModalBottomSheet(
       context: context,
@@ -206,54 +250,160 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   children: [
                     Text(
                       'Ubah Foto Profil',
-                      style: AppTextStyles.h3.copyWith(fontSize: 17),
+                      style: AppTextStyles.h3.copyWith(
+                        fontSize: 17,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 20),
+                      icon: Icon(
+                        Icons.close_rounded,
+                        size: 20,
+                        color: AppColors.textSecondary,
+                      ),
                       onPressed: () => Navigator.pop(ctx),
                     ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                ...options.map((opt) {
-                  final isSelected = _extras.avatarIndex == opt.$1;
-                  return ListTile(
+                // Opsi 1: Upload dari Galeri HP
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  leading: CircleAvatar(
+                    backgroundColor: AppColors.primarySoft,
+                    child: const Icon(
+                      Icons.photo_library_rounded,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    'Pilih Foto dari Galeri',
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Unggah foto profil dari penyimpanan HP kamu',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.textMuted,
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickAndSaveImage(ImageSource.gallery);
+                  },
+                ),
+                Divider(height: 1, color: AppColors.divider),
+                // Opsi 2: Ambil Foto dari Kamera
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  leading: CircleAvatar(
+                    backgroundColor: AppColors.blueLight,
+                    child: const Icon(
+                      Icons.camera_alt_rounded,
+                      color: AppColors.blue,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    'Ambil Foto dari Kamera',
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  subtitle: Text(
+                    'Gunakan kamera langsung untuk foto profil baru',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 11.5,
+                    ),
+                  ),
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.textMuted,
+                  ),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickAndSaveImage(ImageSource.camera);
+                  },
+                ),
+                Divider(height: 1, color: AppColors.divider),
+                // Opsi 3: Gunakan Inisial Nama
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                  leading: CircleAvatar(
+                    backgroundColor: AppColors.secondaryBg,
+                    child: Icon(
+                      Icons.text_fields_rounded,
+                      color: AppColors.textSecondary,
+                      size: 20,
+                    ),
+                  ),
+                  title: Text(
+                    'Gunakan Avatar Inisial Nama',
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  trailing: (!hasCustomPhoto && _extras.avatarIndex == 3)
+                      ? const Icon(
+                          Icons.check_circle_rounded,
+                          color: AppColors.primary,
+                        )
+                      : null,
+                  onTap: () async {
+                    setState(() {
+                      _extras = _extras.copyWith(
+                        avatarPath: '',
+                        avatarIndex: 3,
+                      );
+                    });
+                    Navigator.pop(ctx);
+                    await _persistChanges();
+                    _showSuccessToast('Avatar diubah ke inisial nama');
+                  },
+                ),
+                if (hasCustomPhoto || _extras.avatarIndex != 0) ...[
+                  Divider(height: 1, color: AppColors.divider),
+                  ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                     leading: CircleAvatar(
-                      backgroundColor: isSelected
-                          ? AppColors.primarySoft
-                          : AppColors.secondaryBg,
-                      child: Icon(
-                        opt.$3,
-                        color: isSelected
-                            ? AppColors.primary
-                            : AppColors.textSecondary,
+                      backgroundColor: AppColors.dangerLight,
+                      child: const Icon(
+                        Icons.restore_rounded,
+                        color: AppColors.danger,
+                        size: 20,
                       ),
                     ),
                     title: Text(
-                      opt.$2,
+                      'Reset ke Foto Profil Default',
                       style: AppTextStyles.bodyMedium.copyWith(
-                        fontWeight:
-                            isSelected ? FontWeight.w700 : FontWeight.w500,
-                        color: isSelected
-                            ? AppColors.primary
-                            : AppColors.textPrimary,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.danger,
                       ),
                     ),
-                    trailing: isSelected
-                        ? const Icon(Icons.check_circle_rounded,
-                            color: AppColors.primary)
-                        : null,
                     onTap: () async {
                       setState(() {
-                        _extras = _extras.copyWith(avatarIndex: opt.$1);
+                        _extras = _extras.copyWith(
+                          avatarPath: '',
+                          avatarIndex: 0,
+                        );
                       });
                       Navigator.pop(ctx);
                       await _persistChanges();
-                      _showSuccessToast('Foto profil berhasil diperbarui');
+                      _showSuccessToast('Foto profil dikembalikan ke default');
                     },
-                  );
-                }),
+                  ),
+                ],
               ],
             ),
           ),
@@ -672,7 +822,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = context.watch<ThemeProvider>().isDarkMode;
+    AppColors.isDarkMode = isDark;
     final cleanBioSingleLine = _extras.bio.replaceAll('\n', ' • ').trim();
 
     return Scaffold(
@@ -850,10 +1001,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildAvatarCircle() {
+    if (_extras.avatarPath.isNotEmpty) {
+      final file = File(_extras.avatarPath);
+      if (file.existsSync()) {
+        return Container(
+          width: 82,
+          height: 82,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: AppColors.primary, width: 2),
+          ),
+          child: ClipOval(
+            child: Image.file(
+              file,
+              width: 82,
+              height: 82,
+              fit: BoxFit.cover,
+            ),
+          ),
+        );
+      }
+    }
+
     if (_extras.avatarIndex == 0) {
       return Container(
-        width: 76,
-        height: 76,
+        width: 82,
+        height: 82,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
           border: Border.all(color: AppColors.cardBorder, width: 1.5),
@@ -875,46 +1048,28 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       );
     }
 
-    if (_extras.avatarIndex == 3) {
-      final initial = _name.trim().isNotEmpty ? _name.trim()[0].toUpperCase() : 'U';
-      return Container(
-        width: 76,
-        height: 76,
-        decoration: BoxDecoration(
-          color: AppColors.primarySoft,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: AppColors.primary.withValues(alpha: 0.3),
-            width: 1.5,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            initial,
-            style: const TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
-              color: AppColors.primary,
-            ),
-          ),
-        ),
-      );
-    }
-
+    final initial =
+        _name.trim().isNotEmpty ? _name.trim()[0].toUpperCase() : 'U';
     return Container(
-      width: 76,
-      height: 76,
+      width: 82,
+      height: 82,
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: AppColors.primarySoft,
         shape: BoxShape.circle,
-        border: Border.all(color: AppColors.cardBorder, width: 1.5),
+        border: Border.all(
+          color: AppColors.primary.withValues(alpha: 0.3),
+          width: 1.5,
+        ),
       ),
-      child: Icon(
-        _extras.avatarIndex == 1
-            ? Icons.person_rounded
-            : Icons.face_3_rounded,
-        size: 48,
-        color: AppColors.primary,
+      child: Center(
+        child: Text(
+          initial,
+          style: const TextStyle(
+            fontSize: 30,
+            fontWeight: FontWeight.w800,
+            color: AppColors.primary,
+          ),
+        ),
       ),
     );
   }

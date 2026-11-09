@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/app_currency.dart';
+import '../core/app_routes.dart';
 import '../core/app_text_styles.dart';
 import '../models/product_model.dart';
 
@@ -99,6 +100,44 @@ class FoodGridCard extends StatelessWidget {
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.storeProfile,
+                        arguments: product.vendor,
+                      );
+                    },
+                    behavior: HitTestBehavior.opaque,
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.storefront_rounded,
+                          size: 11.5,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            product.vendor,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          size: 13,
+                          color: AppColors.textMuted,
+                        ),
+                      ],
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Row(

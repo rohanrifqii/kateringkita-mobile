@@ -12,11 +12,14 @@ class ThemeProvider extends ChangeNotifier {
 
   ThemeMode get themeMode => _isDarkMode ? ThemeMode.dark : ThemeMode.light;
 
-  ThemeProvider({bool initialDark = false}) : _isDarkMode = initialDark;
+  ThemeProvider({bool initialDark = false}) : _isDarkMode = initialDark {
+    AppColors.isDarkMode = initialDark;
+  }
 
   Future<void> setDarkMode(bool value) async {
-    if (_isDarkMode == value) return;
+    if (_isDarkMode == value && AppColors.isDarkMode == value) return;
     _isDarkMode = value;
+    AppColors.isDarkMode = value;
     await _prefs.setBool(prefKey, value);
     _updateSystemOverlay();
     notifyListeners();
@@ -31,7 +34,7 @@ class ThemeProvider extends ChangeNotifier {
         statusBarBrightness:
             _isDarkMode ? Brightness.dark : Brightness.light,
         systemNavigationBarColor:
-            _isDarkMode ? AppColors.darkBackground : AppColors.background,
+            _isDarkMode ? AppColors.darkBackground : AppColors.lightBackground,
         systemNavigationBarIconBrightness:
             _isDarkMode ? Brightness.light : Brightness.dark,
       ),

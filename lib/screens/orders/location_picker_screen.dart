@@ -634,7 +634,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen>
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.search_rounded,
                           color: AppColors.textMuted,
                           size: 20,
@@ -680,7 +680,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen>
                               _searchController.clear();
                               _onSearchChanged('');
                             },
-                            child: const Icon(
+                            child: Icon(
                               Icons.clear_rounded,
                               size: 18,
                               color: AppColors.textMuted,
@@ -1274,7 +1274,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen>
               ),
               child: Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.bookmark_border_rounded,
                     color: AppColors.textMuted,
                     size: 20,
@@ -1354,7 +1354,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen>
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                           tooltip: 'Hapus alamat',
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.delete_outline_rounded,
                             size: 18,
                             color: AppColors.textMuted,
@@ -1432,7 +1432,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen>
                         color: AppColors.secondaryBg,
                         borderRadius: BorderRadius.circular(24),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.location_history_outlined,
                         size: 24,
                         color: AppColors.textMuted,
@@ -1529,7 +1529,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen>
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
                           tooltip: 'Hapus dari riwayat',
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.close_rounded,
                             size: 18,
                             color: AppColors.textMuted,
@@ -1598,7 +1598,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen>
               child: Center(
                 child: Column(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.location_off_outlined,
                       size: 34,
                       color: AppColors.textMuted,

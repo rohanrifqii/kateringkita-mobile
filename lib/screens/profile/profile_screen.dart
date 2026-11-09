@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -841,7 +843,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     color: AppColors.secondaryBg,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text(
+                  child: Text(
                     'Versi 1.0.2 • Build 2025',
                     style: TextStyle(
                       fontSize: 11,
@@ -1423,6 +1425,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildHeaderAvatar(String name) {
+    if (_extras.avatarPath.isNotEmpty) {
+      final file = File(_extras.avatarPath);
+      if (file.existsSync()) {
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: Image.file(
+            file,
+            width: 68,
+            height: 68,
+            fit: BoxFit.cover,
+          ),
+        );
+      }
+    }
+
     if (_extras.avatarIndex == 0) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(16),
@@ -1445,28 +1462,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
-    if (_extras.avatarIndex == 3) {
-      final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : 'U';
-      return Container(
-        width: 68,
-        height: 68,
-        decoration: BoxDecoration(
-          color: AppColors.primarySoft,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Center(
-          child: Text(
-            initial,
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              color: AppColors.primary,
-            ),
-          ),
-        ),
-      );
-    }
-
+    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : 'U';
     return Container(
       width: 68,
       height: 68,
@@ -1474,12 +1470,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
         color: AppColors.primarySoft,
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Icon(
-        _extras.avatarIndex == 1
-            ? Icons.person_rounded
-            : Icons.face_3_rounded,
-        size: 36,
-        color: AppColors.primary,
+      child: Center(
+        child: Text(
+          initial,
+          style: const TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            color: AppColors.primary,
+          ),
+        ),
       ),
     );
   }
@@ -1654,7 +1653,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   style: AppTextStyles.bodyMedium.copyWith(
                     fontWeight: FontWeight.w700,
                     fontSize: 13.5,
-                    color: AppColors.textPrimary,
+                    color: isDark
+                        ? AppColors.darkTextPrimary
+                        : AppColors.lightTextPrimary,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -1663,7 +1664,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ? (_isEn ? 'Dark Mode' : 'Mode Gelap')
                       : (_isEn ? 'Light Mode' : 'Mode Terang'),
                   style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.lightTextSecondary,
                     fontSize: 11.5,
                   ),
                 ),
@@ -1674,10 +1677,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Container(
             padding: const EdgeInsets.all(3),
             decoration: BoxDecoration(
-              color: AppColors.secondaryBg,
+              color: isDark
+                  ? const Color(0xFF141418)
+                  : const Color(0xFFF3EFEA),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: AppColors.cardBorder.withValues(alpha: 0.7),
+                color: (isDark
+                        ? AppColors.darkCardBorder
+                        : AppColors.lightCardBorder)
+                    .withValues(alpha: 0.8),
               ),
             ),
             child: Row(
@@ -1686,6 +1694,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _buildThemeOptionChip(
                   label: _isEn ? 'Light' : 'Terang',
                   selected: !isDark,
+                  isDark: isDark,
                   onTap: () async {
                     if (!isDark) return;
                     await themeProvider.setDarkMode(false);
@@ -1699,6 +1708,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _buildThemeOptionChip(
                   label: _isEn ? 'Dark' : 'Gelap',
                   selected: isDark,
+                  isDark: isDark,
                   onTap: () async {
                     if (isDark) return;
                     await themeProvider.setDarkMode(true);
@@ -1720,23 +1730,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildThemeOptionChip({
     required String label,
     required bool selected,
+    required bool isDark,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
         decoration: BoxDecoration(
           color: selected
-              ? (AppColors.isDarkMode ? const Color(0xFF33333D) : Colors.white)
+              ? (isDark ? AppColors.primary : Colors.white)
               : Colors.transparent,
           borderRadius: BorderRadius.circular(9),
           boxShadow: selected
               ? [
                   BoxShadow(
                     color: Colors.black.withValues(
-                      alpha: AppColors.isDarkMode ? 0.2 : 0.06,
+                      alpha: isDark ? 0.25 : 0.06,
                     ),
                     blurRadius: 4,
                     offset: const Offset(0, 1),
@@ -1750,8 +1761,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             fontSize: 11.5,
             fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
             color: selected
-                ? (AppColors.isDarkMode ? Colors.white : AppColors.textPrimary)
-                : AppColors.textMuted,
+                ? (isDark ? Colors.white : AppColors.lightTextPrimary)
+                : (isDark
+                    ? AppColors.darkTextSecondary
+                    : AppColors.lightTextMuted),
           ),
         ),
       ),

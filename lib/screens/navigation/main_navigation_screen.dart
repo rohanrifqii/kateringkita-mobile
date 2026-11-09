@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../core/app_colors.dart';
+import '../../providers/theme_provider.dart';
 import '../../widgets/custom_bottom_navbar.dart';
 import '../ai/ai_assistant_screen.dart';
 import '../home/home_screen.dart';
@@ -32,18 +35,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Subscribe ke ThemeProvider agar seluruh halaman di IndexedStack ikut ter-rebuild
+    // secara instan ketika mode Terang / Gelap diubah.
+    final isDark = context.watch<ThemeProvider>().isDarkMode;
+    AppColors.isDarkMode = isDark;
     final bool isKeyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     final List<Widget> screens = [
-      HomeScreen(onTabChange: _onTabTapped),
-      const OrdersScreen(),
-      const AIAssistantScreen(),
-      const LikedScreen(),
+      HomeScreen(
+        key: ValueKey('home_$isDark'),
+        onTabChange: _onTabTapped,
+      ),
+      OrdersScreen(key: ValueKey('orders_$isDark')),
+      AIAssistantScreen(key: ValueKey('ai_$isDark')),
+      LikedScreen(key: ValueKey('liked_$isDark')),
       const ProfileScreen(),
     ];
 
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      backgroundColor: AppColors.background,
       body: Stack(
         children: [
           // Current Tab Page

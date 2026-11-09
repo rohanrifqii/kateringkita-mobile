@@ -455,9 +455,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
-            icon: const Icon(
+            icon: Icon(
               Icons.arrow_back_rounded,
-              color: Color(0xFF1E293B),
+              color: AppColors.textPrimary,
               size: 22,
             ),
             onPressed: () {
@@ -466,20 +466,20 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               }
             },
           ),
-          const Text(
+          Text(
             'AI Assistant',
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF1E293B),
+              color: AppColors.textPrimary,
               letterSpacing: -0.3,
             ),
           ),
           IconButton(
             tooltip: 'Riwayat Percakapan',
-            icon: const Icon(
+            icon: Icon(
               Icons.more_vert_rounded,
-              color: Color(0xFF1E293B),
+              color: AppColors.textPrimary,
               size: 22,
             ),
             onPressed: () {
@@ -496,7 +496,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   Widget _buildHistorySidebar() {
     return Drawer(
       width: MediaQuery.of(context).size.width * 0.82,
-      backgroundColor: const Color(0xFFFAF8F5),
+      backgroundColor: AppColors.background,
       surfaceTintColor: Colors.transparent,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
@@ -538,7 +538,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -547,7 +547,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                           style: TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
-                            color: Color(0xFF1E293B),
+                            color: AppColors.textPrimary,
                             letterSpacing: -0.3,
                           ),
                         ),
@@ -556,16 +556,16 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                           style: TextStyle(
                             fontSize: 11,
                             fontWeight: FontWeight.w500,
-                            color: Color(0xFF64748B),
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.close_rounded,
-                      color: Color(0xFF475569),
+                      color: AppColors.textSecondary,
                       size: 22,
                     ),
                     onPressed: () => Navigator.of(context).pop(),
@@ -578,7 +578,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Material(
-                color: Colors.white,
+                color: AppColors.surface,
                 borderRadius: BorderRadius.circular(28),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(28),
@@ -605,20 +605,20 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                         ),
                       ],
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.edit_note_rounded,
                           color: AppColors.primary,
                           size: 22,
                         ),
-                        SizedBox(width: 12),
+                        const SizedBox(width: 12),
                         Text(
                           'Percakapan baru',
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF1E293B),
+                            color: AppColors.textPrimary,
                           ),
                         ),
                       ],
@@ -636,12 +636,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Riwayat Chat',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: Color(0xFF64748B),
+                      color: AppColors.textSecondary,
                       letterSpacing: 0.2,
                     ),
                   ),
@@ -686,7 +686,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                               width: 56,
                               height: 56,
                               decoration: BoxDecoration(
-                                color: const Color(0xFFFFF3ED),
+                                color: AppColors.primarySoft,
                                 borderRadius: BorderRadius.circular(28),
                               ),
                               child: const Icon(
@@ -696,21 +696,21 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                               ),
                             ),
                             const SizedBox(height: 12),
-                            const Text(
+                            Text(
                               'Belum ada riwayat chat',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFF334155),
+                                color: AppColors.textPrimary,
                               ),
                             ),
                             const SizedBox(height: 4),
-                            const Text(
+                            Text(
                               'Setiap rekomendasi paket dan konsultasi AI akan tersimpan otomatis di sini.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: Color(0xFF94A3B8),
+                                color: AppColors.textMuted,
                                 height: 1.4,
                               ),
                             ),
@@ -731,7 +731,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                           padding: const EdgeInsets.only(bottom: 6),
                           child: Material(
                             color: isSelected
-                                ? const Color(0xFFFFF1E8)
+                                ? AppColors.primarySoft
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(16),
                             child: InkWell(
@@ -763,7 +763,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                                       size: 17,
                                       color: isSelected
                                           ? AppColors.primary
-                                          : const Color(0xFF64748B),
+                                          : AppColors.textSecondary,
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
@@ -781,8 +781,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                                                   ? FontWeight.w800
                                                   : FontWeight.w600,
                                               color: isSelected
-                                                  ? const Color(0xFF9A3412)
-                                                  : const Color(0xFF1E293B),
+                                                  ? AppColors.primary
+                                                  : AppColors.textPrimary,
                                             ),
                                           ),
                                           const SizedBox(height: 2),
@@ -790,9 +790,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                                             '${session.subtitle} • ${session.updatedAt}',
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 11,
-                                              color: Color(0xFF94A3B8),
+                                              color: AppColors.textMuted,
                                             ),
                                           ),
                                         ],
@@ -801,10 +801,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                                     IconButton(
                                       visualDensity: VisualDensity.compact,
                                       tooltip: 'Hapus chat ini',
-                                      icon: const Icon(
+                                      icon: Icon(
                                         Icons.delete_outline_rounded,
                                         size: 18,
-                                        color: Color(0xFF94A3B8),
+                                        color: AppColors.textMuted,
                                       ),
                                       onPressed: () =>
                                           _deleteSession(session.id),
@@ -822,17 +822,17 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             // 5. Footer Profil User
             Container(
               padding: const EdgeInsets.fromLTRB(18, 12, 18, 16),
-              decoration: const BoxDecoration(
-                color: Colors.white,
+              decoration: BoxDecoration(
+                color: AppColors.surface,
                 border: Border(
-                  top: BorderSide(color: Color(0xFFEDEAE4)),
+                  top: BorderSide(color: AppColors.cardBorder),
                 ),
               ),
               child: Row(
                 children: [
                   CircleAvatar(
                     radius: 17,
-                    backgroundColor: const Color(0xFFFFEDE3),
+                    backgroundColor: AppColors.primarySoft,
                     child: Text(
                       _userName.isNotEmpty ? _userName[0].toUpperCase() : 'U',
                       style: const TextStyle(
@@ -851,17 +851,17 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                           _userName,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: Color(0xFF1E293B),
+                            color: AppColors.textPrimary,
                           ),
                         ),
-                        const Text(
+                        Text(
                           'KateringKita Smart AI',
                           style: TextStyle(
                             fontSize: 11,
-                            color: Color(0xFF64748B),
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
@@ -873,7 +873,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFF3ED),
+                      color: AppColors.primarySoft,
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: const Text(
@@ -904,9 +904,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       builder: (ctx) {
         return Container(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -917,7 +917,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                   width: 42,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: const Color(0xFFCBD5E1),
+                    color: AppColors.cardBorder,
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -928,7 +928,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFFF3ED),
+                      color: AppColors.primarySoft,
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(
@@ -938,7 +938,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                     ),
                   ),
                   const SizedBox(width: 10),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -947,14 +947,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w800,
-                            color: Color(0xFF1E293B),
+                            color: AppColors.textPrimary,
                           ),
                         ),
                         Text(
                           'Sesuaikan jenis konsumsi dengan target acaramu',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Color(0xFF64748B),
+                            color: AppColors.textSecondary,
                           ),
                         ),
                       ],
@@ -969,8 +969,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                   padding: const EdgeInsets.only(bottom: 10),
                   child: Material(
                     color: isSelected
-                        ? const Color(0xFFFFF5EF)
-                        : const Color(0xFFF9F8F6),
+                        ? AppColors.primarySoft
+                        : AppColors.secondaryBg,
                     borderRadius: BorderRadius.circular(16),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
@@ -990,7 +990,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                           border: Border.all(
                             color: isSelected
                                 ? AppColors.primary
-                                : const Color(0xFFE8E5DF),
+                                : AppColors.cardBorder,
                             width: isSelected ? 1.5 : 1.0,
                           ),
                         ),
@@ -1002,7 +1002,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                               decoration: BoxDecoration(
                                 color: isSelected
                                     ? AppColors.primary
-                                    : Colors.white,
+                                    : AppColors.surface,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Icon(
@@ -1010,7 +1010,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                                 size: 20,
                                 color: isSelected
                                     ? Colors.white
-                                    : const Color(0xFF64748B),
+                                    : AppColors.textSecondary,
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -1024,16 +1024,16 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                                       fontSize: 14,
                                       fontWeight: FontWeight.w800,
                                       color: isSelected
-                                          ? const Color(0xFF9A3412)
-                                          : const Color(0xFF1E293B),
+                                          ? AppColors.primary
+                                          : AppColors.textPrimary,
                                     ),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
                                     opt.subtitle,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 11,
-                                      color: Color(0xFF64748B),
+                                      color: AppColors.textSecondary,
                                     ),
                                   ),
                                 ],
@@ -1046,9 +1046,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                                 size: 22,
                               )
                             else
-                              const Icon(
+                              Icon(
                                 Icons.circle_outlined,
-                                color: Color(0xFFCBD5E1),
+                                color: AppColors.textMuted,
                                 size: 20,
                               ),
                           ],
@@ -1071,10 +1071,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: const Color(0xFFE8E5DF).withValues(alpha: 0.7),
+          color: AppColors.cardBorder.withValues(alpha: 0.7),
         ),
         boxShadow: [
           BoxShadow(
@@ -1089,8 +1089,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
           Container(
             width: 44,
             height: 44,
-            decoration: const BoxDecoration(
-              color: Color(0xFFEEF2FF),
+            decoration: BoxDecoration(
+              color: AppColors.blueLight,
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -1106,19 +1106,19 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               children: [
                 Text(
                   'Halo $_userName!',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF1E293B),
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 3),
-                const Text(
+                Text(
                   'Butuh hitung porsi danus kampus atau paket hemat rapat kantor hari ini?',
                   style: TextStyle(
                     fontSize: 12,
                     height: 1.35,
-                    color: Color(0xFF64748B),
+                    color: AppColors.textSecondary,
                   ),
                 ),
               ],
@@ -1135,10 +1135,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: const Color(0xFFE8E5DF).withValues(alpha: 0.8),
+          color: AppColors.cardBorder.withValues(alpha: 0.8),
         ),
         boxShadow: [
           BoxShadow(
@@ -1152,14 +1152,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header Baris: Ikon Slider + Judul
-          const Row(
+          Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.tune_rounded,
-                color: Color(0xFF9A3412),
+                color: AppColors.primary,
                 size: 20,
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Atur Parameter Rekomendasi',
@@ -1168,7 +1168,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF1E293B),
+                    color: AppColors.textPrimary,
                   ),
                 ),
               ),
@@ -1177,17 +1177,17 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
           const SizedBox(height: 16),
 
           // 1. Jenis Produk (Tampilan minimalis sesuai redesign + Bottom Sheet profesional)
-          const Text(
+          Text(
             'Jenis Produk',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF475569),
+              color: AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 6),
           Material(
-            color: const Color(0xFFF9F7F5),
+            color: AppColors.secondaryBg,
             borderRadius: BorderRadius.circular(10),
             child: InkWell(
               borderRadius: BorderRadius.circular(10),
@@ -1197,7 +1197,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: const Color(0xFFE2DED7)),
+                  border: Border.all(color: AppColors.cardBorder),
                 ),
                 child: Row(
                   children: [
@@ -1206,17 +1206,17 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                         _selectedProductType,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFF1E293B),
+                          color: AppColors.textPrimary,
                         ),
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Icon(
+                    Icon(
                       Icons.keyboard_arrow_down_rounded,
-                      color: Color(0xFF64748B),
+                      color: AppColors.textSecondary,
                       size: 20,
                     ),
                   ],
@@ -1234,14 +1234,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Total Modal (Rp)',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF475569),
+                        color: AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -1249,9 +1249,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                       height: 46,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF9F7F5),
+                        color: AppColors.secondaryBg,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE2DED7)),
+                        border: Border.all(color: AppColors.cardBorder),
                       ),
                       child: Row(
                         children: [
@@ -1259,10 +1259,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                             child: TextField(
                               controller: _modalController,
                               keyboardType: TextInputType.number,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w800,
-                                color: Color(0xFF1E293B),
+                                color: AppColors.textPrimary,
                               ),
                               decoration: const InputDecoration(
                                 filled: false,
@@ -1279,12 +1279,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          const Text(
+                          Text(
                             'IDR',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
-                              color: Color(0xFF94A3B8),
+                              color: AppColors.textMuted,
                             ),
                           ),
                         ],
@@ -1300,14 +1300,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Target Penjualan (Opsional)',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF475569),
+                        color: AppColors.textSecondary,
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -1315,19 +1315,19 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                       height: 46,
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF9F7F5),
+                        color: AppColors.secondaryBg,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE2DED7)),
+                        border: Border.all(color: AppColors.cardBorder),
                       ),
                       child: Row(
                         children: [
                           Expanded(
                             child: TextField(
                               controller: _targetController,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w800,
-                                color: Color(0xFF1E293B),
+                                color: AppColors.textPrimary,
                               ),
                               decoration: const InputDecoration(
                                 filled: false,
@@ -1344,10 +1344,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                             ),
                           ),
                           const SizedBox(width: 6),
-                          const Icon(
+                          Icon(
                             Icons.groups_outlined,
                             size: 18,
-                            color: Color(0xFF94A3B8),
+                            color: AppColors.textMuted,
                           ),
                         ],
                       ),
@@ -1360,12 +1360,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
           const SizedBox(height: 16),
 
           // 3. Fokus Rekomendasi
-          const Text(
+          Text(
             'Fokus Rekomendasi:',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF475569),
+              color: AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 8),
@@ -1381,12 +1381,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                     decoration: BoxDecoration(
                       color: _selectedPriority == 0
                           ? const Color(0xFFD9774A)
-                          : Colors.white,
+                          : AppColors.secondaryBg,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: _selectedPriority == 0
                             ? const Color(0xFFD9774A)
-                            : const Color(0xFFE2DED7),
+                            : AppColors.cardBorder,
                       ),
                     ),
                     child: Row(
@@ -1410,7 +1410,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                               fontWeight: FontWeight.w700,
                               color: _selectedPriority == 0
                                   ? Colors.white
-                                  : const Color(0xFF475569),
+                                  : AppColors.textSecondary,
                             ),
                           ),
                         ),
@@ -1431,12 +1431,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                     decoration: BoxDecoration(
                       color: _selectedPriority == 1
                           ? const Color(0xFFD9774A)
-                          : Colors.white,
+                          : AppColors.secondaryBg,
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: _selectedPriority == 1
                             ? const Color(0xFFD9774A)
-                            : const Color(0xFFE2DED7),
+                            : AppColors.cardBorder,
                       ),
                     ),
                     child: Row(
@@ -1448,7 +1448,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                               : Icons.category_outlined,
                           color: _selectedPriority == 1
                               ? Colors.white
-                              : const Color(0xFF64748B),
+                              : AppColors.textSecondary,
                           size: 15,
                         ),
                         const SizedBox(width: 6),
@@ -1462,7 +1462,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                               fontWeight: FontWeight.w700,
                               color: _selectedPriority == 1
                                   ? Colors.white
-                                  : const Color(0xFF475569),
+                                  : AppColors.textSecondary,
                             ),
                           ),
                         ),
@@ -1476,12 +1476,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
           const SizedBox(height: 14),
 
           // 4. Penjelasan Opsi (Dinamis sesuai pilihan Profit Maksimal vs Variasi Menu)
-          const Text(
+          Text(
             'Penjelasan opsi:',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF475569),
+              color: AppColors.textSecondary,
             ),
           ),
           const SizedBox(height: 4),
@@ -1492,10 +1492,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                   ? 'Fokus memilih menu dengan margin keuntungan tertinggi dari modalmu, meskipun yang direkomendasikan hanya satu menu.'
                   : 'Fokus merekomendasikan banyak variasi menu berbeda dengan pembagian porsi yang disesuaikan dari modalmu, meskipun keuntungannya lebih sedikit.',
               key: ValueKey<int>(_selectedPriority),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 height: 1.4,
-                color: Color(0xFF64748B),
+                color: AppColors.textSecondary,
               ),
             ),
           ),
@@ -1545,10 +1545,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: const Color(0xFFE8E5DF).withValues(alpha: 0.8),
+          color: AppColors.cardBorder.withValues(alpha: 0.8),
         ),
         boxShadow: [
           BoxShadow(
@@ -1561,14 +1561,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.donut_large_rounded,
                 color: Color(0xFFD9774A),
                 size: 20,
               ),
-              SizedBox(width: 8),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   'Rekomendasi Paket',
@@ -1577,7 +1577,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                   style: TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF1E293B),
+                    color: AppColors.textPrimary,
                   ),
                 ),
               ),
@@ -1604,7 +1604,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             height: 46,
             child: OutlinedButton(
               style: OutlinedButton.styleFrom(
-                backgroundColor: Colors.white,
+                backgroundColor: AppColors.surface,
                 foregroundColor: const Color(0xFFD9774A),
                 side: const BorderSide(color: Color(0xFFD9774A), width: 1.3),
                 shape: RoundedRectangleBorder(
@@ -1647,10 +1647,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFFCF9F7),
+        color: AppColors.secondaryBg,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(
-          color: const Color(0xFFF1EDE8),
+          color: AppColors.cardBorder,
         ),
       ),
       child: Row(
@@ -1665,7 +1665,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               errorBuilder: (context, error, stackTrace) => Container(
                 width: 56,
                 height: 56,
-                color: const Color(0xFFFFEDE3),
+                color: AppColors.primarySoft,
                 child: const Icon(
                   Icons.fastfood_rounded,
                   color: AppColors.primary,
@@ -1680,10 +1680,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               children: [
                 Text(
                   item.title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF1E293B),
+                    color: AppColors.textPrimary,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -1701,36 +1701,52 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                         ),
                       ),
                     ),
-                    const Text(
+                    Text(
                       ' /pcs',
                       style: TextStyle(
                         fontSize: 11,
-                        color: Color(0xFF64748B),
+                        color: AppColors.textSecondary,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 4),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.storefront_outlined,
-                      size: 13,
-                      color: Color(0xFF64748B),
-                    ),
-                    const SizedBox(width: 5),
-                    Expanded(
-                      child: Text(
-                        item.vendor,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF64748B),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.storeProfile,
+                      arguments: item.vendor,
+                    );
+                  },
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.storefront_outlined,
+                        size: 13,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          item.vendor,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.primary,
+                            decoration: TextDecoration.underline,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      const Icon(
+                        Icons.chevron_right_rounded,
+                        size: 14,
+                        color: AppColors.primary,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1745,10 +1761,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFFFCF7F4),
+        color: AppColors.primarySoft,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: const Color(0xFFF7E4DA),
+          color: AppColors.primary.withValues(alpha: 0.25),
           width: 1.2,
         ),
       ),
@@ -1756,7 +1772,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         children: [
           Row(
             children: [
-              const Expanded(
+              Expanded(
                 child: Text(
                   'Insight & Penyesuaian AI',
                   maxLines: 1,
@@ -1764,7 +1780,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w800,
-                    color: Color(0xFF9A4624),
+                    color: AppColors.isDarkMode
+                        ? AppColors.primaryLight
+                        : const Color(0xFF9A4624),
                   ),
                 ),
               ),
@@ -1774,17 +1792,19 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: AppColors.surface,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     _currentPackage.roiLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF9A4624),
+                      color: AppColors.isDarkMode
+                          ? AppColors.primaryLight
+                          : const Color(0xFF9A4624),
                     ),
                   ),
                 ),
@@ -1852,7 +1872,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -1863,9 +1883,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 10.5,
-              color: Color(0xFF94A3B8),
+              color: AppColors.textMuted,
             ),
           ),
           const SizedBox(height: 4),
@@ -1879,18 +1899,18 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                     value,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13.5,
                       fontWeight: FontWeight.w800,
-                      color: Color(0xFF1E293B),
+                      color: AppColors.textPrimary,
                     ),
                   ),
                 ),
                 Text(
                   ' $unitSuffix',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
-                    color: Color(0xFF94A3B8),
+                    color: AppColors.textMuted,
                   ),
                 ),
               ],
@@ -1903,8 +1923,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 height: 1.25,
                 fontWeight: FontWeight.w800,
                 color: isGreen
-                    ? const Color(0xFF15803D)
-                    : const Color(0xFF1E293B),
+                    ? AppColors.success
+                    : AppColors.textPrimary,
               ),
             ),
         ],
@@ -1917,14 +1937,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Row(
+        Row(
           children: [
             Icon(
               Icons.forum_outlined,
               size: 16,
-              color: Color(0xFF64748B),
+              color: AppColors.textSecondary,
             ),
-            SizedBox(width: 6),
+            const SizedBox(width: 6),
             Expanded(
               child: Text(
                 'Catatan Penyesuaian Chat AI',
@@ -1933,7 +1953,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
-                  color: Color(0xFF64748B),
+                  color: AppColors.textSecondary,
                 ),
               ),
             ),
@@ -1949,7 +1969,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
+                  color: AppColors.primary,
                   borderRadius: BorderRadius.circular(16).copyWith(
                     bottomRight: const Radius.circular(2),
                   ),
@@ -1972,11 +1992,13 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF8F4),
+                  color: AppColors.primarySoft,
                   borderRadius: BorderRadius.circular(16).copyWith(
                     bottomLeft: const Radius.circular(2),
                   ),
-                  border: Border.all(color: const Color(0xFFFFDCC9)),
+                  border: Border.all(
+                    color: AppColors.primary.withValues(alpha: 0.3),
+                  ),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -2006,16 +2028,18 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               margin: const EdgeInsets.only(bottom: 8, right: 30),
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF8F4),
+                color: AppColors.primarySoft,
                 borderRadius: BorderRadius.circular(16).copyWith(
                   bottomLeft: const Radius.circular(2),
                 ),
-                border: Border.all(color: const Color(0xFFFFDCC9)),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.3),
+                ),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  SizedBox(
+                  const SizedBox(
                     width: 14,
                     height: 14,
                     child: CircularProgressIndicator(
@@ -2023,7 +2047,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                       color: AppColors.primary,
                     ),
                   ),
-                  SizedBox(width: 8),
+                  const SizedBox(width: 8),
                   Flexible(
                     child: Text(
                       'Menganalisis menu & kalkulasi...',
@@ -2031,7 +2055,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Color(0xFF9A3412),
+                        color: AppColors.primary,
                         fontStyle: FontStyle.italic,
                       ),
                     ),
@@ -2055,7 +2079,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
           text: parts[i],
           style: TextStyle(
             fontSize: 12,
-            color: const Color(0xFF334155),
+            color: AppColors.textPrimary,
             height: 1.4,
             fontWeight: i.isOdd ? FontWeight.w800 : FontWeight.w500,
           ),
@@ -2071,10 +2095,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(30),
         border: Border.all(
-          color: const Color(0xFFE2DED7),
+          color: AppColors.cardBorder,
         ),
         boxShadow: [
           BoxShadow(
@@ -2099,15 +2123,15 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               textInputAction: TextInputAction.send,
               onSubmitted: (_) =>
                   _isLoadingChat ? null : _handleSendChatMessage(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
-                color: Color(0xFF1E293B),
+                color: AppColors.textPrimary,
               ),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'Tanya kebutuhanmu...',
                 hintStyle: TextStyle(
-                  color: Color(0xFF94A3B8),
+                  color: AppColors.textMuted,
                   fontSize: 13,
                 ),
                 filled: false,

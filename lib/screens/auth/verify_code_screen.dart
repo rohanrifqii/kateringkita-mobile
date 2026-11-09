@@ -71,7 +71,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
                 ),
                 TextSpan(
                   text: email,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
                   ),

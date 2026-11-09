@@ -90,7 +90,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                               IconButton(
                                 padding: EdgeInsets.zero,
                                 constraints: const BoxConstraints(),
-                                icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                                icon: Icon(Icons.arrow_back_ios_new_rounded,
                                     size: 20, color: AppColors.textPrimary),
                                 onPressed: () => Navigator.pop(context),
                               ),
@@ -115,7 +115,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                           ),
                           child: Row(
                             children: [
-                              const Icon(Icons.search,
+                              Icon(Icons.search,
                                   color: AppColors.textMuted, size: 20),
                               const SizedBox(width: 10),
                               Expanded(
@@ -150,7 +150,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                                     _searchController.clear();
                                     setState(() => _searchQuery = '');
                                   },
-                                  child: const Icon(Icons.close_rounded,
+                                  child: Icon(Icons.close_rounded,
                                       color: AppColors.textMuted, size: 18),
                                 ),
                             ],
@@ -421,7 +421,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                     width: 60,
                     height: 60,
                     color: AppColors.secondaryBg,
-                    child: const Icon(Icons.fastfood,
+                    child: Icon(Icons.fastfood,
                         color: AppColors.textMuted, size: 28),
                   ),
                 ),

@@ -50,7 +50,7 @@ class CompletedOrdersScreen extends StatelessWidget {
                       Container(
                         width: 70,
                         height: 70,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           color: AppColors.blueLight,
                           shape: BoxShape.circle,
                         ),
@@ -115,7 +115,7 @@ class CompletedOrdersScreen extends StatelessWidget {
                             width: 58,
                             height: 58,
                             color: AppColors.secondaryBg,
-                            child: const Icon(Icons.fastfood,
+                            child: Icon(Icons.fastfood,
                                 color: AppColors.textMuted),
                           ),
                         ),

@@ -17,6 +17,7 @@ void main() async {
 
   final prefs = SharedPreferencesAsync();
   final isDarkInitial = await prefs.getBool(ThemeProvider.prefKey) ?? false;
+  AppColors.isDarkMode = isDarkInitial;
 
   SystemChrome.setSystemUIOverlayStyle(
     SystemUiOverlayStyle(
@@ -26,7 +27,7 @@ void main() async {
       statusBarBrightness:
           isDarkInitial ? Brightness.dark : Brightness.light,
       systemNavigationBarColor:
-          isDarkInitial ? AppColors.darkBackground : AppColors.background,
+          isDarkInitial ? AppColors.darkBackground : AppColors.lightBackground,
       systemNavigationBarIconBrightness:
           isDarkInitial ? Brightness.light : Brightness.dark,
     ),
@@ -55,6 +56,7 @@ class KateringKitaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
+    AppColors.isDarkMode = themeProvider.isDarkMode;
 
     return MaterialApp(
       title: 'KateringKita',

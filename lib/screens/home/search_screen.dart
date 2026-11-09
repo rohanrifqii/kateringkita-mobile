@@ -73,7 +73,11 @@ class _SearchScreenState extends State<SearchScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                    icon: Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 20,
+                      color: AppColors.textPrimary,
+                    ),
                     onPressed: () => Navigator.pop(context),
                   ),
                   Text(
@@ -200,7 +204,7 @@ class _SearchScreenState extends State<SearchScreen> {
                               ],
                             ),
                           ),
-                          const Icon(
+                          Icon(
                             Icons.chevron_right_rounded,
                             color: AppColors.textMuted,
                             size: 22,

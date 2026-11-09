@@ -295,7 +295,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ],
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.notifications_outlined,
                             color: AppColors.textPrimary,
                             size: 22,
@@ -366,8 +366,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     if (_selectedCategory != 'Semua')
                       GestureDetector(
                         onTap: () => setState(() => _selectedCategory = 'Semua'),
-                        child: const Padding(
-                          padding: EdgeInsets.only(right: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 8),
                           child: Icon(Icons.close_rounded, color: AppColors.textMuted, size: 18),
                         ),
                       ),

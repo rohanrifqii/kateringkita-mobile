@@ -50,7 +50,7 @@ class ActiveOrdersScreen extends StatelessWidget {
                       Container(
                         width: 70,
                         height: 70,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           color: AppColors.primarySoft,
                           shape: BoxShape.circle,
                         ),
@@ -153,7 +153,7 @@ class ActiveOrdersScreen extends StatelessWidget {
                                 width: 68,
                                 height: 68,
                                 color: AppColors.secondaryBg,
-                                child: const Icon(Icons.fastfood,
+                                child: Icon(Icons.fastfood,
                                     color: AppColors.textMuted),
                               ),
                             ),

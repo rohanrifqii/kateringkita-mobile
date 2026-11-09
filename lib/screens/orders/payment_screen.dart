@@ -172,7 +172,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 Container(
                   width: 68,
                   height: 68,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: AppColors.successLight,
                     shape: BoxShape.circle,
                   ),
@@ -715,7 +715,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       ),
       child: Text(
         name,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 9.5,
           fontWeight: FontWeight.w600,
           color: AppColors.textSecondary,
@@ -1011,7 +1011,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.location_on_outlined,
+                    Icon(Icons.location_on_outlined,
                         size: 16, color: AppColors.textSecondary),
                     const SizedBox(width: 6),
                     Expanded(

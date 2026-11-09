@@ -31,7 +31,7 @@ class CheckoutScreen extends StatefulWidget {
 class _CheckoutScreenState extends State<CheckoutScreen> {
   static const List<FontFeature> _tabular = [FontFeature.tabularFigures()];
 
-  static const List<PaymentMethodOption> _paymentOptions = [
+  static List<PaymentMethodOption> get _paymentOptions => [
     PaymentMethodOption(
       method: PaymentMethod.qris,
       code: 'QR',
@@ -54,7 +54,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       code: 'COD',
       title: 'Tunai saat Pengambilan',
       subtitle: 'Bayar di booth Vokasi UB',
-      accent: Color(0xFFD97706),
+      accent: const Color(0xFFD97706),
       accentBg: AppColors.warningLight,
     ),
   ];
@@ -770,8 +770,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ),
             ],
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
             child: Divider(color: AppColors.cardBorder, height: 1),
           ),
           Row(
@@ -817,7 +817,7 @@ class _OrderField extends StatefulWidget {
   final TextInputType? keyboardType;
   final TextInputAction action;
   final Widget? trailing;
-  final Color fillColor;
+  final Color? fillColor;
   final int lines;
 
   const _OrderField({
@@ -826,7 +826,7 @@ class _OrderField extends StatefulWidget {
     this.keyboardType,
     this.action = TextInputAction.next,
     this.trailing,
-    this.fillColor = AppColors.surface,
+    this.fillColor,
     this.lines = 1,
   });
 
@@ -860,7 +860,7 @@ class _OrderFieldState extends State<_OrderField> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
         decoration: BoxDecoration(
-          color: widget.fillColor,
+          color: widget.fillColor ?? AppColors.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: focused ? AppColors.primary : AppColors.cardBorder,

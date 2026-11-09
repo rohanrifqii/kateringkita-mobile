@@ -5,6 +5,7 @@ import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../data/liked_store.dart';
 import '../../models/product_model.dart';
+import '../../models/vendor_model.dart';
 import '../../widgets/primary_button.dart';
 
 class ProductDetailScreen extends StatefulWidget {
@@ -130,10 +131,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                 Transform.translate(
                   offset: const Offset(0, -16),
                   child: Container(
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.surface,
-                      borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                      boxShadow: [
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                      boxShadow: const [
                         BoxShadow(
                           color: Colors.black12,
                           blurRadius: 16,
@@ -200,7 +201,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           decoration: BoxDecoration(
                             color: AppColors.primarySoft,
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFFFEDD5)),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.28),
+                            ),
                           ),
                           child: Text(
                             '🔥 Hanya tersisa 14 porsi untuk kuota hari ini!',
@@ -210,6 +213,152 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               fontSize: 12,
                             ),
                           ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Store / Dapur Profile Card (Clickable -> StoreProfileScreen)
+                        Builder(
+                          builder: (context) {
+                            final vendorProfile =
+                                VendorData.getByVendorName(_product.vendor);
+                            return GestureDetector(
+                              onTap: () {
+                                Navigator.pushNamed(
+                                  context,
+                                  AppRoutes.storeProfile,
+                                  arguments: _product.vendor,
+                                );
+                              },
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: AppColors.background,
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: AppColors.cardBorder,
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(12),
+                                      child: Image.asset(
+                                        vendorProfile.logoImage,
+                                        width: 48,
+                                        height: 48,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, _, _) => Container(
+                                          width: 48,
+                                          height: 48,
+                                          color: AppColors.primarySoft,
+                                          child: const Icon(
+                                            Icons.storefront_rounded,
+                                            color: AppColors.primary,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.verified_rounded,
+                                                color: AppColors.primary,
+                                                size: 15,
+                                              ),
+                                              const SizedBox(width: 4),
+                                              Flexible(
+                                                child: Text(
+                                                  vendorProfile.name,
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: AppTextStyles.h4
+                                                      .copyWith(
+                                                        fontSize: 14,
+                                                        fontWeight:
+                                                            FontWeight.w800,
+                                                      ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Row(
+                                            children: [
+                                              const Icon(
+                                                Icons.star_rounded,
+                                                color: AppColors.warning,
+                                                size: 14,
+                                              ),
+                                              const SizedBox(width: 3),
+                                              Expanded(
+                                                child: Text(
+                                                  '${vendorProfile.rating} (${vendorProfile.reviewCountLabel}) • ${vendorProfile.area}',
+                                                  maxLines: 1,
+                                                  overflow:
+                                                      TextOverflow.ellipsis,
+                                                  style: AppTextStyles.bodySmall
+                                                      .copyWith(
+                                                        fontSize: 11.5,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color: AppColors
+                                                            .textSecondary,
+                                                      ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 7,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primarySoft,
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: AppColors.primary.withValues(
+                                            alpha: 0.35,
+                                          ),
+                                        ),
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            'Kunjungi Dapur',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w800,
+                                              color: AppColors.primary,
+                                            ),
+                                          ),
+                                          SizedBox(width: 2),
+                                          Icon(
+                                            Icons.chevron_right_rounded,
+                                            size: 15,
+                                            color: AppColors.primary,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
                         ),
                         const SizedBox(height: 20),
 

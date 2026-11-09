@@ -52,7 +52,7 @@ class LikedScreen extends StatelessWidget {
                             Container(
                               width: 70,
                               height: 70,
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 color: AppColors.dangerLight,
                                 shape: BoxShape.circle,
                               ),
@@ -118,7 +118,7 @@ class LikedScreen extends StatelessWidget {
                                     width: 60,
                                     height: 60,
                                     color: AppColors.secondaryBg,
-                                    child: const Icon(Icons.fastfood,
+                                    child: Icon(Icons.fastfood,
                                         color: AppColors.textMuted),
                                   ),
                                 ),
