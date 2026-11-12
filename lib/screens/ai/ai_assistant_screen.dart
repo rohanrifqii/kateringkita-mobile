@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
+import '../../core/danusan_calculator.dart';
 import '../../core/app_routes.dart';
 import '../../core/require_login.dart';
 import '../../data/assistant_repository.dart';
@@ -38,6 +39,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   final _questionController = TextEditingController();
   final _budgetController = TextEditingController();
   final _portionsController = TextEditingController();
+  final _sellPriceController = TextEditingController();
   final _scrollController = ScrollController();
   final _resultKey = GlobalKey();
 
@@ -47,6 +49,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   bool _loading = false;
   int _seq = 0;
   Recommendation? _result;
+
+  /// Anggaran yang dikirim untuk [_result] (bukan isian terkini).
+  int? _resultBudget;
   String? _error;
   String? _questionError;
   String? _budgetError;
@@ -70,6 +75,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     _questionController.dispose();
     _budgetController.dispose();
     _portionsController.dispose();
+    _sellPriceController.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -87,10 +93,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     setState(() {
       _loading = false;
       _result = null;
+      _resultBudget = null;
       _error = null;
       _questionController.clear();
       _budgetController.clear();
       _portionsController.clear();
+      _sellPriceController.clear();
       _categorySlug = null;
     });
   }
@@ -150,16 +158,18 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       _loading = true;
       _error = null;
     });
+    final budget = _parse(_budgetController);
     try {
       final result = await repo.recommend(
         question: _questionController.text,
-        budget: _parse(_budgetController),
+        budget: budget,
         portions: _parse(_portionsController),
         category: _categorySlug,
       );
       if (!mounted || seq != _seq) return;
       setState(() {
         _result = result;
+        _resultBudget = budget;
         _loading = false;
       });
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -476,7 +486,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _label('Anggaran (opsional)'),
+                    _label('Modal (opsional)'),
                     TextField(
                       key: const ValueKey('ai-budget'),
                       controller: _budgetController,
@@ -672,36 +682,135 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             ],
             if (r.groups.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Perkiraan total',
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    AppCurrency.format(r.total),
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: _accent,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Harga akhir dihitung ulang saat checkout.',
-                style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
-              ),
+              _calculator(r),
             ],
           ],
         ),
       );
+
+  Widget _calcRow(String label, String value,
+          {Color? color, bool strong = false, Key? key}) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+            Text(
+              value,
+              key: key,
+              style: TextStyle(
+                fontSize: strong ? 15 : 13,
+                fontWeight: strong ? FontWeight.w800 : FontWeight.w700,
+                color: color ?? AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      );
+
+  /// Kalkulator danusan: modal dari total server, laba/ROI dari harga jual
+  /// isian pembeli. Semua dihitung di [estimateDanusan].
+  Widget _calculator(Recommendation r) {
+    final qty = r.groups
+        .expand((g) => g.items)
+        .fold<int>(0, (s, i) => s + i.qty);
+    final e = estimateDanusan(
+      total: r.total,
+      totalQty: qty,
+      budget: _resultBudget,
+      sellPrice: _parse(_sellPriceController),
+    );
+    final laba = e.laba;
+    return Container(
+      key: const ValueKey('ai-calculator'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.secondaryBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.calculate_outlined, color: _accent, size: 18),
+              const SizedBox(width: 6),
+              Text(
+                'Kalkulator Danusan',
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _calcRow('Modal terpakai', AppCurrency.format(e.modalTerpakai),
+              color: _accent, strong: true),
+          if (e.sisaModal != null)
+            _calcRow('Sisa modal', AppCurrency.format(e.sisaModal!)),
+          Text(
+            'Harga menu dari server; harga akhir dihitung ulang saat checkout.',
+            style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 12),
+          _label('Harga jual per porsi (opsional)'),
+          TextField(
+            key: const ValueKey('ai-sell-price'),
+            controller: _sellPriceController,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+            onChanged: (_) => setState(() {}),
+            decoration: _input('Mis. 5000', suffix: 'Rp'),
+          ),
+          const SizedBox(height: 8),
+          if (!e.hasProfit)
+            Text(
+              'Isi harga jual untuk melihat perkiraan laba dan ROI.',
+              style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+            )
+          else ...[
+            _calcRow(
+                'Pendapatan (${AppCurrency.format(e.hargaJual!)} × '
+                '${e.totalQty} porsi)',
+                AppCurrency.format(e.pendapatan!)),
+            _calcRow('Laba', formatSignedRupiah(laba!),
+                key: const ValueKey('ai-profit'),
+                color: laba < 0 ? AppColors.danger : AppColors.success,
+                strong: true),
+            _calcRow('ROI', formatRoi(e.roiPercent),
+                key: const ValueKey('ai-roi'),
+                color: laba < 0 ? AppColors.danger : AppColors.success),
+            const SizedBox(height: 2),
+            Text(
+              'Perkiraan dari harga jual yang kamu isi.',
+              style: TextStyle(
+                fontSize: 10.5,
+                fontStyle: FontStyle.italic,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   Widget _groupHeader(RecommendationGroup g) => Row(
         children: [

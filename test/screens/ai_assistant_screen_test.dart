@@ -261,6 +261,62 @@ void main() {
     expect(h.cart.items.single.menu.id, 99);
   });
 
+  group('kalkulator danusan', () {
+    testWidgets('modal terpakai = total server, sisa = modal - total',
+        (tester) async {
+      final h = _Harness((req) async => _json(_recommendation()));
+      await tester.pumpWidget(h.app());
+      await tester.pumpAndSettle();
+      await _ask(tester, 'danusan nasi box', budget: '600000', portions: '30');
+
+      final calc = find.byKey(const ValueKey('ai-calculator'));
+      await tester.ensureVisible(calc);
+      expect(find.descendant(of: calc, matching: find.text('Rp 540.000')),
+          findsOneWidget);
+      expect(find.text('Sisa modal'), findsOneWidget);
+      expect(find.text('Rp 60.000'), findsOneWidget);
+      // Tanpa harga jual: laba/ROI disembunyikan.
+      expect(find.byKey(const ValueKey('ai-profit')), findsNothing);
+      expect(find.byKey(const ValueKey('ai-roi')), findsNothing);
+      expect(find.text('Isi harga jual untuk melihat perkiraan laba dan ROI.'),
+          findsOneWidget);
+    });
+
+    testWidgets('harga jual: pendapatan, laba, ROI dari qty server',
+        (tester) async {
+      final h = _Harness((req) async => _json(_recommendation()));
+      await tester.pumpWidget(h.app());
+      await tester.pumpAndSettle();
+      await _ask(tester, 'danusan nasi box', budget: '600000');
+
+      final price = find.byKey(const ValueKey('ai-sell-price'));
+      await tester.ensureVisible(price);
+      await tester.enterText(price, '25000');
+      await tester.pump();
+      // 60 porsi (30 + 30) x 25.000 = 1.500.000; laba 960.000; ROI 177,8%
+      expect(find.text('Pendapatan (Rp 25.000 × 60 porsi)'), findsOneWidget);
+      expect(find.text('Rp 1.500.000'), findsOneWidget);
+      expect(
+          tester.widget<Text>(find.byKey(const ValueKey('ai-profit'))).data,
+          '+Rp 960.000');
+      expect(tester.widget<Text>(find.byKey(const ValueKey('ai-roi'))).data,
+          '+177,8%');
+      expect(find.text('Perkiraan dari harga jual yang kamu isi.'),
+          findsOneWidget);
+      // Tidak ada permintaan baru: semua dihitung di aplikasi.
+      expect(h.posts, hasLength(1));
+    });
+
+    testWidgets('tanpa modal: sisa modal tidak ditampilkan', (tester) async {
+      final h = _Harness((req) async => _json(_recommendation()));
+      await tester.pumpWidget(h.app());
+      await tester.pumpAndSettle();
+      await _ask(tester, 'danusan nasi box');
+      expect(find.text('Modal terpakai'), findsOneWidget);
+      expect(find.text('Sisa modal'), findsNothing);
+    });
+  });
+
   testWidgets('cadangan tanpa AI diberi keterangan', (tester) async {
     final h =
         _Harness((req) async => _json(_recommendation(source: 'fallback')));
