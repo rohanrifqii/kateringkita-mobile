@@ -29,6 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<CategoryModel> _categories = const [];
   List<ProductModel> _products = const [];
   bool _loading = true;
+  int _seq = 0;
   String? _error;
 
   int _currentBannerIndex = 0;
@@ -102,7 +103,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     final repo = context.read<CatalogRepository>();
+    final seq = ++_seq;
     setState(() {
       _loading = true;
       _error = null;
@@ -110,20 +113,20 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final cats = _categories.isEmpty ? await repo.categories() : _categories;
       final page = await repo.menus(category: _selectedSlug);
-      if (!mounted) return;
+      if (!mounted || seq != _seq) return;
       setState(() {
         _categories = cats;
         _products = page.items;
         _loading = false;
       });
     } on ApiException catch (e) {
-      if (!mounted) return;
+      if (!mounted || seq != _seq) return;
       setState(() {
         _error = e.message;
         _loading = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted || seq != _seq) return;
       setState(() {
         _error = 'Terjadi kesalahan. Coba lagi.';
         _loading = false;

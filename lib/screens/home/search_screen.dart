@@ -39,6 +39,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Future<void> _search() async {
+    if (!mounted) return;
     final repo = context.read<CatalogRepository>();
     final seq = ++_seq;
     setState(() {

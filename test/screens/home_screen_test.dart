@@ -59,6 +59,7 @@ Widget _wrap(List<http.Request> log, Widget child,
 }
 
 void main() {
+  _raceTest();
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
   testWidgets('empty menus shows empty text', (tester) async {
@@ -122,5 +123,36 @@ void main() {
     await tester.pumpWidget(_wrap(log, const SearchScreen()));
     await tester.pumpAndSettle();
     expect(find.text('Menu tidak ditemukan.'), findsOneWidget);
+  });
+}
+
+void _raceTest() {
+  testWidgets('stale category response is dropped', (tester) async {
+    final api = ApiClient(
+      baseUrl: 'https://x.test/api/v1',
+      client: MockClient((req) async {
+        if (req.url.path.endsWith('/meta/categories')) return _json(_cats);
+        final cat = req.url.queryParameters['category'];
+        if (cat == 'danusan') {
+          await Future<void>.delayed(const Duration(seconds: 2));
+          return _json(_menus([_card(1, 'ItemA')]));
+        }
+        if (cat == 'katering') return _json(_menus([_card(2, 'ItemB')]));
+        return _json(_menus([]));
+      }),
+    );
+    await tester.pumpWidget(Provider<CatalogRepository>.value(
+      value: CatalogRepository(api),
+      child: const MaterialApp(home: HomeScreen()),
+    ));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Danusan'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Katering'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(find.text('ItemB'), findsOneWidget);
+    expect(find.text('ItemA'), findsNothing);
   });
 }
