@@ -157,7 +157,20 @@ void main() {
         );
       }
       if (r.url.path.endsWith('/auth/logout')) return http.Response('', 204);
-      return _err(401, 'UNAUTHORIZED', 'Silakan masuk terlebih dahulu.');
+      // Sesi ditolak hanya oleh /me dan /orders; layar lain (beranda, tab
+      // Pesanan yang memuat ulang saat login) mendapat daftar kosong.
+      final p = r.url.path;
+      if (p.endsWith('/v1/me') || p.endsWith('/v1/orders')) {
+        return _err(401, 'UNAUTHORIZED', 'Silakan masuk terlebih dahulu.');
+      }
+      return http.Response(
+        jsonEncode({
+          'data': [],
+          'meta': {'total': 0},
+        }),
+        200,
+        headers: {'content-type': 'application/json'},
+      );
     }
 
     Future<BuildContext> loggedIn(WidgetTester tester) async {
