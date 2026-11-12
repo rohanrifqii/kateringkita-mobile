@@ -7,6 +7,7 @@ import '../../data/liked_store.dart';
 import '../../models/product_model.dart';
 import '../../models/vendor_model.dart';
 import '../../widgets/primary_button.dart';
+import '../../widgets/menu_image.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final ProductModel? product;
@@ -19,25 +20,12 @@ class ProductDetailScreen extends StatefulWidget {
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late ProductModel _product;
+  bool _missing = false;
   int _selectedOptionIndex = 0;
   int _currentImageIndex = 0;
   final PageController _imagePageController = PageController();
 
-  List<String> get _galleryImages {
-    final allImages = [
-      'assets/images/lumpia_diego.png',
-      'assets/images/nasi_kuning.png',
-      'assets/images/martabak.png',
-      'assets/images/donat_surgawi.png',
-      'assets/images/risoles.png',
-    ];
-    final others = allImages.where((img) => img != _product.image).toList();
-    return [
-      _product.image,
-      if (others.isNotEmpty) others[0],
-      if (others.length > 1) others[1],
-    ];
-  }
+  List<String?> get _galleryImages => [_product.imageUrl];
 
   @override
   void didChangeDependencies() {
@@ -46,7 +34,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     if (args is ProductModel) {
       _product = args;
     } else {
-      _product = widget.product ?? ProductData.defaultProduct;
+      final p = widget.product;
+      if (p == null) {
+        _missing = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) Navigator.pop(context);
+        });
+        return;
+      }
+      _product = p;
     }
   }
 
@@ -58,6 +54,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_missing) return const Scaffold();
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
@@ -80,16 +77,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           setState(() => _currentImageIndex = index);
                         },
                         itemBuilder: (context, index) {
-                          return Image.asset(
+                          return MenuImage(
                             _galleryImages[index],
                             width: double.infinity,
                             height: 340,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => Container(
-                              height: 340,
-                              color: AppColors.secondaryBg,
-                              child: Icon(Icons.fastfood, size: 64, color: AppColors.textMuted),
-                            ),
                           );
                         },
                       ),
@@ -369,7 +361,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _product.description,
+                          _product.description ?? '',
                           style: AppTextStyles.bodyMedium.copyWith(
                             color: AppColors.textSecondary,
                             height: 1.5,
@@ -384,7 +376,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           runSpacing: 8,
                           children: List.generate(_product.options.length, (index) {
                             final isSelected = _selectedOptionIndex == index;
-                            final opt = _product.options[index];
+                            final opt = _product.options[index].name;
                             return GestureDetector(
                               onTap: () {
                                 setState(() {
@@ -467,7 +459,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     child: ValueListenableBuilder<Set<String>>(
                       valueListenable: LikedStore.likedNotifier,
                       builder: (context, likedIds, child) {
-                        final isLiked = likedIds.contains(_product.id);
+                        final isLiked = likedIds.contains(_product.id.toString());
                         return IconButton(
                           icon: Icon(
                             isLiked
@@ -480,7 +472,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           ),
                           onPressed: () async {
                             final nowLiked =
-                                await LikedStore.toggleLike(_product.id);
+                                await LikedStore.toggleLike(_product.id.toString());
                             if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(

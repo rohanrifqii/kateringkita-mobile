@@ -3,7 +3,6 @@ import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../models/product_model.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -22,35 +21,35 @@ class _SearchScreenState extends State<SearchScreen> {
       'price': 35000.0,
       'rating': 4.8,
       'image': 'assets/images/martabak.png',
-      'product': ProductData.mockProducts[1],
+      'product': null, // TODO: dipindah ke API
     },
     {
       'name': 'Nasi Kuning Slamet',
       'price': 20000.0,
       'rating': 4.9,
       'image': 'assets/images/nasi_kuning.png',
-      'product': ProductData.mockProducts[2],
+      'product': null, // TODO: dipindah ke API
     },
     {
       'name': 'Donat Surgawi',
       'price': 15000.0,
       'rating': 4.7,
       'image': 'assets/images/donat_surgawi.png',
-      'product': ProductData.mockProducts[3],
+      'product': null, // TODO: dipindah ke API
     },
     {
       'name': 'Risoles Bu Tima',
       'price': 18000.0,
       'rating': 4.8,
       'image': 'assets/images/risoles.png',
-      'product': ProductData.mockProducts[4],
+      'product': null, // TODO: dipindah ke API
     },
     {
       'name': 'Lumpia Diego',
       'price': 25000.0,
       'rating': 4.6,
       'image': 'assets/images/lumpia_diego.png',
-      'product': ProductData.mockProducts[0],
+      'product': null, // TODO: dipindah ke API
     },
   ];
 

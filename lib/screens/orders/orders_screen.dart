@@ -1,3 +1,4 @@
+import '../../widgets/menu_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -412,18 +413,10 @@ class _OrdersScreenState extends State<OrdersScreen> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: Image.asset(
-                  product.image,
+                child: MenuImage(product?.imageUrl,
                   width: 60,
                   height: 60,
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    width: 60,
-                    height: 60,
-                    color: AppColors.secondaryBg,
-                    child: Icon(Icons.fastfood,
-                        color: AppColors.textMuted, size: 28),
-                  ),
                 ),
               ),
               const SizedBox(width: 12),

@@ -155,8 +155,8 @@ class VendorData {
           tags: ['Harga Mahasiswa', 'Pelayanan Ramah'],
         ),
       ],
-      menus: const [
-        ProductModel(
+      menus: [
+        _legacyProduct(
           id: 'prod-001',
           name: 'Lumpia Diego',
           price: 25000,
@@ -172,7 +172,7 @@ class VendorData {
           isLiked: true,
           category: 'danusan',
         ),
-        ProductModel(
+        _legacyProduct(
           id: 'diego-002',
           name: 'Paket Bento Ayam Crispy Diego',
           price: 18000,
@@ -187,7 +187,7 @@ class VendorData {
           options: ['Saus Asam Manis', 'Sambal Bawang', 'Saus Mentai'],
           category: 'katering',
         ),
-        ProductModel(
+        _legacyProduct(
           id: 'diego-003',
           name: 'Dimsum Ayam Udang (Isi 6)',
           price: 16000,
@@ -259,8 +259,8 @@ class VendorData {
           tags: ['Porsi Besar', 'Cepat Sampai'],
         ),
       ],
-      menus: const [
-        ProductModel(
+      menus: [
+        _legacyProduct(
           id: 'prod-002',
           name: 'Martabak Manis',
           price: 35000,
@@ -276,7 +276,7 @@ class VendorData {
           isLiked: true,
           category: 'manis',
         ),
-        ProductModel(
+        _legacyProduct(
           id: 'mp-002',
           name: 'Martabak Telor Spesial Daging',
           price: 38000,
@@ -348,8 +348,8 @@ class VendorData {
           tags: ['Tepat Waktu', 'Porsi Mengenyangkan'],
         ),
       ],
-      menus: const [
-        ProductModel(
+      menus: [
+        _legacyProduct(
           id: 'prod-003',
           name: 'Nasi Kuning Slamet',
           price: 20000,
@@ -364,7 +364,7 @@ class VendorData {
           options: ['Sambal Tambah', 'Telur Utuh', 'Ayam Goreng'],
           category: 'katering',
         ),
-        ProductModel(
+        _legacyProduct(
           id: 'ds-002',
           name: 'Paket Nasi Ayam Bakar Madu',
           price: 22000,
@@ -426,8 +426,8 @@ class VendorData {
           tags: ['Empuk Banget', 'Untung Danus Maksimal'],
         ),
       ],
-      menus: const [
-        ProductModel(
+      menus: [
+        _legacyProduct(
           id: 'prod-004',
           name: 'Donat Surgawi',
           price: 15000,
@@ -443,7 +443,7 @@ class VendorData {
           isLiked: true,
           category: 'manis',
         ),
-        ProductModel(
+        _legacyProduct(
           id: 'sb-002',
           name: 'Paket Snack Box Seminar (Isi 4 Kue)',
           price: 12000,
@@ -515,8 +515,8 @@ class VendorData {
           tags: ['Masih Hangat', 'Kulit Renyah'],
         ),
       ],
-      menus: const [
-        ProductModel(
+      menus: [
+        _legacyProduct(
           id: 'prod-005',
           name: 'Risoles Bu Tima',
           price: 18000,
@@ -532,7 +532,7 @@ class VendorData {
           isLiked: true,
           category: 'danusan',
         ),
-        ProductModel(
+        _legacyProduct(
           id: 'bt-002',
           name: 'Pastel Ragout Ayam Spesial (Isi 6)',
           price: 16000,
@@ -564,3 +564,42 @@ class VendorData {
   }
 }
 
+
+/// Adaptasi sementara literal ProductModel gaya lama (data dummy vendor)
+/// ke model API. VendorData dihapus pada task berikutnya.
+ProductModel _legacyProduct({
+  required String id,
+  required String name,
+  required double price,
+  required double rating,
+  required int reviewCount,
+  required String image,
+  String? badgeText,
+  String badgeType = 'available',
+  required String vendor,
+  required String description,
+  List<String> options = const [],
+  bool isLiked = false,
+  String category = 'danusan',
+}) {
+  return ProductModel(
+    id: id.hashCode & 0x7fffffff,
+    name: name,
+    price: price.round(),
+    ratingAvg: rating,
+    ratingCount: reviewCount,
+    badge: badgeType == 'quota' ? 'low_stock' : 'available',
+    merchant: MerchantRef(
+      id: vendor.hashCode & 0x7fffffff,
+      slug: vendor.toLowerCase().replaceAll(' ', '-'),
+      businessName: vendor,
+      isOpen: true,
+    ),
+    description: description,
+    isFavorite: isLiked,
+    options: [
+      for (var i = 0; i < options.length; i++)
+        MenuOption(id: i + 1, name: options[i]),
+    ],
+  );
+}

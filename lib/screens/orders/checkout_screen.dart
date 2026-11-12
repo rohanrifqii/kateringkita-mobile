@@ -1,3 +1,4 @@
+import '../../widgets/menu_image.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -60,6 +61,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   ];
 
   late ProductModel _product;
+  bool _missing = false;
   int _quantity = 1;
   PaymentMethod _selectedPayment = PaymentMethod.qris;
 
@@ -103,7 +105,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     if (args is ProductModel) {
       _product = args;
     } else {
-      _product = widget.product ?? ProductData.defaultProduct;
+      final p = widget.product;
+      if (p == null) {
+        _missing = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) Navigator.pop(context);
+        });
+        return;
+      }
+      _product = p;
     }
     if (!_userDataLoaded) {
       _loadUserData();
@@ -240,7 +250,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final subtotal = _product.price * _quantity;
+    if (_missing) return const Scaffold();
+    final subtotal = (_product.price * _quantity).toDouble();
     final total = subtotal;
 
     return Scaffold(
@@ -388,17 +399,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.asset(
-              _product.image,
+            child: MenuImage(_product.imageUrl,
               width: 64,
               height: 64,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                width: 64,
-                height: 64,
-                color: AppColors.secondaryBg,
-                child: const Icon(Icons.image_not_supported_outlined),
-              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -417,7 +421,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   TextSpan(
                     children: [
                       TextSpan(
-                        text: _price(_product.price),
+                        text: _price(_product.price.toDouble()),
                         style: AppTextStyles.price.copyWith(fontSize: 14),
                       ),
                       TextSpan(

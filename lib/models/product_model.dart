@@ -1,156 +1,176 @@
-class ProductModel {
-  final String id;
+import 'category_model.dart';
+import 'pickup_point.dart';
+
+class MenuOption {
+  final int id;
   final String name;
-  final double price;
-  final double rating;
-  final int reviewCount;
-  final String image;
-  final String? badgeText;
-  final String badgeType; // 'quota', 'available'
-  final String vendor;
-  final String description;
-  final List<String> options;
-  final bool isLiked;
-  final String category; // 'danusan', 'manis', 'katering', 'snack'
+  final int extraPrice;
+
+  const MenuOption({
+    required this.id,
+    required this.name,
+    this.extraPrice = 0,
+  });
+
+  factory MenuOption.fromJson(Map<String, dynamic> json) => MenuOption(
+        id: json['id'] as int,
+        name: json['name'] as String,
+        extraPrice: (json['extra_price'] as num?)?.toInt() ?? 0,
+      );
+}
+
+class MerchantRef {
+  final int id;
+  final String slug;
+  final String businessName;
+  final bool isOpen;
+  final String? logoUrl;
+  final String? openTime;
+  final String? closeTime;
+  final List<PickupPoint> pickupPoints;
+
+  const MerchantRef({
+    required this.id,
+    required this.slug,
+    required this.businessName,
+    required this.isOpen,
+    this.logoUrl,
+    this.openTime,
+    this.closeTime,
+    this.pickupPoints = const [],
+  });
+
+  factory MerchantRef.fromJson(Map<String, dynamic> json) => MerchantRef(
+        id: json['id'] as int,
+        slug: json['slug'] as String,
+        businessName: json['business_name'] as String,
+        isOpen: json['is_open'] as bool,
+        logoUrl: json['logo_url'] as String?,
+        openTime: json['open_time'] as String?,
+        closeTime: json['close_time'] as String?,
+        pickupPoints: ((json['pickup_points'] as List?) ?? const [])
+            .map((e) => PickupPoint.fromJson(e as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+class ProductModel {
+  final int id;
+  final String name;
+  final int price;
+  final String unitLabel;
+  final String? imageUrl;
+  final CategoryModel? category;
+  final MerchantRef merchant;
+  final int available;
+  final String badge; // sold_out | preorder | low_stock | available
+  final double ratingAvg;
+  final int ratingCount;
+  final bool isFavorite;
+  final String? description;
+  final List<MenuOption> options;
+  final int minOrderQty;
+  final int prepMinutes;
+  final bool isPreorder;
+  final int preorderDays;
 
   const ProductModel({
     required this.id,
     required this.name,
     required this.price,
-    required this.rating,
-    required this.reviewCount,
-    required this.image,
-    this.badgeText,
-    this.badgeType = 'available',
-    required this.vendor,
-    required this.description,
+    this.unitLabel = 'porsi',
+    this.imageUrl,
+    this.category,
+    required this.merchant,
+    this.available = 0,
+    this.badge = 'available',
+    this.ratingAvg = 0,
+    this.ratingCount = 0,
+    this.isFavorite = false,
+    this.description,
     this.options = const [],
-    this.isLiked = false,
-    this.category = 'danusan',
+    this.minOrderQty = 1,
+    this.prepMinutes = 0,
+    this.isPreorder = false,
+    this.preorderDays = 0,
   });
 
-  ProductModel copyWith({
-    String? id,
-    String? name,
-    double? price,
-    double? rating,
-    int? reviewCount,
-    String? image,
-    String? badgeText,
-    String badgeType = 'available',
-    String? vendor,
-    String? description,
-    List<String>? options,
-    bool? isLiked,
-    String? category,
-  }) {
-    return ProductModel(
-      id: id ?? this.id,
-      name: name ?? this.name,
-      price: price ?? this.price,
-      rating: rating ?? this.rating,
-      reviewCount: reviewCount ?? this.reviewCount,
-      image: image ?? this.image,
-      badgeText: badgeText ?? this.badgeText,
-      badgeType: badgeType,
-      vendor: vendor ?? this.vendor,
-      description: description ?? this.description,
-      options: options ?? this.options,
-      isLiked: isLiked ?? this.isLiked,
-      category: category ?? this.category,
-    );
+  factory ProductModel.fromJson(Map<String, dynamic> json) => ProductModel(
+        id: json['id'] as int,
+        name: json['name'] as String,
+        price: (json['price'] as num).toInt(),
+        unitLabel: (json['unit_label'] as String?) ?? 'porsi',
+        imageUrl: json['image_url'] as String?,
+        category: json['category'] == null
+            ? null
+            : CategoryModel.fromJson(json['category'] as Map<String, dynamic>),
+        merchant:
+            MerchantRef.fromJson(json['merchant'] as Map<String, dynamic>),
+        available: (json['available'] as num?)?.toInt() ?? 0,
+        badge: (json['badge'] as String?) ?? 'available',
+        ratingAvg: (json['rating_avg'] as num?)?.toDouble() ?? 0,
+        ratingCount: (json['rating_count'] as num?)?.toInt() ?? 0,
+        isFavorite: (json['is_favorite'] as bool?) ?? false,
+        description: json['description'] as String?,
+        options: ((json['options'] as List?) ?? const [])
+            .map((e) => MenuOption.fromJson(e as Map<String, dynamic>))
+            .toList(),
+        minOrderQty: (json['min_order_qty'] as num?)?.toInt() ?? 1,
+        prepMinutes: (json['prep_minutes'] as num?)?.toInt() ?? 0,
+        isPreorder: (json['is_preorder'] as bool?) ?? false,
+        preorderDays: (json['preorder_days'] as num?)?.toInt() ?? 0,
+      );
+
+  // Getter kompatibilitas untuk layar lama.
+  double get rating => ratingAvg;
+  int get reviewCount => ratingCount;
+  String get vendor => merchant.businessName;
+  bool get isLiked => isFavorite;
+  bool get canOrder => merchant.isOpen && badge != 'sold_out';
+
+  String? get badgeText {
+    switch (badge) {
+      case 'sold_out':
+        return 'Habis';
+      case 'preorder':
+        return preorderDays > 0 ? 'Pre-order H-$preorderDays' : 'Pre-order';
+      case 'low_stock':
+        return '🔥 Sisa $available Porsi';
+      case 'available':
+        return 'Tersedia';
+    }
+    return null;
   }
+
+  String get badgeType =>
+      (badge == 'low_stock' || badge == 'sold_out') ? 'quota' : 'available';
+
+  ProductModel copyWith({bool? isFavorite}) => ProductModel(
+        id: id,
+        name: name,
+        price: price,
+        unitLabel: unitLabel,
+        imageUrl: imageUrl,
+        category: category,
+        merchant: merchant,
+        available: available,
+        badge: badge,
+        ratingAvg: ratingAvg,
+        ratingCount: ratingCount,
+        isFavorite: isFavorite ?? this.isFavorite,
+        description: description,
+        options: options,
+        minOrderQty: minOrderQty,
+        prepMinutes: prepMinutes,
+        isPreorder: isPreorder,
+        preorderDays: preorderDays,
+      );
 }
 
+/// Shim sementara agar layar yang belum dipindah ke API tetap kompil.
+/// Dihapus setelah pemakai terakhirnya hilang.
 class ProductData {
-  static const ProductModel defaultProduct = ProductModel(
-    id: 'prod-001',
-    name: 'Lumpia Diego',
-    price: 25000,
-    rating: 4.6,
-    reviewCount: 120,
-    image: 'assets/images/lumpia_diego.png',
-    badgeText: '🔥 Sisa 8 Porsi',
-    badgeType: 'quota',
-    vendor: 'Diego Katering',
-    description:
-        'Lumpia goreng super renyah khas Diego Katering, isian rebung manis, telur orak-arik, dan daging ayam gurih dengan saus tauco bawang spesial.',
-    options: ['Sambal Pisah', 'Ekstra Cabai Rawit', 'Goreng Hangat'],
-    isLiked: true,
-    category: 'danusan',
-  );
+  static final List<ProductModel> mockProducts = [];
 
-  static final List<ProductModel> mockProducts = [
-    defaultProduct,
-    const ProductModel(
-      id: 'prod-002',
-      name: 'Martabak Manis',
-      price: 35000,
-      rating: 4.8,
-      reviewCount: 85,
-      image: 'assets/images/martabak.png',
-      badgeText: 'Tersedia',
-      badgeType: 'available',
-      vendor: 'Martabak Pecenongan',
-      description: 'Martabak manis tebal empuk dengan aneka topping keju, coklat, dan kacang gurih.',
-      options: ['Keju Spesial', 'Coklat Leleh', 'Kacang'],
-      isLiked: true,
-      category: 'manis',
-    ),
-    const ProductModel(
-      id: 'prod-003',
-      name: 'Nasi Kuning Slamet',
-      price: 20000,
-      rating: 4.9,
-      reviewCount: 210,
-      image: 'assets/images/nasi_kuning.png',
-      badgeText: '🔥 Sisa 5 Porsi',
-      badgeType: 'quota',
-      vendor: 'Dapur Slamet',
-      description: 'Nasi kuning wangi rempah dengan suwiran ayam, sambal balado tempe orek, dan telur iris.',
-      options: ['Sambal Tambah', 'Telur Utuh'],
-      isLiked: false,
-      category: 'katering',
-    ),
-    const ProductModel(
-      id: 'prod-004',
-      name: 'Donat Surgawi',
-      price: 15000,
-      rating: 4.7,
-      reviewCount: 95,
-      image: 'assets/images/donat_surgawi.png',
-      badgeText: 'Tersedia',
-      badgeType: 'available',
-      vendor: 'Surgawi Bakery',
-      description: 'Donat kentang empuk bertabur gula salju dan glaze rasa premium.',
-      options: ['Glaze Cokelat', 'Gula Halus'],
-      isLiked: true,
-      category: 'manis',
-    ),
-    const ProductModel(
-      id: 'prod-005',
-      name: 'Risoles Bu Tima',
-      price: 18000,
-      rating: 4.8,
-      reviewCount: 110,
-      image: 'assets/images/risoles.png',
-      badgeText: 'Tersedia',
-      badgeType: 'available',
-      vendor: 'Dapur Bu Tima',
-      description: 'Risoles mayo lumer isi daging asap, telur rebus, dan saus mayo creamy gurih.',
-      options: ['Cabe Rawit Segar', 'Saus Keju'],
-      isLiked: true,
-      category: 'danusan',
-    ),
-  ];
-
-  static ProductModel getProductByName(String name) {
-    try {
-      return mockProducts.firstWhere(
-        (p) => p.name.trim().toLowerCase() == name.trim().toLowerCase(),
-      );
-    } catch (_) {
-      return defaultProduct;
-    }
-  }
+  static ProductModel? getProductByName(String name) => null;
 }

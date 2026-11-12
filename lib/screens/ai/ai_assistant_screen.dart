@@ -367,15 +367,18 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
 
   void _onOrderRecommendation() {
     final bundleProduct = ProductModel(
-      id: 'ai-package-50',
+      id: 0,
       name:
           'Paket Rekomendasi AI (${_selectedPriority == 0 ? "Profit Maksimal" : "Variasi Menu"})',
-      category: _selectedProductType,
-      price: _currentPackage.totalModalValue,
-      vendor: _currentPackage.items.map((e) => e.vendor).toSet().join(' & '),
-      image: _currentPackage.items.first.imagePath,
-      rating: 4.9,
-      reviewCount: 50,
+      price: _currentPackage.totalModalValue.round(),
+      merchant: MerchantRef(
+        id: 0,
+        slug: 'ai-package',
+        businessName: _currentPackage.items.map((e) => e.vendor).toSet().join(' & '),
+        isOpen: true,
+      ),
+      ratingAvg: 4.9,
+      ratingCount: 50,
       description:
           'Paket rekomendasi cerdas AI: ${_currentPackage.items.map((e) => e.title).join(' + ')}. Estimasi profit ${_currentPackage.estimasiProfit.replaceAll("\n", " ")}.',
     );

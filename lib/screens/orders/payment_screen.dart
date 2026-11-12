@@ -1,3 +1,4 @@
+import '../../widgets/menu_image.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -54,9 +55,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>? ??
               {};
-      _product = args['product'] as ProductModel? ?? ProductData.defaultProduct;
+      final p = args['product'] as ProductModel?;
+      if (p == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) Navigator.pop(context);
+        });
+        return;
+      }
+      _product = p;
       _quantity = args['quantity'] as int? ?? 1;
-      _total = args['total'] as double? ?? _product.price * _quantity;
+      _total = args['total'] as double? ?? (_product.price * _quantity).toDouble();
       _orderCode = args['orderCode'] as String? ??
           '#KK-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch % 900 + 100}';
       _paymentMethod =
@@ -1107,17 +1115,10 @@ class _PaymentScreenState extends State<PaymentScreen> {
             children: [
               ClipRRect(
                 borderRadius: BorderRadius.circular(10),
-                child: Image.asset(
-                  _product.image,
+                child: MenuImage(_product.imageUrl,
                   width: 50,
                   height: 50,
                   fit: BoxFit.cover,
-                  errorBuilder: (ctx, err, stack) => Container(
-                    width: 50,
-                    height: 50,
-                    color: AppColors.secondaryBg,
-                    child: const Icon(Icons.image_not_supported_outlined),
-                  ),
                 ),
               ),
               const SizedBox(width: 12),

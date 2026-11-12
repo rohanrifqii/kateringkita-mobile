@@ -106,14 +106,14 @@ class _HomeScreenState extends State<HomeScreen> {
       case '🥞 Martabak':
         return ProductData.mockProducts
             .where((p) =>
-                p.category == 'manis' &&
+                p.category?.slug == 'manis' &&
                 p.name.toLowerCase().contains('martabak'))
             .toList();
       case '🍗 Ayam':
         return ProductData.mockProducts
             .where((p) =>
                 p.name.toLowerCase().contains('ayam') ||
-                p.description.toLowerCase().contains('ayam'))
+                (p.description ?? '').toLowerCase().contains('ayam'))
             .toList();
       case '🥟 Snack':
         return ProductData.mockProducts
@@ -126,12 +126,12 @@ class _HomeScreenState extends State<HomeScreen> {
         return ProductData.mockProducts
             .where((p) =>
                 p.name.toLowerCase().contains('nasi') ||
-                p.category == 'katering' ||
-                p.category == 'danusan')
+                p.category?.slug == 'katering' ||
+                p.category?.slug == 'danusan')
             .toList();
       case '🍩 Donat & Manis':
         return ProductData.mockProducts
-            .where((p) => p.category == 'manis')
+            .where((p) => p.category?.slug == 'manis')
             .toList();
       case '🥤 Minuman':
         return [];
@@ -463,7 +463,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   itemBuilder: (context, index) {
                     final banner = _promoBanners[index];
-                    final targetProduct = ProductData.mockProducts[banner['productIndex'] as int];
+                    final idx = banner['productIndex'] as int;
+                    final targetProduct = idx < ProductData.mockProducts.length
+                        ? ProductData.mockProducts[idx]
+                        : null;
 
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 2),

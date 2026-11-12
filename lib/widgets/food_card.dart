@@ -1,3 +1,4 @@
+import 'menu_image.dart';
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/app_currency.dart';
@@ -42,16 +43,10 @@ class FoodGridCard extends StatelessWidget {
                   Positioned.fill(
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                      child: Image.asset(
-                        product.image,
+                      child: MenuImage(product.imageUrl,
                         width: double.infinity,
                         height: double.infinity,
                         fit: BoxFit.cover,
-                        alignment: Alignment.center,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: AppColors.secondaryBg,
-                          child: Icon(Icons.fastfood, color: AppColors.textMuted),
-                        ),
                       ),
                     ),
                   ),

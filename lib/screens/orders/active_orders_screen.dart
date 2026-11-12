@@ -1,3 +1,4 @@
+import '../../widgets/menu_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -144,18 +145,10 @@ class ActiveOrdersScreen extends StatelessWidget {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: Image.asset(
-                              product.image,
+                            child: MenuImage(product?.imageUrl,
                               width: 68,
                               height: 68,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Container(
-                                width: 68,
-                                height: 68,
-                                color: AppColors.secondaryBg,
-                                child: Icon(Icons.fastfood,
-                                    color: AppColors.textMuted),
-                              ),
                             ),
                           ),
                           const SizedBox(width: 14),

@@ -1,3 +1,4 @@
+import '../../widgets/menu_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -107,7 +108,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       list = list
           .where((m) =>
               m.name.toLowerCase().contains(q) ||
-              m.description.toLowerCase().contains(q))
+              (m.description ?? '').toLowerCase().contains(q))
           .toList();
     }
     if (_selectedMenuCategory == 'Terlaris') {
@@ -117,10 +118,10 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               m.rating >= 4.8)
           .toList();
     } else if (_selectedMenuCategory == 'Paket & Katering') {
-      return list.where((m) => m.category == 'katering').toList();
+      return list.where((m) => m.category?.slug == 'katering').toList();
     } else if (_selectedMenuCategory == 'Danusan & Snack') {
       return list
-          .where((m) => m.category == 'danusan' || m.category == 'manis')
+          .where((m) => m.category?.slug == 'danusan' || m.category?.slug == 'manis')
           .toList();
     }
     return list;
@@ -1014,21 +1015,10 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                           children: [
                             ClipRRect(
                               borderRadius: BorderRadius.circular(14),
-                              child: Image.asset(
-                                menu.image,
+                              child: MenuImage(menu.imageUrl,
                                 width: 92,
                                 height: 92,
                                 fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) =>
-                                    Container(
-                                  width: 92,
-                                  height: 92,
-                                  color: AppColors.secondaryBg,
-                                  child: Icon(
-                                    Icons.fastfood_rounded,
-                                    color: AppColors.textMuted,
-                                  ),
-                                ),
                               ),
                             ),
                             Positioned(
@@ -1107,7 +1097,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                menu.description,
+                                menu.description ?? '',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: AppTextStyles.bodySmall.copyWith(
@@ -1246,8 +1236,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                 borderRadius: const BorderRadius.vertical(
                                   top: Radius.circular(17),
                                 ),
-                                child: Image.asset(
-                                  menu.image,
+                                child: MenuImage(menu.imageUrl,
                                   fit: BoxFit.cover,
                                 ),
                               ),

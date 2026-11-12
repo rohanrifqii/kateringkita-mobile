@@ -1,3 +1,4 @@
+import '../../widgets/menu_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/app_colors.dart';
@@ -36,9 +37,9 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
           ? args
           : (widget.orderDetails ?? <String, dynamic>{});
 
-      final prod = map['product'] as ProductModel? ?? ProductData.defaultProduct;
+      final prod = map['product'] as ProductModel?;
       final qty = map['quantity'] as int? ?? 1;
-      final tot = (map['total'] as num?)?.toDouble() ?? prod.price;
+      final tot = (map['total'] as num?)?.toDouble() ?? (prod?.price.toDouble() ?? 0);
       final code = map['orderCode'] as String? ?? '#KK-2026-089';
       final name = map['name'] as String? ?? 'Mahasiswa UB';
       final phone = map['phone'] as String? ?? '-';
@@ -51,7 +52,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
           'Halo Admin KateringKita! 👋\n\n'
           'Saya ingin konfirmasi pesanan:\n'
           '• Kode Pesanan: $code\n'
-          '• Menu: ${prod.name} ($qty Porsi)\n'
+          '• Menu: ${prod?.name ?? '-'} ($qty Porsi)\n'
           '• Total: ${AppCurrency.format(tot)}\n'
           '• Pemesan: $name ($phone)\n'
           '• Titik Temu: $location\n'
@@ -208,17 +209,10 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(10),
-                        child: Image.asset(
-                          _product!.image,
+                        child: MenuImage(_product!.imageUrl,
                           width: 48,
                           height: 48,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            width: 48,
-                            height: 48,
-                            color: AppColors.secondaryBg,
-                            child: Icon(Icons.fastfood, size: 24, color: AppColors.textMuted),
-                          ),
                         ),
                       ),
                       const SizedBox(width: 12),

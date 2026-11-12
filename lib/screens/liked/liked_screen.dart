@@ -1,3 +1,4 @@
+import '../../widgets/menu_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_colors.dart';
@@ -20,7 +21,7 @@ class LikedScreen extends StatelessWidget {
           valueListenable: LikedStore.likedNotifier,
           builder: (context, likedIds, child) {
             final likedProducts = ProductData.mockProducts
-                .where((p) => likedIds.contains(p.id))
+                .where((p) => likedIds.contains(p.id.toString()))
                 .toList();
 
             return SingleChildScrollView(
@@ -108,19 +109,10 @@ class LikedScreen extends StatelessWidget {
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
-                                child: Image.asset(
-                                  product.image,
+                                child: MenuImage(product.imageUrl,
                                   width: 60,
                                   height: 60,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (context, error, stackTrace) =>
-                                      Container(
-                                    width: 60,
-                                    height: 60,
-                                    color: AppColors.secondaryBg,
-                                    child: Icon(Icons.fastfood,
-                                        color: AppColors.textMuted),
-                                  ),
                                 ),
                               ),
                               const SizedBox(width: 12),
@@ -150,7 +142,7 @@ class LikedScreen extends StatelessWidget {
                                   size: 22,
                                 ),
                                 onPressed: () async {
-                                  await LikedStore.toggleLike(product.id);
+                                  await LikedStore.toggleLike(product.id.toString());
                                   if (!context.mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
