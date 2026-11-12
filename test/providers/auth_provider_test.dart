@@ -59,6 +59,37 @@ void main() {
     expect(notified, greaterThanOrEqualTo(2));
   });
 
+  test('setFavoritePickupPoint memperbarui user dari jawaban server',
+      () async {
+    final seen = <http.Request>[];
+    final p = AuthProvider(AuthRepository(ApiClient(
+      client: MockClient((r) async {
+        seen.add(r);
+        if (r.url.path.endsWith('/auth/login')) {
+          return _json(200, {
+            'data': {'token': 'tok', 'expires_at': 'x', 'user': _user}
+          });
+        }
+        return _json(200, {
+          'data': {
+            'user': {..._user, 'favorite_pickup_point_id': 3},
+            'merchant': null
+          }
+        });
+      }),
+      baseUrl: 'https://x.test/api/v1',
+      readToken: TokenStore.readToken,
+    )));
+    await p.login('budi@x.com', 'abc12345');
+    expect(p.user!.favoritePickupPointId, isNull);
+    var notified = 0;
+    p.addListener(() => notified++);
+    await p.setFavoritePickupPoint(3);
+    expect(seen.last.method, 'PATCH');
+    expect(p.user!.favoritePickupPointId, 3);
+    expect(notified, 1);
+  });
+
   test('load with saved token fetches user', () async {
     await TokenStore.saveSession('tok', 'budi@x.com');
     final p = _make();

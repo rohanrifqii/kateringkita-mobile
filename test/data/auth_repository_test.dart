@@ -141,6 +141,57 @@ void main() {
         email: 'a@x.com', code: '123456', password: 'abc12345');
   });
 
+  test('setFavoritePickupPoint: PATCH /me hanya favorite_pickup_point_id',
+      () async {
+    late http.Request seen;
+    final repo = _repo((r) async {
+      seen = r;
+      return _json(200, {
+        'data': {
+          'user': {..._user, 'favorite_pickup_point_id': 4},
+          'merchant': null,
+        }
+      });
+    });
+    final u = await repo.setFavoritePickupPoint(4);
+    expect(seen.method, 'PATCH');
+    expect(seen.url.path, '/api/v1/me');
+    expect(jsonDecode(seen.body), {'favorite_pickup_point_id': 4});
+    expect(u.favoritePickupPointId, 4);
+  });
+
+  test('setFavoritePickupPoint(null) mengirim null untuk menghapus', () async {
+    late http.Request seen;
+    final repo = _repo((r) async {
+      seen = r;
+      return _json(200, {
+        'data': {'user': _user, 'merchant': null}
+      });
+    });
+    final u = await repo.setFavoritePickupPoint(null);
+    expect(jsonDecode(seen.body), {'favorite_pickup_point_id': null});
+    expect(u.favoritePickupPointId, isNull);
+  });
+
+  test('setFavoritePickupPoint: titik tidak aktif -> galat kolom', () async {
+    final repo = _repo((r) async => _json(400, {
+          'error': {
+            'code': 'VALIDATION_ERROR',
+            'message': 'Data tidak valid.',
+            'fields': {
+              'favorite_pickup_point_id': ['Titik temu tidak tersedia.']
+            }
+          }
+        }));
+    await expectLater(
+      repo.setFavoritePickupPoint(99),
+      throwsA(isA<ApiException>().having(
+          (e) => e.field('favorite_pickup_point_id'),
+          'field',
+          'Titik temu tidak tersedia.')),
+    );
+  });
+
   test('logout ignores network error and clears session', () async {
     await TokenStore.saveSession('tok', 'a@x.com');
     final repo = _repo((r) async => throw http.ClientException('offline'));

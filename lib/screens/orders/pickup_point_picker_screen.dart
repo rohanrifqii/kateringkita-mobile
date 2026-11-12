@@ -10,16 +10,25 @@ import '../../services/map_service.dart';
 /// Pusat peta titik temu: kampus UB.
 const LatLng ubPickupMapCenter = LatLng(-7.9526, 112.6145);
 
-/// Pilih titik temu toko. Peta hanya latar (titik belum punya koordinat);
+/// Pilih titik temu (titik temu toko di checkout, atau titik temu favorit
+/// dari beranda). Peta hanya latar (titik belum punya koordinat);
 /// `pop(PickupPoint)` saat satu titik dipilih.
 class PickupPointPickerScreen extends StatelessWidget {
   final List<PickupPoint> points;
   final int? selectedId;
+  final String title;
+
+  /// Keterangan singkat di atas daftar; tidak tampil bila null.
+  final String? note;
+  final String emptyText;
 
   const PickupPointPickerScreen({
     super.key,
     required this.points,
     this.selectedId,
+    this.title = 'Pilih Titik Temu',
+    this.note,
+    this.emptyText = 'Toko ini belum punya titik temu.',
   });
 
   @override
@@ -31,8 +40,7 @@ class PickupPointPickerScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Pilih Titik Temu',
-            style: AppTextStyles.h3.copyWith(fontSize: 18)),
+        title: Text(title, style: AppTextStyles.h3.copyWith(fontSize: 18)),
       ),
       body: Column(
         children: [
@@ -53,13 +61,24 @@ class PickupPointPickerScreen extends StatelessWidget {
               ],
             ),
           ),
+          if (note != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+              child: Text(
+                note!,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ),
           Expanded(
             child: points.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        'Toko ini belum punya titik temu.',
+                        emptyText,
                         textAlign: TextAlign.center,
                         style: AppTextStyles.bodyMedium,
                       ),

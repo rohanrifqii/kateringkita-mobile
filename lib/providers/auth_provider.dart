@@ -25,6 +25,12 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Simpan titik temu favorit ke profil (dipakai beranda & checkout).
+  Future<void> setFavoritePickupPoint(int? pickupPointId) async {
+    _user = await _repo.setFavoritePickupPoint(pickupPointId);
+    notifyListeners();
+  }
+
   Future<void> logout() async {
     await _repo.logout();
     clear();

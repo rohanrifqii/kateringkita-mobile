@@ -117,6 +117,12 @@ class AuthRepository {
     return user;
   }
 
+  /// PATCH /me `{favorite_pickup_point_id}`; null menghapus favorit. Server
+  /// menolak titik yang tidak aktif (400, kolom favorite_pickup_point_id).
+  Future<ApiUser> setFavoritePickupPoint(int? pickupPointId) async =>
+      _userFrom(await _api.patch('/me',
+          body: {'favorite_pickup_point_id': pickupPointId}));
+
   /// PUT /me/password. Return null bila sukses, atau pesan galat dari server.
   Future<String?> changePassword({
     required String email,

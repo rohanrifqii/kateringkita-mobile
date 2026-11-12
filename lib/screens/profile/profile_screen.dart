@@ -428,12 +428,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const Divider(height: 1),
                     _buildNotifSwitchTile(
-                      title: _isEn
-                          ? 'Order & Courier Status'
-                          : 'Status Pesanan & Pengantaran Kurir',
+                      title: _isEn ? 'Order Status' : 'Status Pesanan',
                       subtitle: _isEn
-                          ? 'Real-time updates when food arrives'
-                          : 'Notifikasi saat pesanan sedang dimasak & diantar',
+                          ? 'When your order is confirmed, cooking & ready for pickup'
+                          : 'Saat pesanan dikonfirmasi, dimasak & siap diambil',
                       value: _notifCourier,
                       onChanged: (v) async {
                         setSheetState(() => _notifCourier = v);
@@ -1081,8 +1079,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ? 'Notification Settings'
                       : 'Pengaturan Notifikasi',
                   subtitle: _isEn
-                      ? 'Meal time, promos, courier status'
-                      : 'Jam makan, promo, status kurir',
+                      ? 'Meal time, promos, order status'
+                      : 'Jam makan, promo, status pesanan',
                   onTap: _showNotificationSettingsSheet,
                 ),
                 _buildCardDivider(),
@@ -1151,7 +1149,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     sections: const [
                       (
                         '1. Ketentuan Pemesanan & Pre-Order',
-                        'Setiap pesanan katering dan paket danusan di KateringKita diproses sesuai kuota harian mitra vendor. Pastikan titik lokasi pengantaran dan nomor WhatsApp aktif sudah sesuai sebelum melakukan konfirmasi pembayaran.'
+                        'Setiap pesanan katering dan paket danusan di KateringKita diproses sesuai kuota harian mitra vendor. Pesanan tidak diantar: pembeli mengambil sendiri di titik temu yang dipilih saat checkout. Pastikan titik temu, waktu ambil, dan nomor WhatsApp aktif sudah sesuai sebelum melakukan pembayaran.'
                       ),
                       (
                         '2. Sistem Holding Timer 5 Menit',
@@ -1159,7 +1157,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       (
                         '3. Pembayaran & Konfirmasi Pesanan',
-                        'Pembayaran dapat dilakukan melalui QRIS, Transfer Virtual Account, maupun Tunai saat Pengambilan (COD). Bukti pesanan dapat diteruskan langsung ke WhatsApp resmi vendor melalui fitur konfirmasi di aplikasi.'
+                        'Pembayaran dilakukan lewat Midtrans: QRIS/e-wallet atau Virtual Account bank. Tidak ada pembayaran tunai. Bukti pesanan dapat diteruskan ke WhatsApp vendor melalui fitur konfirmasi di aplikasi.'
                       ),
                     ],
                   ),
@@ -1175,11 +1173,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     sections: const [
                       (
                         '1. Perlindungan Data Pengguna',
-                        'KateringKita menjaga kerahasiaan data pribadi pengguna seperti Nama, Alamat Email, Nomor WhatsApp, serta titik lokasi pengantaran. Password dan token sesi disimpan secara terenkripsi menggunakan penyimpanan aman (Secure Storage).'
+                        'KateringKita menjaga kerahasiaan data pribadi pengguna seperti Nama, Alamat Email, Nomor WhatsApp, serta titik temu favorit. Token sesi disimpan secara terenkripsi menggunakan penyimpanan aman (Secure Storage); kata sandi tidak disimpan di perangkat.'
                       ),
                       (
-                        '2. Penggunaan Lokasi & GPS',
-                        'Akses lokasi GPS dan peta OpenStreetMap hanya digunakan untuk memudahkan penentuan titik pengantaran pesanan katering serta menghitung estimasi waktu tempuh pengantaran.'
+                        '2. Peta & Titik Temu',
+                        'Aplikasi tidak meminta akses lokasi GPS. Peta OpenStreetMap hanya ditampilkan sebagai latar area kampus, dan titik temu dipilih dari daftar resmi KateringKita.'
                       ),
                       (
                         '3. Keamanan Konsultasi AI Assistant',

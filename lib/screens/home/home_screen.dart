@@ -5,15 +5,16 @@ import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../api/api_exception.dart';
+import '../../core/require_login.dart';
 import '../../data/catalog_repository.dart';
-import '../../data/settings_store.dart';
 import '../../models/category_model.dart';
+import '../../models/pickup_point.dart';
 import '../../models/product_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/cart_button.dart';
 import '../../widgets/food_card.dart';
 import '../../widgets/notification_bell.dart';
-import '../orders/location_picker_screen.dart';
+import '../orders/pickup_point_picker_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final Function(int)? onTabChange;
@@ -51,7 +52,6 @@ class _InfoBanner {
 class _HomeScreenState extends State<HomeScreen> {
   String _selectedCategory = 'Semua';
   String? _selectedSlug;
-  String _meetingPoint = SettingsStore.defaultMeetingPoint;
 
   List<CategoryModel> _categories = const [];
   List<ProductModel> _products = const [];
@@ -115,14 +115,20 @@ class _HomeScreenState extends State<HomeScreen> {
   late final AuthProvider _auth;
   late bool _wasLoggedIn;
 
+  /// Daftar titik temu aktif (GET /meta/pickup-points) untuk nama favorit.
+  List<PickupPoint> _pickupPoints = const [];
+  bool _savingPickup = false;
+
   @override
   void initState() {
     super.initState();
     _auth = context.read<AuthProvider>();
     _wasLoggedIn = _auth.isLoggedIn;
     _auth.addListener(_onAuthChanged);
-    _loadMeetingPoint();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      if (_auth.user?.favoritePickupPointId != null) _ensurePickupPoints();
+    });
   }
 
   @override
@@ -138,36 +144,76 @@ class _HomeScreenState extends State<HomeScreen> {
     if (now == _wasLoggedIn || !mounted) return;
     _wasLoggedIn = now;
     _load();
+    if (now && _auth.user?.favoritePickupPointId != null) {
+      _ensurePickupPoints();
+    }
   }
 
-  Future<void> _loadMeetingPoint() async {
-    final point = await SettingsStore.loadMeetingPoint();
-    if (!mounted) return;
-    setState(() => _meetingPoint = point);
+  /// null bila gagal dimuat.
+  Future<List<PickupPoint>?> _ensurePickupPoints() async {
+    if (_pickupPoints.isNotEmpty) return _pickupPoints;
+    final repo = context.read<CatalogRepository>();
+    try {
+      final pts = await repo.pickupPoints();
+      if (mounted) setState(() => _pickupPoints = pts);
+      return pts;
+    } catch (_) {
+      return null;
+    }
   }
 
-  Future<void> _pickMeetingPoint() async {
-    final (lat, lng) = await SettingsStore.loadMeetingCoordinates();
+  void _snack(String text) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(text)));
+
+  /// Titik temu favorit disimpan ke profil (PATCH /me) dan dipilih otomatis
+  /// saat checkout bila dilayani toko. Tamu diminta masuk dulu.
+  Future<void> _pickPickupPoint() async {
+    if (_savingPickup) return;
+    if (!_auth.isLoggedIn) {
+      _snack('Masuk dulu untuk menyimpan titik temu favorit.');
+      if (!await requireLogin(context) || !mounted) return;
+    }
+    final pts = await _ensurePickupPoints();
     if (!mounted) return;
-    final result = await Navigator.push<DeliveryLocation>(
+    if (pts == null) {
+      _snack('Gagal memuat titik temu. Coba lagi.');
+      return;
+    }
+    final current = _auth.user?.favoritePickupPointId;
+    final picked = await Navigator.push<PickupPoint>(
       context,
       MaterialPageRoute(
-        builder: (context) => LocationPickerScreen(
-          currentLocationName: _meetingPoint,
-          initialLat: lat,
-          initialLng: lng,
+        builder: (_) => PickupPointPickerScreen(
+          points: pts,
+          selectedId: current,
+          title: 'Titik Temu Favorit',
+          note: 'Dipilih otomatis saat checkout bila titik ini dilayani '
+              'toko. Pesanan diambil sendiri di titik temu.',
+          emptyText: 'Belum ada titik temu yang aktif.',
         ),
       ),
     );
-    if (result != null) {
-      await SettingsStore.saveMeetingPoint(
-        result.name,
-        fullAddress: result.fullAddress,
-        latitude: result.latitude,
-        longitude: result.longitude,
-      );
-      setState(() => _meetingPoint = result.name);
+    if (picked == null || !mounted || picked.id == current) return;
+    setState(() => _savingPickup = true);
+    try {
+      await _auth.setFavoritePickupPoint(picked.id);
+      if (mounted) _snack('Titik temu favorit: ${picked.name}');
+    } on ApiException catch (e) {
+      if (mounted) _snack(e.field('favorite_pickup_point_id') ?? e.message);
+    } catch (_) {
+      if (mounted) _snack('Titik temu gagal disimpan. Coba lagi.');
+    } finally {
+      if (mounted) setState(() => _savingPickup = false);
     }
+  }
+
+  String _pickupLabel(int? favoriteId) {
+    if (favoriteId == null) return 'Pilih titik temu favorit';
+    for (final p in _pickupPoints) {
+      if (p.id == favoriteId) return 'Titik temu: ${p.name}';
+    }
+    return 'Titik temu favorit';
   }
 
   Future<void> _load() async {
@@ -287,6 +333,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final products = _products;
+    final favoritePickupId = context.select<AuthProvider, int?>(
+        (a) => a.isLoggedIn ? a.user?.favoritePickupPointId : null);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -317,14 +365,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 2),
                         GestureDetector(
-                          onTap: _pickMeetingPoint,
+                          key: const ValueKey('home-pickup-point'),
+                          onTap: _pickPickupPoint,
                           child: Row(
                             children: [
                               const Icon(Icons.location_on, size: 14, color: AppColors.primary),
                               const SizedBox(width: 4),
                               Flexible(
                                 child: Text(
-                                  '$_meetingPoint ▾',
+                                  '${_pickupLabel(favoritePickupId)} ▾',
                                   overflow: TextOverflow.ellipsis,
                                   style: AppTextStyles.bodySmall.copyWith(
                                     color: AppColors.textSecondary,

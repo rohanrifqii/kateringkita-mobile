@@ -1,12 +1,16 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/core/app_routes.dart';
+import 'package:kateringkita_pbl/data/auth_repository.dart';
 import 'package:kateringkita_pbl/data/catalog_repository.dart';
+import 'package:kateringkita_pbl/data/token_store.dart';
+import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:kateringkita_pbl/providers/cart_provider.dart';
 import 'package:kateringkita_pbl/screens/home/home_screen.dart';
 import 'package:kateringkita_pbl/screens/home/search_screen.dart';
@@ -71,6 +75,148 @@ Widget _wrap(List<http.Request> log, Widget child,
 void main() {
   _raceTest();
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  group('titik temu favorit', () {
+    const points = {
+      'data': [
+        {'id': 1, 'name': 'Gerbang Barat', 'description': 'Dekat parkir'},
+        {'id': 2, 'name': 'Perpustakaan Pusat', 'description': null},
+      ]
+    };
+
+    Map<String, dynamic> user(int? fav) => {
+          'id': 1,
+          'role': 'customer',
+          'full_name': 'Budi',
+          'email': 'b@x.com',
+          'phone': '0812345678901',
+          'favorite_pickup_point_id': fav,
+        };
+
+    /// AuthProvider asli: login & PATCH /me lewat MockClient.
+    Future<(List<http.Request>, AuthProvider)> pump(WidgetTester tester,
+        {int? fav, bool login = true, http.Response? patch}) async {
+      FlutterSecureStorage.setMockInitialValues({});
+      final log = <http.Request>[];
+      final api = ApiClient(
+        baseUrl: 'https://x.test/api/v1',
+        readToken: TokenStore.readToken,
+        client: MockClient((req) async {
+          log.add(req);
+          final p = req.url.path;
+          if (p.endsWith('/auth/login')) {
+            return _json({
+              'data': {'token': 't', 'expires_at': 'x', 'user': user(fav)}
+            });
+          }
+          if (p.endsWith('/v1/me') && req.method == 'PATCH') {
+            if (patch != null) return patch;
+            final id = jsonDecode(req.body)['favorite_pickup_point_id'];
+            return _json({
+              'data': {'user': user(id as int?), 'merchant': null}
+            });
+          }
+          if (p.endsWith('/meta/pickup-points')) return _json(points);
+          if (p.endsWith('/meta/categories')) return _json(_cats);
+          return _json({'data': [], 'meta': {'total': 0}});
+        }),
+      );
+      final auth = AuthProvider(AuthRepository(api));
+      if (login) await auth.login('b@x.com', 'abc12345');
+      await tester.pumpWidget(MultiProvider(
+        providers: [
+          Provider<CatalogRepository>.value(value: CatalogRepository(api)),
+          ChangeNotifierProvider(create: (_) => CartProvider()),
+          ...sessionProviders(api, auth: auth),
+        ],
+        child: MaterialApp(
+          home: const HomeScreen(),
+          routes: {
+            AppRoutes.login: (c) => Scaffold(
+                  body: TextButton(
+                    onPressed: () async {
+                      await auth.login('b@x.com', 'abc12345');
+                      if (c.mounted) Navigator.pop(c, true);
+                    },
+                    child: const Text('login-palsu'),
+                  ),
+                ),
+          },
+        ),
+      ));
+      await tester.pumpAndSettle();
+      return (log, auth);
+    }
+
+    Finder label() => find.byKey(const ValueKey('home-pickup-point'));
+
+    testWidgets('tanpa favorit: ajakan pilih, tanpa teks pengantaran',
+        (tester) async {
+      await pump(tester);
+      expect(find.text('Pilih titik temu favorit ▾'), findsOneWidget);
+      expect(find.textContaining('Pengantaran'), findsNothing);
+    });
+
+    testWidgets('favorit dari profil server tampil dengan namanya',
+        (tester) async {
+      await pump(tester, fav: 2);
+      expect(find.text('Titik temu: Perpustakaan Pusat ▾'), findsOneWidget);
+    });
+
+    testWidgets('pilih titik -> PATCH /me favorite_pickup_point_id',
+        (tester) async {
+      final (log, auth) = await pump(tester);
+      await tester.tap(label());
+      await tester.pumpAndSettle();
+      expect(find.text('Titik Temu Favorit'), findsOneWidget);
+      await tester.tap(find.text('Gerbang Barat'));
+      await tester.pumpAndSettle();
+
+      final patch = log.singleWhere((r) => r.method == 'PATCH');
+      expect(patch.url.path, '/api/v1/me');
+      expect(jsonDecode(patch.body), {'favorite_pickup_point_id': 1});
+      expect(auth.user!.favoritePickupPointId, 1);
+      expect(find.text('Titik temu: Gerbang Barat ▾'), findsOneWidget);
+      expect(find.text('Titik temu favorit: Gerbang Barat'), findsOneWidget);
+    });
+
+    testWidgets('server menolak: pesan kolom, favorit tidak berubah',
+        (tester) async {
+      final (_, auth) = await pump(tester,
+          fav: 2,
+          patch: _json({
+            'error': {
+              'code': 'VALIDATION_ERROR',
+              'message': 'Data tidak valid.',
+              'fields': {
+                'favorite_pickup_point_id': ['Titik temu tidak tersedia.']
+              }
+            }
+          }, 400));
+      await tester.tap(label());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Gerbang Barat'));
+      await tester.pumpAndSettle();
+      expect(find.text('Titik temu tidak tersedia.'), findsOneWidget);
+      expect(auth.user!.favoritePickupPointId, 2);
+      expect(find.text('Titik temu: Perpustakaan Pusat ▾'), findsOneWidget);
+    });
+
+    testWidgets('tamu: diminta masuk dulu, lalu memilih', (tester) async {
+      final (log, _) = await pump(tester, login: false);
+      await tester.tap(label());
+      await tester.pumpAndSettle();
+      expect(find.text('Masuk dulu untuk menyimpan titik temu favorit.'),
+          findsOneWidget);
+      expect(log.where((r) => r.url.path.endsWith('/pickup-points')), isEmpty);
+      await tester.tap(find.text('login-palsu'));
+      await tester.pumpAndSettle();
+      expect(find.text('Titik Temu Favorit'), findsOneWidget);
+      await tester.tap(find.text('Perpustakaan Pusat'));
+      await tester.pumpAndSettle();
+      expect(find.text('Titik temu: Perpustakaan Pusat ▾'), findsOneWidget);
+    });
+  });
 
   group('banner info layanan', () {
     final stubRoutes = <String, WidgetBuilder>{
