@@ -115,6 +115,44 @@ void main() {
     expect(find.text('Dikonfirmasi'), findsNWidgets(2));
   });
 
+  testWidgets('Beri Ulasan hanya bila can_review; sukses memuat ulang daftar',
+      (tester) async {
+    var reviewed = false;
+    var listCalls = 0;
+    await tester.pumpWidget(_wrap((req) async {
+      if (req.method == 'POST' && req.url.path.endsWith('/KK-1/reviews')) {
+        reviewed = true;
+        return _json({
+          'data': {
+            'order_code': 'KK-1',
+            'reviewed_menu_ids': [7]
+          }
+        }, 201);
+      }
+      listCalls++;
+      return _json({
+        'data': [
+          _order('KK-1', status: 'completed')..['can_review'] = !reviewed,
+          _order('KK-2', status: 'completed'),
+        ],
+        'meta': {'total': 2}
+      });
+    }));
+    await tester.pumpAndSettle();
+    expect(find.text('Beri Ulasan'), findsOneWidget);
+
+    await tester.tap(find.text('Beri Ulasan'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('star-7-5')));
+    await tester.pump();
+    await tester.tap(find.text('Kirim Ulasan'));
+    await tester.pumpAndSettle();
+
+    expect(reviewed, true);
+    expect(listCalls, greaterThanOrEqualTo(2));
+    expect(find.text('Beri Ulasan'), findsNothing);
+  });
+
   testWidgets('batal sukses memuat ulang daftar', (tester) async {
     var listCalls = 0;
     var cancelled = false;

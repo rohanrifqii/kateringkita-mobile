@@ -17,6 +17,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../widgets/menu_image.dart';
 import '../../widgets/order_status_label.dart';
+import '../../widgets/review_sheet.dart';
 
 /// Daftar pesanan satu tab (`active` | `completed` | `cancelled`) dari server,
 /// lengkap dengan aksi batal / selesai / bayar / pesan lagi.
@@ -178,6 +179,14 @@ class _OrderListViewState extends State<OrderListView>
       _snack('Pesanan ${o.code} selesai! Terima kasih.');
       await _load(silent: true);
     });
+  }
+
+  Future<void> _review(OrderApiModel o) async {
+    final ok = await showReviewSheet(context, o);
+    if (ok == true && mounted) {
+      _snack('Terima kasih atas ulasanmu!');
+      await _load(silent: true);
+    }
   }
 
   Future<void> _pay(OrderApiModel o) => _run(o, () async {
@@ -467,7 +476,9 @@ class _OrderListViewState extends State<OrderListView>
                           fontWeight: FontWeight.w700,
                           fontSize: 11)),
                 ),
-              // Tempat tombol "Beri Ulasan" (o.canReview) untuk Task 14.
+              if (o.canReview)
+                _filled('Beri Ulasan', AppColors.primary,
+                    busy ? null : () => _review(o)),
             ],
           ),
           if (o.canCancel || o.canComplete) ...[
