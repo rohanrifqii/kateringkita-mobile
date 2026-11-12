@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
+import '../../api/api_exception.dart';
+import '../../data/catalog_repository.dart';
 import '../../data/settings_store.dart';
+import '../../models/category_model.dart';
 import '../../models/product_model.dart';
 import '../../widgets/food_card.dart';
 import '../orders/location_picker_screen.dart';
@@ -19,15 +23,13 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _selectedCategory = 'Semua';
+  String? _selectedSlug;
   String _meetingPoint = SettingsStore.defaultMeetingPoint;
 
-  final List<String> _categories = [
-    'Semua',
-    '🥞 Martabak',
-    '🍗 Ayam',
-    '🥟 Snack',
-    '🍱 Paket',
-  ];
+  List<CategoryModel> _categories = const [];
+  List<ProductModel> _products = const [];
+  bool _loading = true;
+  String? _error;
 
   int _currentBannerIndex = 0;
   final PageController _bannerController = PageController();
@@ -39,7 +41,6 @@ class _HomeScreenState extends State<HomeScreen> {
       'subtitle': 'Diskon s/d 50% untuk Danusan',
       'cta': 'Pesan Sekarang →',
       'image': 'assets/images/banner_promo.png',
-      'productIndex': 1,
     },
     {
       'tag': 'GRATIS ONGKIR',
@@ -47,7 +48,6 @@ class _HomeScreenState extends State<HomeScreen> {
       'subtitle': 'Bebas biaya kirim ke semua fakultas',
       'cta': 'Klaim Promo →',
       'image': 'assets/images/nasi_kuning.png',
-      'productIndex': 2,
     },
     {
       'tag': 'PAKET DANUSAN',
@@ -55,7 +55,6 @@ class _HomeScreenState extends State<HomeScreen> {
       'subtitle': 'Catering snack & makan siang organisasi',
       'cta': 'Pilih Menu →',
       'image': 'assets/images/lumpia_diego.png',
-      'productIndex': 0,
     },
   ];
 
@@ -63,6 +62,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadMeetingPoint();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   @override
@@ -101,55 +101,48 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  List<ProductModel> get _filteredProducts {
-    switch (_selectedCategory) {
-      case '🥞 Martabak':
-        return ProductData.mockProducts
-            .where((p) =>
-                p.category?.slug == 'manis' &&
-                p.name.toLowerCase().contains('martabak'))
-            .toList();
-      case '🍗 Ayam':
-        return ProductData.mockProducts
-            .where((p) =>
-                p.name.toLowerCase().contains('ayam') ||
-                (p.description ?? '').toLowerCase().contains('ayam'))
-            .toList();
-      case '🥟 Snack':
-        return ProductData.mockProducts
-            .where((p) =>
-                p.name.toLowerCase().contains('lumpia') ||
-                p.name.toLowerCase().contains('risoles') ||
-                p.name.toLowerCase().contains('donat'))
-            .toList();
-      case '🍱 Paket':
-        return ProductData.mockProducts
-            .where((p) =>
-                p.name.toLowerCase().contains('nasi') ||
-                p.category?.slug == 'katering' ||
-                p.category?.slug == 'danusan')
-            .toList();
-      case '🍩 Donat & Manis':
-        return ProductData.mockProducts
-            .where((p) => p.category?.slug == 'manis')
-            .toList();
-      case '🥤 Minuman':
-        return [];
-      case 'Semua':
-      default:
-        return ProductData.mockProducts;
+  Future<void> _load() async {
+    final repo = context.read<CatalogRepository>();
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final cats = _categories.isEmpty ? await repo.categories() : _categories;
+      final page = await repo.menus(category: _selectedSlug);
+      if (!mounted) return;
+      setState(() {
+        _categories = cats;
+        _products = page.items;
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Terjadi kesalahan. Coba lagi.';
+        _loading = false;
+      });
     }
   }
 
+  void _selectCategory(CategoryModel? c) {
+    setState(() {
+      _selectedCategory = c?.name ?? 'Semua';
+      _selectedSlug = c?.slug;
+    });
+    _load();
+  }
+
   void _showCategoryFilterSheet() {
-    final filterOptions = [
-      {'label': 'Semua Menu', 'cat': 'Semua', 'icon': Icons.restaurant_menu_rounded},
-      {'label': '🥞 Martabak Manis', 'cat': '🥞 Martabak', 'icon': Icons.cake_rounded},
-      {'label': '🍗 Ayam & Lauk', 'cat': '🍗 Ayam', 'icon': Icons.lunch_dining_rounded},
-      {'label': '🥟 Snack & Gorengan', 'cat': '🥟 Snack', 'icon': Icons.bakery_dining_rounded},
-      {'label': '🍱 Paket Danus & Katering', 'cat': '🍱 Paket', 'icon': Icons.inventory_2_rounded},
-      {'label': '🍩 Donat & Manis', 'cat': '🍩 Donat & Manis', 'icon': Icons.cookie_rounded},
-      {'label': '🥤 Minuman Dingin', 'cat': '🥤 Minuman', 'icon': Icons.local_drink_rounded},
+    final filterOptions = <Map<String, dynamic>>[
+      {'label': 'Semua Menu', 'cat': null},
+      for (final c in _categories) {'label': c.name, 'cat': c},
     ];
 
     showModalBottomSheet(
@@ -187,10 +180,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     separatorBuilder: (context, index) => const Divider(height: 1),
                     itemBuilder: (context, index) {
                       final item = filterOptions[index];
-                      final isSelected = _selectedCategory == item['cat'];
+                      final cat = item['cat'] as CategoryModel?;
+                      final isSelected = _selectedSlug == cat?.slug;
                       return ListTile(
                         leading: Icon(
-                          item['icon'] as IconData,
+                          Icons.restaurant_menu_rounded,
                           color: isSelected ? AppColors.primary : AppColors.textSecondary,
                         ),
                         title: Text(
@@ -204,10 +198,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             ? const Icon(Icons.check_circle_rounded, color: AppColors.primary)
                             : null,
                         onTap: () {
-                          setState(() {
-                            _selectedCategory = item['cat'] as String;
-                          });
                           Navigator.pop(context);
+                          _selectCategory(cat);
                         },
                       );
                     },
@@ -223,13 +215,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final products = _filteredProducts;
+    final products = _products;
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
         bottom: false,
-        child: SingleChildScrollView(
+        child: RefreshIndicator(
+         onRefresh: _load,
+         child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -365,7 +360,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     if (_selectedCategory != 'Semua')
                       GestureDetector(
-                        onTap: () => setState(() => _selectedCategory = 'Semua'),
+                        onTap: () => _selectCategory(null),
                         child: Padding(
                           padding: const EdgeInsets.only(right: 8),
                           child: Icon(Icons.close_rounded, color: AppColors.textMuted, size: 18),
@@ -400,21 +395,16 @@ class _HomeScreenState extends State<HomeScreen> {
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
                 child: Row(
-                  children: List.generate(_categories.length, (index) {
-                    final category = _categories[index];
-                    final isSelected = _selectedCategory == category;
+                  children: List.generate(_categories.length + 1, (index) {
+                    final CategoryModel? cat =
+                        index == 0 ? null : _categories[index - 1];
+                    final category = cat?.name ?? 'Semua';
+                    final isSelected = _selectedSlug == cat?.slug;
                     return Padding(
                       padding: const EdgeInsets.only(right: 10),
                       child: GestureDetector(
                         onTap: () {
-                          setState(() {
-                            // Jika klik kategori yang sama, toggle kembali ke 'Semua'
-                            if (isSelected && category != 'Semua') {
-                              _selectedCategory = 'Semua';
-                            } else {
-                              _selectedCategory = category;
-                            }
-                          });
+                          _selectCategory(isSelected ? null : cat);
                         },
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 200),
@@ -463,11 +453,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   },
                   itemBuilder: (context, index) {
                     final banner = _promoBanners[index];
-                    final idx = banner['productIndex'] as int;
-                    final targetProduct = idx < ProductData.mockProducts.length
-                        ? ProductData.mockProducts[idx]
-                        : null;
-
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 2),
                       decoration: BoxDecoration(
@@ -559,10 +544,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 GestureDetector(
                                   onTap: () {
                                     Navigator.pushNamed(
-                                      context,
-                                      AppRoutes.productDetail,
-                                      arguments: targetProduct,
-                                    );
+                                        context, AppRoutes.search);
                                   },
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -639,7 +621,32 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 14),
 
               // ---------------- PRODUCT GRID (FIGMA) ----------------
-              if (products.isEmpty)
+              if (_loading)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_error != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 40),
+                  child: Column(
+                    children: [
+                      Icon(Icons.cloud_off_rounded,
+                          size: 48, color: AppColors.textMuted),
+                      const SizedBox(height: 12),
+                      Text(_error!,
+                          textAlign: TextAlign.center,
+                          style: AppTextStyles.h4.copyWith(fontSize: 14)),
+                      const SizedBox(height: 6),
+                      TextButton(
+                        onPressed: _load,
+                        child: const Text('Coba lagi'),
+                      ),
+                    ],
+                  ),
+                )
+              else if (products.isEmpty)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 40),
@@ -648,13 +655,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       Icon(Icons.search_off_rounded, size: 48, color: AppColors.textMuted),
                       const SizedBox(height: 12),
                       Text(
-                        'Tidak ada menu dalam kategori ini',
+                        'Belum ada menu yang tersedia saat ini.',
                         style: AppTextStyles.h4.copyWith(fontSize: 14),
-                      ),
-                      const SizedBox(height: 6),
-                      TextButton(
-                        onPressed: () => setState(() => _selectedCategory = 'Semua'),
-                        child: const Text('Tampilkan Semua Menu'),
                       ),
                     ],
                   ),
@@ -686,6 +688,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
             ],
           ),
+         ),
         ),
       ),
     );

@@ -102,7 +102,7 @@ class FoodGridCard extends StatelessWidget {
                       Navigator.pushNamed(
                         context,
                         AppRoutes.storeProfile,
-                        arguments: product.vendor,
+                        arguments: product.merchant.slug,
                       );
                     },
                     behavior: HitTestBehavior.opaque,

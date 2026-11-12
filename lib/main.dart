@@ -6,7 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/app_colors.dart';
 import 'core/app_router.dart';
 import 'core/app_theme.dart';
+import 'api/api_client.dart';
 import 'data/app_database.dart';
+import 'data/catalog_repository.dart';
+import 'data/token_store.dart';
 import 'data/liked_store.dart';
 import 'providers/cart_provider.dart';
 import 'providers/theme_provider.dart';
@@ -43,6 +46,13 @@ void main() async {
         Provider<AppDb>(
           create: (_) => AppDb(),
           dispose: (_, db) => db.close(),
+        ),
+        // --- katalog API ---
+        Provider<ApiClient>(
+          create: (_) => ApiClient(readToken: TokenStore.readToken),
+        ),
+        ProxyProvider<ApiClient, CatalogRepository>(
+          update: (_, api, _) => CatalogRepository(api),
         ),
       ],
       child: const KateringKitaApp(),
