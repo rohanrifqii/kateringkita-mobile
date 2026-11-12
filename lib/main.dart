@@ -60,11 +60,13 @@ Widget buildAppProviders({
     client: client,
     readToken: TokenStore.readToken,
     onUnauthorized: () async {
-      // Sesi kedaluwarsa: hanya sekali, dan hanya bila token masih ada.
+      // Sesi kedaluwarsa: hanya sekali, dan hanya bila masih ada sesi
+      // (token tersimpan atau aplikasi masih menganggap user login).
       if (redirecting) return;
       redirecting = true;
       try {
-        if (await TokenStore.readToken() == null) return;
+        final token = await TokenStore.readToken();
+        if (token == null && !auth.isLoggedIn) return;
         await TokenStore.logout();
         auth.clear();
         appNavigatorKey.currentState?.pushNamedAndRemoveUntil(
@@ -76,13 +78,23 @@ Widget buildAppProviders({
       }
     },
   );
-  final repo = AuthRepository(api);
+  // Token dihapus oleh currentUser() (401): bersihkan status login tanpa
+  // navigasi, jadi splash tetap lanjut sebagai tamu.
+  final repo = AuthRepository(api, onSessionInvalid: () => auth.clear());
   auth = AuthProvider(repo);
+
+  // Keranjang milik sesi: dikosongkan saat logout / sesi tidak valid.
+  final cart = CartProvider();
+  var wasLoggedIn = false;
+  auth.addListener(() {
+    if (wasLoggedIn && !auth.isLoggedIn) cart.clear();
+    wasLoggedIn = auth.isLoggedIn;
+  });
 
   return MultiProvider(
     providers: [
       ChangeNotifierProvider(create: (_) => ThemeProvider(initialDark: isDark)),
-      ChangeNotifierProvider(create: (_) => CartProvider()),
+      ChangeNotifierProvider<CartProvider>.value(value: cart),
       Provider<ApiClient>.value(value: api),
       Provider<AuthRepository>.value(value: repo),
       ChangeNotifierProvider<AuthProvider>.value(value: auth),

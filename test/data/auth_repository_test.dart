@@ -93,6 +93,30 @@ void main() {
     expect(await TokenStore.readToken(), isNull);
   });
 
+  test('currentUser 401 calls onSessionInvalid once; 500 does not', () async {
+    await TokenStore.saveSession('tok', 'a@x.com');
+    var invalid = 0;
+    var status = 401;
+    final repo = AuthRepository(
+      ApiClient(
+        client: MockClient((r) async => _json(status, {
+              'error': {'code': 'X', 'message': 'x'}
+            })),
+        baseUrl: 'https://x.test/api/v1',
+        readToken: TokenStore.readToken,
+      ),
+      onSessionInvalid: () => invalid++,
+    );
+    expect(await repo.currentUser(), isNull);
+    expect(invalid, 1);
+
+    await TokenStore.saveSession('tok', 'a@x.com');
+    status = 500;
+    await expectLater(repo.currentUser(), throwsA(isA<ApiException>()));
+    expect(invalid, 1);
+    expect(await TokenStore.readToken(), 'tok');
+  });
+
   test('currentUser parses /me', () async {
     await TokenStore.saveSession('tok', 'a@x.com');
     final repo = _repo((r) async {

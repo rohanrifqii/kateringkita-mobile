@@ -6,8 +6,13 @@ import 'token_store.dart';
 /// Akun pelanggan lewat REST backend. Token & email sesi disimpan di
 /// [TokenStore] (secure storage).
 class AuthRepository {
-  AuthRepository(this._api);
+  AuthRepository(this._api, {this.onSessionInvalid});
   final ApiClient _api;
+
+  /// Dipanggil saat [currentUser] mendapati sesi tidak valid (401) dan token
+  /// sudah dihapus, supaya status login aplikasi ikut dibersihkan. Hanya
+  /// membersihkan state, tanpa navigasi (aman saat splash: lanjut sebagai tamu).
+  final void Function()? onSessionInvalid;
 
   Future<ApiUser> login({
     required String identifier,
@@ -52,6 +57,7 @@ class AuthRepository {
     } on ApiException catch (e) {
       if (e.status == 401) {
         await TokenStore.logout();
+        onSessionInvalid?.call();
         return null;
       }
       rethrow;

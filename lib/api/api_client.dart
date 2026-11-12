@@ -92,15 +92,14 @@ class ApiClient {
       throw const ApiException(
           status: 0, code: 'TIMEOUT', message: 'Koneksi lambat. Coba lagi.');
     } on SocketException {
-      throw const ApiException(
-          status: 0,
-          code: 'NETWORK',
-          message: 'Tidak ada koneksi internet.');
+      throw _network;
     } on http.ClientException {
-      throw const ApiException(
-          status: 0,
-          code: 'NETWORK',
-          message: 'Tidak ada koneksi internet.');
+      throw _network;
+    } on TlsException {
+      // Termasuk HandshakeException (sertifikat/jabat tangan TLS gagal).
+      throw _network;
+    } on HttpException {
+      throw _network;
     }
 
     dynamic decoded;
@@ -124,11 +123,16 @@ class ApiClient {
       return ApiResponse(status: res.statusCode);
     }
 
-    if (res.statusCode == 401 && hasToken && handleUnauthorized) {
+    // Juga tanpa token: sesi lokal bisa saja masih dianggap aktif meski token
+    // sudah terhapus. Handler global yang memutuskan perlu bertindak atau tidak.
+    if (res.statusCode == 401 && handleUnauthorized) {
       await _onUnauthorized?.call();
     }
     throw _toException(res.statusCode, decoded);
   }
+
+  static const _network = ApiException(
+      status: 0, code: 'NETWORK', message: 'Tidak ada koneksi internet.');
 
   ApiException _toException(int status, dynamic decoded) {
     if (decoded is Map && decoded['error'] is Map) {

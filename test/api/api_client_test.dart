@@ -108,8 +108,14 @@ void main() {
     expect(await run401(token: 't'), 1);
   });
 
-  test('401 without token does not call onUnauthorized', () async {
-    expect(await run401(), 0);
+  test('401 without token still calls onUnauthorized (handler decides)',
+      () async {
+    expect(await run401(), 1);
+  });
+
+  test('401 without token and handleUnauthorized false does not call',
+      () async {
+    expect(await run401(handle: false), 0);
   });
 
   test('401 with token and handleUnauthorized false does not call', () async {
@@ -132,6 +138,23 @@ void main() {
             .having((e) => e.code, 'code', 'NETWORK')
             .having((e) => e.message, 'message', 'Tidak ada koneksi internet.')));
   });
+
+  for (final (name, err) in [
+    ('HandshakeException', const HandshakeException('bad cert')),
+    ('TlsException', const TlsException('tls')),
+    ('HttpException', const HttpException('closed')),
+  ]) {
+    test('$name maps to NETWORK', () async {
+      final c = _make((r) async => throw err);
+      await expectLater(
+          c.get('/x'),
+          throwsA(isA<ApiException>()
+              .having((e) => e.status, 'status', 0)
+              .having((e) => e.code, 'code', 'NETWORK')
+              .having(
+                  (e) => e.message, 'message', 'Tidak ada koneksi internet.')));
+    });
+  }
 
   test('timeout maps to TIMEOUT', () async {
     final c = _make((r) async {

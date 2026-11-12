@@ -8,12 +8,13 @@ import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/core/app_router.dart';
 import 'package:kateringkita_pbl/core/app_routes.dart';
+import 'package:kateringkita_pbl/data/auth_repository.dart';
 import 'package:kateringkita_pbl/data/token_store.dart';
 import 'package:kateringkita_pbl/main.dart';
+import 'package:kateringkita_pbl/models/product_model.dart';
 import 'package:kateringkita_pbl/providers/auth_provider.dart';
+import 'package:kateringkita_pbl/providers/cart_provider.dart';
 import 'package:provider/provider.dart';
-
-
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
@@ -61,6 +62,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(_currentRoute(), AppRoutes.mainNav);
     expect(await TokenStore.readToken(), isNull);
+    final ctx = appNavigatorKey.currentContext!;
+    expect(ctx.read<AuthProvider>().isLoggedIn, isFalse);
   });
 
   testWidgets('authenticated 401 redirects to Login exactly once', (
@@ -120,5 +123,111 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Email/WA atau password salah.'), findsOneWidget);
     expect(_currentRoute(), AppRoutes.login);
+  });
+
+  group('sesi tidak valid di tengah jalan', () {
+    const user = {
+      'id': 1,
+      'role': 'customer',
+      'full_name': 'Budi',
+      'email': 'a@x.com',
+      'phone': '0812345678901',
+    };
+    final menu = ProductModel.fromJson({
+      'id': 7,
+      'name': 'Nasi Box',
+      'price': 10000,
+      'merchant': {
+        'id': 1,
+        'slug': 'a',
+        'business_name': 'A',
+        'is_open': true,
+      },
+      'options': [],
+    });
+
+    Future<http.Response> handler(http.Request r) async {
+      if (r.url.path.endsWith('/auth/login')) {
+        return http.Response(
+          jsonEncode({
+            'data': {'token': 'tok', 'expires_at': 'x', 'user': user},
+          }),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }
+      if (r.url.path.endsWith('/auth/logout')) return http.Response('', 204);
+      return _err(401, 'UNAUTHORIZED', 'Silakan masuk terlebih dahulu.');
+    }
+
+    Future<BuildContext> loggedIn(WidgetTester tester) async {
+      await _pump(tester, handler);
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 500));
+      final ctx = appNavigatorKey.currentContext!;
+      await ctx.read<AuthProvider>().login('a@x.com', 'abc12345');
+      ctx.read<CartProvider>().add(menu);
+      expect(ctx.read<AuthProvider>().isLoggedIn, isTrue);
+      expect(await TokenStore.readToken(), 'tok');
+      return ctx;
+    }
+
+    testWidgets('currentUser 401: AuthProvider & keranjang dikosongkan', (
+      tester,
+    ) async {
+      final ctx = await loggedIn(tester);
+      final auth = ctx.read<AuthProvider>();
+      final cart = ctx.read<CartProvider>();
+
+      expect(await ctx.read<AuthRepository>().currentUser(), isNull);
+      await tester.pumpAndSettle();
+
+      expect(await TokenStore.readToken(), isNull);
+      expect(auth.isLoggedIn, isFalse);
+      expect(cart.items, isEmpty);
+      expect(_currentRoute(), AppRoutes.mainNav);
+    });
+
+    testWidgets('auth masih login tapi token hilang: 401 -> Login sekali', (
+      tester,
+    ) async {
+      final ctx = await loggedIn(tester);
+      final auth = ctx.read<AuthProvider>();
+      final cart = ctx.read<CartProvider>();
+      await TokenStore.logout(); // token hilang, AuthProvider belum tahu
+
+      final apiClient = Provider.of<ApiClient>(ctx, listen: false);
+      Future<Object?> call() async {
+        try {
+          await apiClient.get('/orders');
+          return null;
+        } catch (e) {
+          return e;
+        }
+      }
+
+      final results = await Future.wait([call(), call()]);
+      await tester.pumpAndSettle();
+      for (final e in results) {
+        expect(e.toString(), contains('ApiException'));
+      }
+      expect(_currentRoute(), AppRoutes.login);
+      var depth = 0;
+      appNavigatorKey.currentState!.popUntil((r) {
+        depth++;
+        return true;
+      });
+      expect(depth, 1);
+      expect(auth.isLoggedIn, isFalse);
+      expect(cart.items, isEmpty);
+    });
+
+    testWidgets('logout mengosongkan keranjang', (tester) async {
+      final ctx = await loggedIn(tester);
+      await ctx.read<AuthProvider>().logout();
+      await tester.pumpAndSettle();
+      expect(ctx.read<CartProvider>().items, isEmpty);
+      expect(ctx.read<AuthProvider>().isLoggedIn, isFalse);
+    });
   });
 }
