@@ -13,7 +13,6 @@ import 'package:kateringkita_pbl/main.dart';
 import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
 
-import 'support/drift_quiet.dart';
 
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -45,7 +44,6 @@ String? _currentRoute() {
 }
 
 void main() {
-  setUpAll(quietDriftMultiDbWarning);
   testWidgets('guest with no token: splash goes to main nav', (tester) async {
     await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
     expect(find.byType(MaterialApp), findsOneWidget);

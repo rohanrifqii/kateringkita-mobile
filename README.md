@@ -69,13 +69,11 @@ flutter run
 
 Supaya kodingan kita nggak bentrok (*conflict*) atau bikin error di laptop teman lain, **tolong jangan ubah file-file ini kecuali memang tugasmu:**
 
-1. ❌ **Jangan hapus atau edit manual `lib/data/app_database.g.dart`**
-   - Ini adalah file otomatis (*generated file*) dari database lokal **Drift (SQLite)**. Kalau file ini kamu hapus atau edit manual, seluruh fitur Login, Register, dan Order bakal langsung merah semua!
-2. ❌ **Jangan jalanin `flutter pub upgrade --major-versions`**
+1. ❌ **Jangan jalanin `flutter pub upgrade --major-versions`**
    - Kita udah ngunci kombinasi versi package yang paling stabil di `pubspec.yaml` dan `pubspec.lock`. Kalau kamu paksa *upgrade major versions*, beberapa package bisa nggak kompatibel satu sama lain. Cukup pakai **`flutter pub get`** aja!
-3. ❌ **Jangan utak-atik versi di `android/settings.gradle.kts`, `android/app/build.gradle.kts`, atau `gradle-wrapper.properties`**
+2. ❌ **Jangan utak-atik versi di `android/settings.gradle.kts`, `android/app/build.gradle.kts`, atau `gradle-wrapper.properties`**
    - Versi Java 17, Kotlin 2.4.0, dan Gradle 9.3.1 di sana udah disetel pas dengan Flutter terbaru.
-4. ❌ **Jangan commit folder `build/`, `.dart_tool/`, atau file `android/local.properties`**
+3. ❌ **Jangan commit folder `build/`, `.dart_tool/`, atau file `android/local.properties`**
    - File `local.properties` itu isinya lokasi SDK di laptop masing-masing (beda laptop beda lokasi). File itu udah masuk di `.gitignore` dan bakal dibuat otomatis sama Flutter di laptopmu.
 
 ---
@@ -99,7 +97,10 @@ Supaya kalian paham cara kerja fitur-fitur yang udah jalan di Mobile saat ini:
 - AI juga sudah dipasangi **Guardrail Konteks KateringKita**: AI tahu posisinya adalah asisten resmi KateringKita dan bakal menolak dengan sopan kalau ditanya hal-hal di luar katering/danusan.
 
 ### 💳 C. Bagian Pembayaran & Integrasi Backend (Untuk Rohan, Ammar, & Diego)
-- Saat ini data *User* dan *Orders* disimpan di database lokal HP menggunakan **Drift SQLite (`lib/data/app_database.dart`)** karena tahap sinkronisasi *Web ↔ Backend API ↔ Mobile* baru akan digarap minggu depan.
+- Aplikasi sekarang sudah **tersambung ke backend API** (bukan lagi database lokal). Base URL default-nya server produksi: `https://ketring-45f82aef1ca0.herokuapp.com/api/v1`. Mau pakai server lain (misal backend lokal)? Jalankan dengan `flutter run --dart-define=API_BASE_URL=https://alamat-server-kamu/api/v1`.
+- **Login** bisa pakai **email atau nomor WA** + password.
+- **Pembayaran hanya lewat Midtrans**: Virtual Account (VA) dan QRIS/e-wallet, dibuka lewat Snap di dalam aplikasi. Selama pengujian, Midtrans masih mode **sandbox** (uang tidak sungguhan).
+- Mau isi toko demo supaya katalog nggak kosong? Jalankan `dart run tool/seed_toko.dart` (detail lengkap ada di `tool/README.md`).
 - Untuk **Rohan (Payment):** Alur checkout ada di `lib/screens/orders/checkout_screen.dart` dan halaman pembayaran ada di `lib/screens/orders/payment_screen.dart`. Kalau mau diintegrasikan ke Midtrans / Payment Gateway, kamu bisa langsung masuk dari kedua file tersebut.
 
 ---
@@ -131,12 +132,6 @@ flutter run
 3. Kalau belum ada Android SDK Command-line Tools, buka **Android Studio → Settings → Languages & Frameworks → Android SDK → Tab SDK Tools**, centang **Android SDK Command-line Tools (latest)** lalu klik **Apply**.
 4. Jalankan `flutter doctor --android-licenses` di terminal dan ketik `y` sampai selesai.
 
-### Kasus 4: Tidak sengaja mengubah tabel di `app_database.dart`
-Kalau ke depannya kita perlu nambah kolom di tabel SQLite (`lib/data/app_database.dart`), jalankan perintah ini untuk men-generate ulang `app_database.g.dart`:
-```bash
-dart run build_runner build --delete-conflicting-outputs
-```
-
 ---
 
 ## 📂 6. Struktur Folder Singkat (Biar Gampang Nyari File)
@@ -147,8 +142,9 @@ kateringkita-mobile/
 ├── assets/images/            # Gambar produk, banner promo, & aset UI
 ├── lib/
 │   ├── main.dart             # Titik masuk utama aplikasi (Entry point)
+│   ├── api/                  # Klien HTTP ke backend API (ApiClient, config base URL)
 │   ├── core/                 # Warna tema, route navigasi, format Rupiah, config AI
-│   ├── data/                 # Database SQLite (Drift), Auth Repo, Settings & Token Store
+│   ├── data/                 # Auth Repo, Catalog/Order Repo, Settings & Token Store
 │   ├── models/               # Model data Produk, Order, Cart, & AI Recommendation
 │   ├── providers/            # State management (Provider)
 │   ├── services/             # GeminiService (AI Assistant) & MapService (OpenStreetMap & GPS)
