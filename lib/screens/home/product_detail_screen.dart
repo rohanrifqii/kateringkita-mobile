@@ -9,6 +9,8 @@ import '../../models/product_model.dart';
 import '../../data/catalog_repository.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/menu_image.dart';
+import '../../widgets/add_to_cart.dart';
+import '../../widgets/cart_button.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final ProductModel? product;
@@ -78,7 +80,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   String get _buttonText {
     if (!_product.merchant.isOpen) return 'Toko sedang tutup';
     if (_product.badge == 'sold_out') return 'Habis';
-    return 'Add to Orders';
+    return 'Tambah ke Keranjang';
   }
 
   @override
@@ -540,6 +542,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       onPressed: () => Navigator.pop(context),
                     ),
                   ),
+                  const Spacer(),
+                  const CartButton(),
+                  const SizedBox(width: 8),
                   // Favorite Button
                   Container(
                     width: 42,
@@ -601,13 +606,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               backgroundColor: AppColors.textMuted,
               onPressed: !_product.canOrder
                   ? null
-                  : () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.checkout,
-                        arguments: _product,
-                      );
-                    },
+                  : () => addToCartWithPrompt(context, _product,
+                      option: _selectedOption),
             ),
           ),
         ],

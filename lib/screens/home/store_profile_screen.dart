@@ -1,5 +1,9 @@
 import '../../data/catalog_repository.dart';
 import '../../widgets/menu_image.dart';
+import '../../widgets/add_to_cart.dart';
+import '../../widgets/primary_button.dart';
+import '../../widgets/cart_button.dart';
+import '../../providers/cart_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -171,6 +175,22 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      bottomNavigationBar: Consumer<CartProvider>(
+        builder: (context, cart, _) {
+          if (cart.count == 0) return const SizedBox.shrink();
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: PrimaryButton(
+                text: 'Lihat Keranjang (${cart.count})',
+                gradient: AppColors.primaryGradient,
+                onPressed: () =>
+                    Navigator.pushNamed(context, AppRoutes.checkout),
+              ),
+            ),
+          );
+        },
+      ),
       body: CustomScrollView(
         slivers: [
           // 1. Hero Cover + Overlapping Store Card (Gabungan GrabFood, GoFood, & ShopeeFood)
@@ -250,6 +270,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                   onTap: () => Navigator.pop(context),
                 ),
                 const Spacer(),
+                const CartButton(),
                 const SizedBox(width: 8),
                 _buildCircleTopButton(
                   icon: _isSearching
@@ -828,13 +849,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                   GestureDetector(
                                     onTap: !menu.canOrder
                                         ? null
-                                        : () {
-                                            Navigator.pushNamed(
-                                              context,
-                                              AppRoutes.checkout,
-                                              arguments: menu,
-                                            );
-                                          },
+                                        : () => addToCartWithPrompt(context, menu),
                                     child: Container(
                                       width: 32,
                                       height: 32,
@@ -943,13 +958,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                               child: GestureDetector(
                                 onTap: !menu.canOrder
                                     ? null
-                                    : () {
-                                        Navigator.pushNamed(
-                                          context,
-                                          AppRoutes.checkout,
-                                          arguments: menu,
-                                        );
-                                      },
+                                    : () => addToCartWithPrompt(context, menu),
                                 child: Container(
                                   width: 32,
                                   height: 32,

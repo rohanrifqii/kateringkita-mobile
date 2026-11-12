@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/data/catalog_repository.dart';
 import 'package:kateringkita_pbl/models/product_model.dart';
+import 'package:kateringkita_pbl/providers/cart_provider.dart';
 import 'package:kateringkita_pbl/providers/theme_provider.dart';
 import 'package:kateringkita_pbl/screens/home/product_detail_screen.dart';
 import 'package:kateringkita_pbl/screens/home/store_profile_screen.dart';
@@ -57,7 +58,7 @@ ProductModel _card({bool open = true, String badge = 'available'}) =>
     ProductModel.fromJson(_menuJson(open: open, badge: badge));
 
 Widget _wrap(Widget screen, Object? args,
-    {bool open = true, String badge = 'available'}) {
+    {bool open = true, String badge = 'available', CartProvider? cart}) {
   final api = ApiClient(
     baseUrl: 'https://x.test/api/v1',
     client: MockClient((req) async {
@@ -100,6 +101,7 @@ Widget _wrap(Widget screen, Object? args,
     providers: [
       Provider<CatalogRepository>.value(value: CatalogRepository(api)),
       ChangeNotifierProvider<ThemeProvider>.value(value: _FakeTheme()),
+      ChangeNotifierProvider<CartProvider>.value(value: cart ?? CartProvider()),
     ],
     child: MaterialApp(
       home: Builder(
@@ -157,6 +159,54 @@ void main() {
     expect(find.text('Mantap rasanya'), findsOneWidget);
     expect(find.text('Dapur A'), findsWidgets);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('detail add puts selected option in cart and stays', (tester) async {
+    final cart = CartProvider();
+    await _open(tester, _wrap(const ProductDetailScreen(), _card(), cart: cart));
+    await tester.ensureVisible(find.textContaining('Pedas'));
+    await tester.pump();
+    await tester.tap(find.textContaining('Pedas'));
+    await tester.pump();
+    await tester.tap(find.text('Tambah ke Keranjang'));
+    await tester.pump();
+    expect(cart.items.length, 1);
+    expect(cart.items.first.option?.id, 1);
+    expect(cart.items.first.qty, 1);
+    expect(find.text('Ditambahkan ke keranjang'), findsOneWidget);
+    expect(find.byType(ProductDetailScreen), findsOneWidget);
+  });
+
+  testWidgets('different merchant asks, Ya replaces cart', (tester) async {
+    final cart = CartProvider();
+    final other = ProductModel.fromJson({
+      ..._menuJson(),
+      'id': 99,
+      'merchant': {..._merchantJson(), 'id': 2, 'slug': 'x'},
+    });
+    cart.add(other);
+    await _open(tester, _wrap(const ProductDetailScreen(), _card(), cart: cart));
+    await tester.tap(find.text('Tambah ke Keranjang'));
+    await tester.pumpAndSettle();
+    expect(find.text('Keranjang berisi menu dari toko lain. Kosongkan dan ganti?'),
+        findsOneWidget);
+    await tester.tap(find.text('Ya'));
+    await tester.pumpAndSettle();
+    expect(cart.items.length, 1);
+    expect(cart.items.first.menu.id, 7);
+  });
+
+  testWidgets('store profile + adds and shows Lihat Keranjang bar',
+      (tester) async {
+    final cart = CartProvider();
+    await _open(tester, _wrap(const StoreProfileScreen(), 'dapur-a', cart: cart));
+    expect(find.textContaining('Lihat Keranjang'), findsNothing);
+    await tester.ensureVisible(find.byIcon(Icons.add_rounded).first);
+    await tester.pump();
+    await tester.tap(find.byIcon(Icons.add_rounded).first);
+    await tester.pump();
+    expect(cart.count, 1);
+    expect(find.text('Lihat Keranjang (1)'), findsOneWidget);
   });
 
   testWidgets('store profile loads from API by slug', (tester) async {

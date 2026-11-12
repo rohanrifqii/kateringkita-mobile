@@ -1,31 +1,74 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../models/cart_item.dart';
+import '../models/product_model.dart';
 
-class CartProvider with ChangeNotifier {
-  final List _items = [];
+enum AddResult { added, differentMerchant }
 
-  List get items => _items;
+/// Keranjang multi-menu untuk satu toko.
+class CartProvider extends ChangeNotifier {
+  final List<CartItem> _items = [];
 
-  int get itemCount =>
-      _items.fold<int>(0, (sum, item) => sum + (item.quantity as int));
+  List<CartItem> get items => List.unmodifiable(_items);
 
-  double get totalPrice => _items.fold(
-        0.0,
-        (sum, item) => sum + (item.price * item.quantity),
-      );
+  int? get merchantId => _items.isEmpty ? null : _items.first.menu.merchant.id;
 
-  void addToCart(CartItem newItem) {
-    final index = _items.indexWhere((item) => item.id == newItem.id);
-    if (index >= 0) {
-      _items[index].quantity += 1;
-    } else {
-      _items.add(newItem);
+  int get count => _items.fold(0, (s, i) => s + i.qty);
+
+  bool get hasPreorder => _items.any((i) => i.menu.isPreorder);
+
+  int get maxPreorderDays => _items
+      .where((i) => i.menu.isPreorder)
+      .fold(0, (m, i) => i.menu.preorderDays > m ? i.menu.preorderDays : m);
+
+  AddResult add(ProductModel menu, {MenuOption? option, int qty = 1}) {
+    if (_items.isNotEmpty && merchantId != menu.merchant.id) {
+      return AddResult.differentMerchant;
     }
+    _addLine(menu, option, qty);
+    notifyListeners();
+    return AddResult.added;
+  }
+
+  void replaceWith(ProductModel menu, {MenuOption? option, int qty = 1}) {
+    _items.clear();
+    _addLine(menu, option, qty);
     notifyListeners();
   }
 
-  void removeFromCart(String id) {
-    _items.removeWhere((item) => item.id == id);
+  void _addLine(ProductModel menu, MenuOption? option, int qty) {
+    final line = CartItem(menu: menu, option: option, qty: qty);
+    final i = _items.indexWhere((e) => e.key == line.key);
+    if (i >= 0) {
+      _items[i].qty += qty;
+    } else {
+      _items.add(line);
+    }
+  }
+
+  void setQty(String key, int qty) {
+    if (qty <= 0) return remove(key);
+    final i = _items.indexWhere((e) => e.key == key);
+    if (i < 0) return;
+    _items[i].qty = qty;
     notifyListeners();
   }
+
+  void remove(String key) {
+    _items.removeWhere((e) => e.key == key);
+    notifyListeners();
+  }
+
+  void clear() {
+    _items.clear();
+    notifyListeners();
+  }
+
+  List<Map<String, dynamic>> toQuoteItems() => [
+        for (final i in _items)
+          {
+            'menu_id': i.menu.id,
+            'qty': i.qty,
+            'option_ids': i.option == null ? <int>[] : [i.option!.id],
+          }
+      ];
 }
