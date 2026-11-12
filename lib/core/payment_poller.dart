@@ -8,8 +8,7 @@ enum PaymentOutcome { waiting, paid, expired, cancelled }
 /// Status pembayaran menurut server (bukan tebakan klien).
 PaymentOutcome outcomeOf(OrderApiModel o) {
   if (o.isPaid) return PaymentOutcome.paid;
-  if (o.status == 'expired' ||
-      (o.status == 'holding' && o.secondsLeft == 0)) {
+  if (o.status == 'expired' || (o.status == 'holding' && o.secondsLeft == 0)) {
     return PaymentOutcome.expired;
   }
   if (o.status == 'cancelled') return PaymentOutcome.cancelled;
@@ -18,8 +17,11 @@ PaymentOutcome outcomeOf(OrderApiModel o) {
 
 /// Memanggil GET /orders/:code berkala sampai status tidak lagi `waiting`.
 class PaymentPoller {
-  PaymentPoller(this._repo, this._code,
-      {this.interval = const Duration(seconds: 5)});
+  PaymentPoller(
+    this._repo,
+    this._code, {
+    this.interval = const Duration(seconds: 5),
+  });
 
   final OrderRepository _repo;
   final String _code;

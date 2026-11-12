@@ -17,10 +17,9 @@ import 'snap_webview_screen.dart';
 /// Membuka halaman Snap. Dapat diganti di test.
 typedef SnapOpener = Future<void> Function(BuildContext context, String url);
 
-Future<void> _openSnapWebView(BuildContext context, String url) =>
-    Navigator.of(context).push<void>(
-      MaterialPageRoute(builder: (_) => SnapWebViewScreen(url: url)),
-    );
+Future<void> _openSnapWebView(BuildContext context, String url) => Navigator.of(
+  context,
+).push<void>(MaterialPageRoute(builder: (_) => SnapWebViewScreen(url: url)));
 
 /// Halaman pembayaran pesanan (argumen rute: [OrderApiModel]).
 /// Status bayar selalu berasal dari server (polling GET /orders/:code).
@@ -54,6 +53,9 @@ class _PaymentScreenState extends State<PaymentScreen>
   bool _busy = false;
   bool _refreshing = false;
   bool _successShown = false;
+  bool _snapOpen = false;
+  bool _serverConfirmed = false;
+  OrderVa? _va;
   String? _error;
 
   @override
@@ -76,25 +78,37 @@ class _PaymentScreenState extends State<PaymentScreen>
     _argsLoaded = true;
     _repo = context.read<OrderRepository>();
     _order = arg;
+    _va = arg.payment?.va;
     _remainingSeconds = _computeRemaining(arg);
     _startWatching();
     if (_order.isPaid) _scheduleSuccess();
+    // Argumen rute bisa usang: segarkan dari server segera.
+    Future.microtask(_refresh);
   }
 
+  /// Sisa waktu berpatokan pada `seconds_left` server, bukan jam perangkat.
   int _computeRemaining(OrderApiModel o) {
+    final s = o.secondsLeft;
+    if (s != null) return s < 0 ? 0 : s;
     final hold = o.holdUntil;
     if (hold != null) {
-      final s = hold.difference(DateTime.now()).inSeconds;
-      return s < 0 ? 0 : s;
+      final d = hold.difference(DateTime.now()).inSeconds;
+      return d < 0 ? 0 : d;
     }
-    return o.secondsLeft ?? 0;
+    return 0;
   }
 
-  PaymentOutcome get _outcome => outcomeOf(_order);
-
-  bool get _expired =>
-      _outcome == PaymentOutcome.expired ||
-      (_outcome == PaymentOutcome.waiting && _remainingSeconds == 0);
+  /// Argumen rute yang tampak kedaluwarsa belum dianggap final sebelum
+  /// server mengonfirmasi.
+  PaymentOutcome get _outcome {
+    final o = outcomeOf(_order);
+    if (!_serverConfirmed &&
+        o == PaymentOutcome.expired &&
+        _order.status == 'holding') {
+      return PaymentOutcome.waiting;
+    }
+    return o;
+  }
 
   void _startWatching() {
     if (_outcome != PaymentOutcome.waiting) return;
@@ -145,8 +159,13 @@ class _PaymentScreenState extends State<PaymentScreen>
 
   void _apply(OrderApiModel o) {
     if (!mounted) return;
+    // Monoton: status bayar tidak boleh mundur karena respons usang.
+    if (_order.isPaid) return;
+    if (o.updatedAt.isBefore(_order.updatedAt)) return;
     setState(() {
+      _serverConfirmed = true;
       _order = o;
+      _va = o.payment?.va ?? _va;
       _remainingSeconds = _computeRemaining(o);
     });
     if (_outcome != PaymentOutcome.waiting) _stopWatching();
@@ -154,7 +173,7 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   void _scheduleSuccess() {
-    if (_successShown) return;
+    if (_successShown || _snapOpen) return;
     _successShown = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _showPaymentSuccessSheet();
@@ -171,6 +190,12 @@ class _PaymentScreenState extends State<PaymentScreen>
   String _errorText(Object e) =>
       e is ApiException ? e.message : 'Terjadi gangguan. Coba lagi.';
 
+  void _onApiError(Object e) {
+    if (!mounted) return;
+    setState(() => _error = _errorText(e));
+    if (e is ApiException && e.status == 409) _refresh();
+  }
+
   Future<void> _createVa() async {
     setState(() {
       _busy = true;
@@ -181,7 +206,7 @@ class _PaymentScreenState extends State<PaymentScreen>
       if (!mounted) return;
       _apply(o);
     } catch (e) {
-      if (mounted) setState(() => _error = _errorText(e));
+      _onApiError(e);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -200,11 +225,17 @@ class _PaymentScreenState extends State<PaymentScreen>
         setState(() => _error = 'Tautan pembayaran belum tersedia. Coba lagi.');
         return;
       }
-      await widget.snapOpener(context, url);
+      _snapOpen = true;
+      try {
+        await widget.snapOpener(context, url);
+      } finally {
+        _snapOpen = false;
+      }
       if (!mounted) return;
       await _refresh();
+      if (mounted && _order.isPaid) _scheduleSuccess();
     } catch (e) {
-      if (mounted) setState(() => _error = _errorText(e));
+      _onApiError(e);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -223,9 +254,13 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   void _goHome() => Navigator.pushNamedAndRemoveUntil(
-      context, AppRoutes.mainNav, (_) => false);
+    context,
+    AppRoutes.mainNav,
+    (_) => false,
+  );
 
   void _showPaymentSuccessSheet() {
+    final late = _order.status == 'expired';
     showModalBottomSheet<void>(
       context: context,
       isDismissible: false,
@@ -248,19 +283,28 @@ class _PaymentScreenState extends State<PaymentScreen>
                   color: AppColors.successLight,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.check_circle_rounded,
-                    color: AppColors.success, size: 44),
+                child: const Icon(
+                  Icons.check_circle_rounded,
+                  color: AppColors.success,
+                  size: 44,
+                ),
               ),
               const SizedBox(height: 16),
-              Text('Pembayaran Berhasil',
-                  textAlign: TextAlign.center,
-                  style: AppTextStyles.h2.copyWith(fontSize: 18)),
+              Text(
+                late ? 'Pembayaran Diterima' : 'Pembayaran Berhasil',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.h2.copyWith(fontSize: 18),
+              ),
               const SizedBox(height: 6),
               Text(
-                'Pembayaran Anda sudah dikonfirmasi. Pesanan siap diproses penjual.',
+                late
+                    ? 'Pembayaran diterima, tetapi pesanan sudah kedaluwarsa. Hubungi penjual atau layanan pelanggan untuk pengembalian dana.'
+                    : 'Pembayaran Anda sudah dikonfirmasi. Pesanan siap diproses penjual.',
                 textAlign: TextAlign.center,
-                style: AppTextStyles.bodySmall
-                    .copyWith(color: AppColors.textSecondary, fontSize: 12.5),
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                  fontSize: 12.5,
+                ),
               ),
               const SizedBox(height: 16),
               Container(
@@ -269,40 +313,55 @@ class _PaymentScreenState extends State<PaymentScreen>
                   color: AppColors.secondaryBg,
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Column(children: [
-                  _kv('Kode Pesanan', _order.code, mono: true),
-                  const SizedBox(height: 6),
-                  _kv('Total Dibayar', AppCurrency.format(_order.total),
-                      accent: true),
-                ]),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF25D366),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    elevation: 0,
-                  ),
-                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 20),
-                  label: const Text('Kirim Rincian ke WhatsApp',
-                      style:
-                          TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    Navigator.pushReplacementNamed(
-                      context,
-                      AppRoutes.whatsappGenerator,
-                      arguments: _order.code,
-                    );
-                  },
+                child: Column(
+                  children: [
+                    _kv('Kode Pesanan', _order.code, mono: true),
+                    const SizedBox(height: 6),
+                    _kv(
+                      'Total Dibayar',
+                      AppCurrency.format(_order.total),
+                      accent: true,
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 20),
+              if (!late) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF25D366),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      size: 20,
+                    ),
+                    label: const Text(
+                      'Kirim Rincian ke WhatsApp',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      Navigator.pushReplacementNamed(
+                        context,
+                        AppRoutes.whatsappGenerator,
+                        arguments: _order.code,
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
@@ -310,19 +369,26 @@ class _PaymentScreenState extends State<PaymentScreen>
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     side: BorderSide(color: AppColors.cardBorder),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   onPressed: () {
                     Navigator.pop(ctx);
                     // Indeks 1 = tab Pesanan pada MainNavigationScreen.
                     Navigator.pushNamedAndRemoveUntil(
-                        context, AppRoutes.mainNav, (_) => false,
-                        arguments: 1);
+                      context,
+                      AppRoutes.mainNav,
+                      (_) => false,
+                      arguments: 1,
+                    );
                   },
-                  child: Text('Lihat Pesanan',
-                      style: TextStyle(
-                          color: AppColors.textPrimary,
-                          fontWeight: FontWeight.w600)),
+                  child: Text(
+                    'Lihat Pesanan',
+                    style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
             ],
@@ -336,9 +402,13 @@ class _PaymentScreenState extends State<PaymentScreen>
       Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(k,
-              style: AppTextStyles.bodySmall
-                  .copyWith(color: AppColors.textSecondary, fontSize: 12)),
+          Text(
+            k,
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+              fontSize: 12,
+            ),
+          ),
           const SizedBox(width: 12),
           Flexible(
             child: Text(
@@ -355,66 +425,80 @@ class _PaymentScreenState extends State<PaymentScreen>
       );
 
   BoxDecoration get _cardDecoration => BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.cardBorder),
-      );
+    color: AppColors.surface,
+    borderRadius: BorderRadius.circular(16),
+    border: Border.all(color: AppColors.cardBorder),
+  );
 
   Widget _summaryCard() => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: _cardDecoration,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Ringkasan Pesanan', style: AppTextStyles.h4),
-            const SizedBox(height: 10),
-            _kv('Kode Pesanan', _order.code, mono: true),
-            const Divider(height: 20),
-            for (final i in _order.items) ...[
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text(i.menuName, style: AppTextStyles.bodyMedium),
-                  ),
-                  Text('${i.qty}x  ${AppCurrency.format(i.lineTotal)}',
-                      style: AppTextStyles.bodySmall
-                          .copyWith(color: AppColors.textSecondary)),
-                ],
+    padding: const EdgeInsets.all(16),
+    decoration: _cardDecoration,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Ringkasan Pesanan', style: AppTextStyles.h4),
+        const SizedBox(height: 10),
+        _kv('Kode Pesanan', _order.code, mono: true),
+        const Divider(height: 20),
+        for (final i in _order.items) ...[
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(i.menuName, style: AppTextStyles.bodyMedium),
               ),
-              const SizedBox(height: 6),
+              Text(
+                '${i.qty}x  ${AppCurrency.format(i.lineTotal)}',
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
             ],
-            const Divider(height: 20),
-            _kv('Total Pembayaran', AppCurrency.format(_order.total),
-                accent: true),
-            const SizedBox(height: 6),
-            _kv('Titik Temu', _order.pickupPoint.name),
-          ],
-        ),
-      );
+          ),
+          const SizedBox(height: 6),
+        ],
+        const Divider(height: 20),
+        _kv('Total Pembayaran', AppCurrency.format(_order.total), accent: true),
+        const SizedBox(height: 6),
+        _kv('Titik Temu', _order.pickupPoint.name),
+      ],
+    ),
+  );
 
   Widget _timerCard() => Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: AppColors.warningLight,
-          borderRadius: BorderRadius.circular(14),
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: AppColors.warningLight,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.timer_outlined, color: AppColors.warning),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            'Selesaikan pembayaran sebelum waktu habis',
+            style: AppTextStyles.bodySmall,
+          ),
         ),
-        child: Row(
-          children: [
-            const Icon(Icons.timer_outlined, color: AppColors.warning),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text('Selesaikan pembayaran sebelum waktu habis',
-                  style: AppTextStyles.bodySmall),
+        if (_remainingSeconds == 0)
+          Text(
+            'Memeriksa status pembayaran…',
+            style: AppTextStyles.bodySmall.copyWith(
+              fontWeight: FontWeight.w700,
             ),
-            Text(_formatTimer(_remainingSeconds),
-                style: AppTextStyles.h4.copyWith(fontFamily: 'monospace')),
-          ],
-        ),
-      );
+          )
+        else
+          Text(
+            _formatTimer(_remainingSeconds),
+            style: AppTextStyles.h4.copyWith(fontFamily: 'monospace'),
+          ),
+      ],
+    ),
+  );
 
   Widget _vaSection() {
-    final va = _order.payment?.va;
+    final va = _va;
     if (va != null) {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -422,15 +506,21 @@ class _PaymentScreenState extends State<PaymentScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Virtual Account ${va.bank.toUpperCase()}',
-                style: AppTextStyles.h4),
+            Text(
+              'Virtual Account ${va.bank.toUpperCase()}',
+              style: AppTextStyles.h4,
+            ),
             const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
-                  child: Text(va.vaNumber,
-                      style: AppTextStyles.h2.copyWith(
-                          fontFamily: 'monospace', color: AppColors.primary)),
+                  child: Text(
+                    va.vaNumber,
+                    style: AppTextStyles.h2.copyWith(
+                      fontFamily: 'monospace',
+                      color: AppColors.primary,
+                    ),
+                  ),
                 ),
                 IconButton(
                   tooltip: 'Salin nomor',
@@ -440,13 +530,16 @@ class _PaymentScreenState extends State<PaymentScreen>
               ],
             ),
             const SizedBox(height: 4),
-            Text('Jumlah: ${AppCurrency.format(_order.total)}',
-                style: AppTextStyles.bodySmall),
+            Text(
+              'Jumlah: ${AppCurrency.format(_order.total)}',
+              style: AppTextStyles.bodySmall,
+            ),
             const SizedBox(height: 4),
             Text(
               'Transfer melalui ATM, m-banking, atau internet banking. Status diperbarui otomatis setelah pembayaran diterima.',
-              style: AppTextStyles.bodySmall
-                  .copyWith(color: AppColors.textSecondary),
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.textSecondary,
+              ),
             ),
           ],
         ),
@@ -482,7 +575,8 @@ class _PaymentScreenState extends State<PaymentScreen>
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
                   : const Text('Buat Nomor Virtual Account'),
             ),
           ),
@@ -492,34 +586,36 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   Widget _onlineSection() => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: _cardDecoration,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('QRIS / E-Wallet', style: AppTextStyles.h4),
-            const SizedBox(height: 6),
-            Text(
-              'Anda akan diarahkan ke halaman pembayaran Midtrans.',
-              style: AppTextStyles.bodySmall
-                  .copyWith(color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _busy ? null : _payOnline,
-                child: _busy
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('Bayar dengan QRIS / E-Wallet'),
-              ),
-            ),
-          ],
+    padding: const EdgeInsets.all(16),
+    decoration: _cardDecoration,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('QRIS / E-Wallet', style: AppTextStyles.h4),
+        const SizedBox(height: 6),
+        Text(
+          'Anda akan diarahkan ke halaman pembayaran Midtrans.',
+          style: AppTextStyles.bodySmall.copyWith(
+            color: AppColors.textSecondary,
+          ),
         ),
-      );
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _busy ? null : _payOnline,
+            child: _busy
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Text('Bayar dengan QRIS / E-Wallet'),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _endedSection() {
     final cancelled = _outcome == PaymentOutcome.cancelled;
@@ -531,8 +627,11 @@ class _PaymentScreenState extends State<PaymentScreen>
       ),
       child: Column(
         children: [
-          const Icon(Icons.error_outline_rounded,
-              color: AppColors.danger, size: 40),
+          const Icon(
+            Icons.error_outline_rounded,
+            color: AppColors.danger,
+            size: 40,
+          ),
           const SizedBox(height: 8),
           Text(
             cancelled
@@ -540,7 +639,9 @@ class _PaymentScreenState extends State<PaymentScreen>
                 : 'Batas waktu pesanan sudah habis.',
             textAlign: TextAlign.center,
             style: AppTextStyles.bodyMedium.copyWith(
-                fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
           ),
           const SizedBox(height: 12),
           SizedBox(
@@ -558,8 +659,7 @@ class _PaymentScreenState extends State<PaymentScreen>
   @override
   Widget build(BuildContext context) {
     if (!_argsLoaded) return const Scaffold();
-    final ended = !_order.isPaid &&
-        (_outcome == PaymentOutcome.cancelled || _expired);
+    final ended = !_order.isPaid && _outcome != PaymentOutcome.waiting;
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -580,8 +680,10 @@ class _PaymentScreenState extends State<PaymentScreen>
                 color: AppColors.successLight,
                 borderRadius: BorderRadius.circular(14),
               ),
-              child: Text('Pembayaran sudah diterima.',
-                  style: AppTextStyles.bodyMedium),
+              child: Text(
+                'Pembayaran sudah diterima.',
+                style: AppTextStyles.bodyMedium,
+              ),
             )
           else ...[
             _timerCard(),
@@ -592,9 +694,12 @@ class _PaymentScreenState extends State<PaymentScreen>
               _onlineSection(),
             if (_error != null) ...[
               const SizedBox(height: 10),
-              Text(_error!,
-                  style:
-                      AppTextStyles.bodySmall.copyWith(color: AppColors.danger)),
+              Text(
+                _error!,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.danger,
+                ),
+              ),
             ],
           ],
           const SizedBox(height: 12),
