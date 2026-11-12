@@ -1,119 +1,135 @@
-import 'app_database.dart';
+import '../api/api_client.dart';
+import '../api/api_exception.dart';
+import '../models/api_user.dart';
 import 'token_store.dart';
 
-/// Menggabungkan 2 jenis local storage untuk fitur akun:
-/// - Drift (SQLite)  -> data profil: nama, email, no HP
-/// - Secure Storage  -> password & token sesi (terenkripsi)
+/// Akun pelanggan lewat REST backend. Token & email sesi disimpan di
+/// [TokenStore] (secure storage).
 class AuthRepository {
-  AuthRepository(this._db);
-  final AppDb _db;
+  AuthRepository(this._api);
+  final ApiClient _api;
 
-  /// Return `null` kalau sukses, atau pesan error.
-  Future<String?> register({
+  Future<ApiUser> login({
+    required String identifier,
+    required String password,
+  }) async {
+    final res = await _api.post('/auth/login',
+        handleUnauthorized: false,
+        body: {
+          'identifier': identifier,
+          'password': password,
+          'client': 'mobile',
+        });
+    final data = res.data as Map<String, dynamic>;
+    final user = ApiUser.fromJson(data['user'] as Map<String, dynamic>);
+    await TokenStore.saveSession(
+        data['token'] as String, user.email ?? identifier);
+    return user;
+  }
+
+  /// Backend tidak mengembalikan token saat daftar; panggil [login] sesudahnya.
+  Future<void> register({
     required String fullName,
     required String email,
     required String phone,
     required String password,
   }) async {
-    final existing = await _db.findUserByEmail(email);
-    if (existing != null) return 'Email sudah terdaftar, silakan login.';
-
-    await _db.addUser(fullName: fullName, email: email, phone: phone);
-    await TokenStore.savePassword(email, password);
-    return null;
+    await _api.post('/auth/customer/register', handleUnauthorized: false, body: {
+      'full_name': fullName,
+      'email': email,
+      'phone': phone,
+      'password': password,
+    });
   }
 
-  /// Return `null` kalau sukses, atau pesan error.
-  Future<String?> login({
+  /// null bila tidak ada token atau sesi sudah tidak valid (401).
+  Future<ApiUser?> currentUser() async {
+    final token = await TokenStore.readToken();
+    if (token == null || token.isEmpty) return null;
+    try {
+      final res = await _api.get('/me', handleUnauthorized: false);
+      return _userFrom(res);
+    } on ApiException catch (e) {
+      if (e.status == 401) {
+        await TokenStore.logout();
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  Future<void> logout() async {
+    try {
+      await _api.post('/auth/logout', handleUnauthorized: false);
+    } catch (_) {
+      // Abaikan galat jaringan/401: sesi lokal tetap dihapus.
+    }
+    await TokenStore.logout();
+  }
+
+  Future<String> forgotPassword(String email) async {
+    final res = await _api.post('/auth/password/forgot',
+        handleUnauthorized: false, body: {'email': email});
+    return (res.data as Map<String, dynamic>)['message'] as String? ?? '';
+  }
+
+  Future<void> verifyCode({required String email, required String code}) async {
+    await _api.post('/auth/password/verify',
+        handleUnauthorized: false, body: {'email': email, 'code': code});
+  }
+
+  Future<void> resetPassword({
     required String email,
+    required String code,
     required String password,
   }) async {
-    final user = await _db.findUserByEmail(email);
-    if (user == null) return 'Akun belum terdaftar. Silakan daftar dulu.';
-
-    final saved = await TokenStore.readPassword(email);
-    if (saved != password) return 'Password salah.';
-
-    // Simulasi token (belum ada backend).
-    await TokenStore.saveSession(
-      'dev-token-${DateTime.now().millisecondsSinceEpoch}',
-      user.email,
-    );
-    return null;
+    await _api.post('/auth/password/reset',
+        handleUnauthorized: false,
+        body: {'email': email, 'code': code, 'password': password});
   }
 
-  /// User yang sedang login (berdasarkan email sesi di secure storage).
-  Future<User?> currentUser() async {
-    final token = await TokenStore.readToken();
-    final email = await TokenStore.readSessionEmail();
-    if (token == null || email == null) return null;
-    return _db.findUserByEmail(email);
-  }
-
-  /// Reset password: simpan password baru ke secure storage
-  /// dan pastikan akun user ada di database SQLite.
-  Future<String?> resetPassword({
-    required String email,
-    required String newPassword,
-  }) async {
-    final cleanEmail = email.trim().toLowerCase();
-    var user = await _db.findUserByEmail(cleanEmail);
-    if (user == null) {
-      await _db.addUser(
-        fullName: cleanEmail.split('@').first,
-        email: cleanEmail,
-        phone: '085852157352',
-      );
-    }
-    await TokenStore.savePassword(cleanEmail, newPassword);
-    return null;
-  }
-
-  /// Update data nama, nomor WhatsApp, dan email user yang sedang login.
-  Future<User?> updateProfile({
+  /// PATCH /me. Mengubah email/HP butuh [currentPassword] di server.
+  Future<ApiUser> updateProfile({
     required int userId,
     required String oldEmail,
     required String fullName,
     required String phone,
     required String newEmail,
+    String? currentPassword,
   }) async {
-    final cleanOld = oldEmail.trim().toLowerCase();
-    final cleanNew = newEmail.trim().toLowerCase();
-
-    await _db.updateUserProfile(
-      id: userId,
-      fullName: fullName,
-      phone: phone,
-      email: cleanNew,
-    );
-
-    if (cleanNew != cleanOld) {
-      final oldPwd = await TokenStore.readPassword(cleanOld);
-      if (oldPwd != null) {
-        await TokenStore.savePassword(cleanNew, oldPwd);
-      }
-      final token = await TokenStore.readToken() ??
-          'dev-token-${DateTime.now().millisecondsSinceEpoch}';
-      await TokenStore.saveSession(token, cleanNew);
+    final body = <String, dynamic>{'full_name': fullName, 'phone': phone};
+    if (newEmail.trim().toLowerCase() != oldEmail.trim().toLowerCase()) {
+      body['email'] = newEmail.trim();
     }
-
-    return _db.findUserByEmail(cleanNew);
+    if (currentPassword != null) body['current_password'] = currentPassword;
+    final res = await _api.patch('/me', body: body);
+    final user = _userFrom(res);
+    if (user.email != null) {
+      final token = await TokenStore.readToken();
+      if (token != null) await TokenStore.saveSession(token, user.email!);
+    }
+    return user;
   }
 
-  /// Ubah password akun dengan verifikasi password lama.
+  /// PUT /me/password. Return null bila sukses, atau pesan galat dari server.
   Future<String?> changePassword({
     required String email,
     required String currentPassword,
     required String newPassword,
   }) async {
-    final cleanEmail = email.trim().toLowerCase();
-    final saved = await TokenStore.readPassword(cleanEmail);
-    if (saved != null && saved != currentPassword) {
-      return 'Password saat ini tidak sesuai.';
+    try {
+      await _api.put('/me/password', body: {
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      });
+      return null;
+    } on ApiException catch (e) {
+      return e.field('current_password') ??
+          e.field('new_password') ??
+          e.message;
     }
-    await TokenStore.savePassword(cleanEmail, newPassword);
-    return null;
   }
 
-  Future<void> logout() => TokenStore.logout();
+  ApiUser _userFrom(ApiResponse res) => ApiUser.fromJson(
+      (res.data as Map<String, dynamic>)['user'] as Map<String, dynamic>);
 }

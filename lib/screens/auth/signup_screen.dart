@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../data/app_database.dart';
+import '../../core/password_rules.dart';
+import '../../api/api_exception.dart';
 import '../../data/auth_repository.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/primary_button.dart';
 
@@ -24,6 +27,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _agreeToTerms = false;
   bool _obscurePassword = true;
   bool _loading = false;
+  Map<String, String?> _errors = {};
 
   @override
   void dispose() {
@@ -52,34 +56,62 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showMessage('Format email tidak valid.');
       return;
     }
-    if (password.length < 6) {
-      _showMessage('Password minimal 6 karakter.');
+    if (!RegExp(r'^08\d{8,11}$').hasMatch(phone)) {
+      _showMessage('Nomor HP harus diawali 08 dan 10–13 digit.');
+      return;
+    }
+    final passwordError = validatePasswordRules(password);
+    if (passwordError != null) {
+      _showMessage(passwordError);
       return;
     }
 
-    setState(() => _loading = true);
-    final repo = AuthRepository(context.read<AppDb>());
-    final error = await repo.register(
-      fullName: name,
-      email: email,
-      phone: phone,
-      password: password,
-    );
+    setState(() {
+      _loading = true;
+      _errors = {};
+    });
+    final repo = context.read<AuthRepository>();
+    final auth = context.read<AuthProvider>();
+    try {
+      await repo.register(
+        fullName: name,
+        email: email,
+        phone: phone,
+        password: password,
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _errors = {
+          'full_name': e.field('full_name'),
+          'email': e.field('email'),
+          'phone': e.field('phone'),
+          'password': e.field('password'),
+        };
+      });
+      if (_errors.values.every((v) => v == null)) _showMessage(e.message);
+      return;
+    }
+
+    // Backend tidak mengembalikan token saat daftar: login langsung.
+    try {
+      await auth.login(email, password);
+    } on ApiException {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      _showMessage('Akun berhasil dibuat! Silakan login.');
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.login,
+        (route) => false,
+        arguments: email,
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() => _loading = false);
-
-    if (error != null) {
-      _showMessage(error);
-      return;
-    }
-    _showMessage('Akun berhasil dibuat! Silakan login.');
-    // Ke halaman Login (bukan dashboard), email langsung terisi.
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      AppRoutes.login,
-      (route) => false,
-      arguments: email,
-    );
+    Navigator.pushNamedAndRemoveUntil(context, AppRoutes.mainNav, (r) => false);
   }
 
   @override
@@ -107,6 +139,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 label: 'Full Name',
                 hint: 'Masukkan nama lengkap',
                 controller: _nameController,
+                errorText: _errors['full_name'],
               ),
               const SizedBox(height: 16),
               // Email Field
@@ -114,6 +147,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 label: 'Email Address',
                 hint: 'Masukkan email student UB',
                 controller: _emailController,
+                errorText: _errors['email'],
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 16),
@@ -122,6 +156,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 label: 'Phone Number',
                 hint: '08xx-xxxx-xxxx',
                 controller: _phoneController,
+                errorText: _errors['phone'],
                 keyboardType: TextInputType.phone,
               ),
               const SizedBox(height: 16),
@@ -130,10 +165,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 label: 'Password',
                 hint: 'Buat kata sandi aman',
                 controller: _passwordController,
+                errorText: _errors['password'],
                 obscureText: _obscurePassword,
                 suffixIcon: IconButton(
                   icon: Icon(
-                    _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                    _obscurePassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
                     color: AppColors.textMuted,
                     size: 20,
                   ),
@@ -161,12 +199,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         color: _agreeToTerms ? AppColors.primary : Colors.white,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: _agreeToTerms ? AppColors.primary : AppColors.cardBorder,
+                          color: _agreeToTerms
+                              ? AppColors.primary
+                              : AppColors.cardBorder,
                           width: 1.5,
                         ),
                       ),
                       child: _agreeToTerms
-                          ? const Icon(Icons.check, size: 16, color: Colors.white)
+                          ? const Icon(
+                              Icons.check,
+                              size: 16,
+                              color: Colors.white,
+                            )
                           : null,
                     ),
                   ),

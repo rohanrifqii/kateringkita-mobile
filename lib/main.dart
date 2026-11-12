@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,9 +8,12 @@ import 'core/app_colors.dart';
 import 'core/app_router.dart';
 import 'core/app_theme.dart';
 import 'api/api_client.dart';
+import 'core/app_routes.dart';
 import 'data/app_database.dart';
+import 'data/auth_repository.dart';
 import 'data/catalog_repository.dart';
 import 'data/token_store.dart';
+import 'providers/auth_provider.dart';
 import 'data/liked_store.dart';
 import 'providers/cart_provider.dart';
 import 'providers/theme_provider.dart';
@@ -25,38 +29,67 @@ void main() async {
   SystemChrome.setSystemUIOverlayStyle(
     SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
-      statusBarIconBrightness:
-          isDarkInitial ? Brightness.light : Brightness.dark,
-      statusBarBrightness:
-          isDarkInitial ? Brightness.dark : Brightness.light,
-      systemNavigationBarColor:
-          isDarkInitial ? AppColors.darkBackground : AppColors.lightBackground,
-      systemNavigationBarIconBrightness:
-          isDarkInitial ? Brightness.light : Brightness.dark,
+      statusBarIconBrightness: isDarkInitial
+          ? Brightness.light
+          : Brightness.dark,
+      statusBarBrightness: isDarkInitial ? Brightness.dark : Brightness.light,
+      systemNavigationBarColor: isDarkInitial
+          ? AppColors.darkBackground
+          : AppColors.lightBackground,
+      systemNavigationBarIconBrightness: isDarkInitial
+          ? Brightness.light
+          : Brightness.dark,
     ),
   );
 
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(
-          create: (_) => ThemeProvider(initialDark: isDarkInitial),
-        ),
-        ChangeNotifierProvider(create: (_) => CartProvider()),
-        Provider<AppDb>(
-          create: (_) => AppDb(),
-          dispose: (_, db) => db.close(),
-        ),
-        // --- katalog API ---
-        Provider<ApiClient>(
-          create: (_) => ApiClient(readToken: TokenStore.readToken),
-        ),
-        ProxyProvider<ApiClient, CatalogRepository>(
-          update: (_, api, _) => CatalogRepository(api),
-        ),
-      ],
-      child: const KateringKitaApp(),
-    ),
+    buildAppProviders(isDark: isDarkInitial, child: const KateringKitaApp()),
+  );
+}
+
+/// Daftar provider aplikasi (dipisah supaya wiring asli bisa diuji).
+Widget buildAppProviders({
+  required Widget child,
+  http.Client? client,
+  bool isDark = false,
+}) {
+  late final AuthProvider auth;
+  var redirecting = false;
+
+  final api = ApiClient(
+    client: client,
+    readToken: TokenStore.readToken,
+    onUnauthorized: () async {
+      // Sesi kedaluwarsa: hanya sekali, dan hanya bila token masih ada.
+      if (redirecting) return;
+      redirecting = true;
+      try {
+        if (await TokenStore.readToken() == null) return;
+        await TokenStore.logout();
+        auth.clear();
+        appNavigatorKey.currentState?.pushNamedAndRemoveUntil(
+          AppRoutes.login,
+          (_) => false,
+        );
+      } finally {
+        redirecting = false;
+      }
+    },
+  );
+  final repo = AuthRepository(api);
+  auth = AuthProvider(repo);
+
+  return MultiProvider(
+    providers: [
+      ChangeNotifierProvider(create: (_) => ThemeProvider(initialDark: isDark)),
+      ChangeNotifierProvider(create: (_) => CartProvider()),
+      Provider<ApiClient>.value(value: api),
+      Provider<AuthRepository>.value(value: repo),
+      ChangeNotifierProvider<AuthProvider>.value(value: auth),
+      Provider<CatalogRepository>.value(value: CatalogRepository(api)),
+      Provider<AppDb>(create: (_) => AppDb(), dispose: (_, db) => db.close()),
+    ],
+    child: child,
   );
 }
 
@@ -69,6 +102,7 @@ class KateringKitaApp extends StatelessWidget {
     AppColors.isDarkMode = themeProvider.isDarkMode;
 
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: 'KateringKita',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,

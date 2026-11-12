@@ -13,6 +13,7 @@ class CustomTextField extends StatelessWidget {
   final int maxLines;
   final ValueChanged<String>? onChanged;
   final String? Function(String?)? validator;
+  final String? errorText;
 
   const CustomTextField({
     super.key,
@@ -26,6 +27,7 @@ class CustomTextField extends StatelessWidget {
     this.maxLines = 1,
     this.onChanged,
     this.validator,
+    this.errorText,
   });
 
   @override
@@ -66,6 +68,7 @@ class CustomTextField extends StatelessWidget {
               filled: true,
               fillColor: AppColors.surface,
               hintText: hint,
+              errorText: errorText,
               hintStyle: AppTextStyles.bodyMedium.copyWith(
                 color: AppColors.textMuted,
               ),

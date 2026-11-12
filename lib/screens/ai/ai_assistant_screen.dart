@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
-import '../../data/app_database.dart';
 import '../../data/auth_repository.dart';
 import '../../models/ai_recommendation_model.dart';
 import '../../models/product_model.dart';
@@ -124,7 +123,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   }
 
   Future<void> _loadUserName() async {
-    final user = await AuthRepository(context.read<AppDb>()).currentUser();
+    final user = await context.read<AuthRepository>().currentUser();
     if (!mounted) return;
     if (user != null && user.fullName.isNotEmpty) {
       setState(() {

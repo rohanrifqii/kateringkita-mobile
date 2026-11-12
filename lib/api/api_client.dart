@@ -36,20 +36,31 @@ class ApiClient {
   final Future<void> Function()? _onUnauthorized;
   final Duration _timeout;
 
-  Future<ApiResponse> get(String path, {Map<String, String>? query}) =>
-      _send('GET', path, query: query);
+  /// [handleUnauthorized] false: 401 tidak memicu onUnauthorized global
+  /// (login, register, logout, dsb. menangani 401 sendiri).
+  Future<ApiResponse> get(String path,
+          {Map<String, String>? query, bool handleUnauthorized = true}) =>
+      _send('GET', path, query: query, handleUnauthorized: handleUnauthorized);
 
   Future<ApiResponse> post(String path,
-          {Object? body, Map<String, String>? headers}) =>
-      _send('POST', path, body: body, headers: headers);
+          {Object? body,
+          Map<String, String>? headers,
+          bool handleUnauthorized = true}) =>
+      _send('POST', path,
+          body: body,
+          headers: headers,
+          handleUnauthorized: handleUnauthorized);
 
-  Future<ApiResponse> put(String path, {Object? body}) =>
-      _send('PUT', path, body: body);
+  Future<ApiResponse> put(String path,
+          {Object? body, bool handleUnauthorized = true}) =>
+      _send('PUT', path, body: body, handleUnauthorized: handleUnauthorized);
 
-  Future<ApiResponse> patch(String path, {Object? body}) =>
-      _send('PATCH', path, body: body);
+  Future<ApiResponse> patch(String path,
+          {Object? body, bool handleUnauthorized = true}) =>
+      _send('PATCH', path, body: body, handleUnauthorized: handleUnauthorized);
 
-  Future<ApiResponse> delete(String path) => _send('DELETE', path);
+  Future<ApiResponse> delete(String path, {bool handleUnauthorized = true}) =>
+      _send('DELETE', path, handleUnauthorized: handleUnauthorized);
 
   Future<ApiResponse> _send(
     String method,
@@ -57,6 +68,7 @@ class ApiClient {
     Map<String, String>? query,
     Object? body,
     Map<String, String>? headers,
+    bool handleUnauthorized = true,
   }) async {
     var uri = Uri.parse('$_baseUrl$path');
     if (query != null && query.isNotEmpty) {
@@ -64,7 +76,8 @@ class ApiClient {
     }
     final h = <String, String>{'Accept': 'application/json'};
     final token = await _readToken?.call();
-    if (token != null && token.isNotEmpty) h['Authorization'] = 'Bearer $token';
+    final hasToken = token != null && token.isNotEmpty;
+    if (hasToken) h['Authorization'] = 'Bearer $token';
     if (body != null) h['Content-Type'] = 'application/json';
     if (headers != null) h.addAll(headers);
 
@@ -111,7 +124,9 @@ class ApiClient {
       return ApiResponse(status: res.statusCode);
     }
 
-    if (res.statusCode == 401) await _onUnauthorized?.call();
+    if (res.statusCode == 401 && hasToken && handleUnauthorized) {
+      await _onUnauthorized?.call();
+    }
     throw _toException(res.statusCode, decoded);
   }
 

@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/app_text_styles.dart';
-import '../../data/app_database.dart';
 import '../../data/auth_repository.dart';
 import '../../data/settings_store.dart';
 import '../../services/map_service.dart';
@@ -172,8 +171,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen>
   Future<void> _initializeUserLocationData() async {
     // 1. Muat profil user yang sedang login
     try {
-      final db = context.read<AppDb>();
-      final user = await AuthRepository(db).currentUser();
+      final user = await context.read<AuthRepository>().currentUser();
       if (user != null) {
         _userName = user.fullName;
         _userPhone = user.phone;

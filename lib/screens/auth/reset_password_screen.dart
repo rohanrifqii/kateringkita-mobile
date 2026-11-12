@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import '../../api/api_exception.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../data/app_database.dart';
+import '../../core/password_rules.dart';
 import '../../data/auth_repository.dart';
-import '../../data/token_store.dart';
 import '../../widgets/app_modal_dialog.dart';
 import '../../widgets/auth_scaffold.dart';
 import '../../widgets/custom_text_field.dart';
@@ -21,9 +21,6 @@ class ResetPasswordScreen extends StatefulWidget {
 }
 
 class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
-  // Minimal 1 angka ATAU 1 simbol (sesuai teks di desain).
-  static final RegExp _numberOrSymbol = RegExp(r'[0-9]|[^A-Za-z0-9\s]');
-
   final TextEditingController _newController = TextEditingController();
   final TextEditingController _confirmController = TextEditingController();
 
@@ -31,6 +28,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _obscureConfirm = true;
   String? _newError;
   String? _confirmError;
+  String? _serverError;
   bool _isLoading = false;
 
   @override
@@ -42,9 +40,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
   String? _validateNew(String v) {
     if (v.isEmpty) return 'Password baru wajib diisi';
-    if (v.length < 8) return 'Minimal 8 karakter';
-    if (!_numberOrSymbol.hasMatch(v)) return 'Harus mengandung angka atau simbol';
-    return null;
+    return validatePasswordRules(v);
   }
 
   String? _validateConfirm(String v) {
@@ -75,21 +71,33 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
-
-    // Ambil email dari arguments rute (atau sesi tersimpan/default)
+    // Argumen dari layar verifikasi: {'email': String, 'code': String}.
     final args = ModalRoute.of(context)?.settings.arguments;
-    final email = (args is String && args.isNotEmpty)
-        ? args.trim()
-        : (await TokenStore.readSessionEmail() ?? 'abdurrahim@student.ub.ac.id');
+    final email = args is Map ? (args['email'] as String? ?? '') : '';
+    final code = args is Map ? (args['code'] as String? ?? '') : '';
 
-    // Simpan password baru ke Drift SQLite & Secure Storage
-    if (!mounted) return;
-    final repo = AuthRepository(context.read<AppDb>());
-    await repo.resetPassword(
-      email: email,
-      newPassword: _newController.text,
-    );
+    setState(() {
+      _isLoading = true;
+      _serverError = null;
+    });
+    final repo = context.read<AuthRepository>();
+    try {
+      await repo.resetPassword(
+        email: email,
+        code: code,
+        password: _newController.text,
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _newError = e.field('password');
+        _serverError = _newError == null
+            ? (e.field('code') ?? e.message)
+            : null;
+      });
+      return;
+    }
 
     if (!mounted) return;
     setState(() => _isLoading = false);
@@ -126,7 +134,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Enter your new password below. Make sure it is at least 8 characters long.',
+            'Enter your new password below. Use 8–72 characters with at least one letter and one number.',
             style: AppTextStyles.bodyMedium.copyWith(fontSize: 12.5),
           ),
           const SizedBox(height: 20),
@@ -159,9 +167,10 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             },
           ),
           AuthFieldError(_confirmError),
+          AuthFieldError(_serverError),
           const SizedBox(height: 10),
           Text(
-            '• Minimum 8 characters  • At least one number or symbol',
+            '• 8–72 characters  • At least one letter and one number',
             style: AppTextStyles.bodySmall.copyWith(
               color: AppColors.textSecondary,
               fontSize: 10.5,
