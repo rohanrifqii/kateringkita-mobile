@@ -9,6 +9,7 @@ import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/core/app_router.dart';
 import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/data/auth_repository.dart';
+import 'package:kateringkita_pbl/data/catalog_repository.dart';
 import 'package:kateringkita_pbl/data/token_store.dart';
 import 'package:kateringkita_pbl/main.dart';
 import 'package:kateringkita_pbl/models/product_model.dart';
@@ -248,12 +249,26 @@ void main() {
     testWidgets('logout mengosongkan status favorit sesi', (tester) async {
       final ctx = await loggedIn(tester);
       final favorites = ctx.read<FavoritesProvider>();
+      const store = MerchantProfile(
+        id: 1,
+        slug: 'a',
+        businessName: 'A',
+        merchantTypeName: 'Katering',
+        isOpen: true,
+        openTime: '08:00',
+        closeTime: '17:00',
+        ratingAvg: 0,
+        ratingCount: 0,
+      );
       await favorites.setFavorite(menu, true);
+      await favorites.setFavoriteMerchant(store, true);
       expect(favorites.isFavorite(menu), isTrue);
+      expect(favorites.isFavoriteMerchant(store), isTrue);
 
       await ctx.read<AuthProvider>().logout();
       await tester.pumpAndSettle();
       expect(favorites.isFavorite(menu), isFalse);
+      expect(favorites.isFavoriteMerchant(store), isFalse);
     });
 
     testWidgets('logout mengosongkan lencana notifikasi', (tester) async {

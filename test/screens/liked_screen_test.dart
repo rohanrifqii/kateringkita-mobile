@@ -60,7 +60,7 @@ void main() {
       },
     }));
     await tester.pumpAndSettle();
-    expect(find.text('Masuk untuk melihat menu favoritmu'), findsOneWidget);
+    expect(find.text('Masuk untuk melihat favoritmu'), findsOneWidget);
     expect(seen, isEmpty);
     await tester.tap(find.text('Masuk'));
     await tester.pumpAndSettle();
@@ -180,7 +180,7 @@ void main() {
     auth.set(false);
     await tester.pumpAndSettle();
     expect(find.text('Nasi Box'), findsNothing);
-    expect(find.text('Masuk untuk melihat menu favoritmu'), findsOneWidget);
+    expect(find.text('Masuk untuk melihat favoritmu'), findsOneWidget);
 
     auth.set(true);
     await tester.pumpAndSettle();
@@ -213,5 +213,159 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Risoles'), findsOneWidget);
     expect(find.text('2 Menu Favorit Tersimpan'), findsOneWidget);
+  });
+
+  group('segmen Toko (Dapur Favorit)', () {
+    Map<String, dynamic> store(int id, String name, {bool open = true}) => {
+          'id': id,
+          'slug': 'dapur-$id',
+          'business_name': name,
+          'description': null,
+          'logo_url': null,
+          'merchant_type': {'id': 1, 'name': 'Katering'},
+          'is_open': open,
+          'open_time': '08:00',
+          'close_time': '17:00',
+          'rating_avg': 4.6,
+          'rating_count': 8,
+          'pickup_points': [],
+          'is_favorite': true,
+        };
+
+    Object stores(List<Map<String, dynamic>> items) => {
+          'data': items,
+          'meta': {'page': 1, 'limit': 50, 'total': items.length},
+        };
+
+    Future<void> openToko(WidgetTester tester) async {
+      await tester.tap(find.text('Toko'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('memuat GET /me/favorite-merchants saat segmen dibuka',
+        (tester) async {
+      final seen = <Uri>[];
+      Object? storeArgs;
+      await tester.pumpWidget(_wrap((req) async {
+        seen.add(req.url);
+        if (req.url.path.endsWith('/me/favorite-merchants')) {
+          return _json(stores([
+            store(3, 'Dapur Bu Tima'),
+            store(4, 'Diego Katering', open: false),
+          ]));
+        }
+        return _json(_page([]));
+      }, routes: {
+        AppRoutes.storeProfile: (c) {
+          storeArgs = ModalRoute.of(c)?.settings.arguments;
+          return const Scaffold(body: Text('layar-toko'));
+        },
+      }));
+      await tester.pumpAndSettle();
+      expect(seen.where((u) => u.path.contains('favorite-merchants')), isEmpty);
+
+      await openToko(tester);
+      final q = seen.singleWhere((u) => u.path.contains('favorite-merchants'));
+      expect(q.queryParameters, {'page': '1', 'limit': '50'});
+      expect(find.text('2 Dapur Favorit Tersimpan'), findsOneWidget);
+      expect(find.text('Dapur Bu Tima'), findsOneWidget);
+      expect(find.textContaining('Tutup 08:00–17:00 WIB'), findsOneWidget);
+
+      await tester.tap(find.text('Diego Katering'));
+      await tester.pumpAndSettle();
+      expect(find.text('layar-toko'), findsOneWidget);
+      expect(storeArgs, 'dapur-4');
+    });
+
+    testWidgets('hapus toko: langsung hilang, DELETE, muat ulang',
+        (tester) async {
+      final calls = <String>[];
+      var removed = false;
+      await tester.pumpWidget(_wrap((req) async {
+        calls.add('${req.method} ${req.url.path}');
+        if (req.method == 'DELETE') {
+          removed = true;
+          return http.Response('', 204);
+        }
+        if (req.url.path.endsWith('/me/favorite-merchants')) {
+          return _json(stores([
+            if (!removed) store(3, 'Dapur Bu Tima'),
+            store(4, 'Diego Katering'),
+          ]));
+        }
+        return _json(_page([]));
+      }));
+      await tester.pumpAndSettle();
+      await openToko(tester);
+      await tester.tap(find.byTooltip('Hapus dari Dapur Favorit').first);
+      await tester.pump();
+      expect(find.text('Dapur Bu Tima'), findsNothing);
+      await tester.pumpAndSettle();
+      expect(calls.where((c) => c.contains('favorite-merchants')), [
+        'GET /api/v1/me/favorite-merchants',
+        'DELETE /api/v1/me/favorite-merchants/3',
+        'GET /api/v1/me/favorite-merchants',
+      ]);
+      expect(find.text('1 Dapur Favorit Tersimpan'), findsOneWidget);
+    });
+
+    testWidgets('hapus gagal: toko muncul lagi + pesan', (tester) async {
+      await tester.pumpWidget(_wrap((req) async {
+        if (req.method == 'DELETE') {
+          return _json({
+            'error': {'code': 'INTERNAL_ERROR', 'message': 'Gagal menyimpan.'}
+          }, 500);
+        }
+        if (req.url.path.endsWith('/me/favorite-merchants')) {
+          return _json(stores([store(3, 'Dapur Bu Tima')]));
+        }
+        return _json(_page([]));
+      }));
+      await tester.pumpAndSettle();
+      await openToko(tester);
+      await tester.tap(find.byTooltip('Hapus dari Dapur Favorit'));
+      await tester.pumpAndSettle();
+      expect(find.text('Dapur Bu Tima'), findsOneWidget);
+      expect(find.text('Gagal menyimpan.'), findsOneWidget);
+    });
+
+    testWidgets('kosong, galat + Coba Lagi', (tester) async {
+      var n = 0;
+      await tester.pumpWidget(_wrap((req) async {
+        if (req.url.path.endsWith('/me/favorite-merchants')) {
+          n++;
+          if (n == 1) {
+            return _json({
+              'error': {'code': 'INTERNAL_ERROR', 'message': 'Server sibuk.'}
+            }, 500);
+          }
+          return _json(stores([]));
+        }
+        return _json(_page([]));
+      }));
+      await tester.pumpAndSettle();
+      await openToko(tester);
+      expect(find.text('Server sibuk.'), findsOneWidget);
+      await tester.tap(find.text('Coba Lagi'));
+      await tester.pumpAndSettle();
+      expect(find.text('Belum ada Dapur Favorit'), findsOneWidget);
+    });
+
+    testWidgets('keluar: daftar toko dibuang, ajakan masuk', (tester) async {
+      final auth = FakeAuth(loggedIn: true);
+      await tester.pumpWidget(_wrap((req) async {
+        if (req.url.path.endsWith('/me/favorite-merchants')) {
+          return _json(stores([store(3, 'Dapur Bu Tima')]));
+        }
+        return _json(_page([]));
+      }, auth: auth));
+      await tester.pumpAndSettle();
+      await openToko(tester);
+      expect(find.text('Dapur Bu Tima'), findsOneWidget);
+      auth.set(false);
+      await tester.pumpAndSettle();
+      expect(find.text('Dapur Bu Tima'), findsNothing);
+      expect(find.text('Masuk untuk melihat favoritmu'), findsOneWidget);
+    });
   });
 }

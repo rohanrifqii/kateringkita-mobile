@@ -11,6 +11,8 @@ import 'package:kateringkita_pbl/providers/theme_provider.dart';
 import 'package:kateringkita_pbl/screens/home/store_profile_screen.dart';
 import 'package:provider/provider.dart';
 
+import '../support/session.dart';
+
 class _FakeTheme extends ChangeNotifier implements ThemeProvider {
   @override
   bool get isDarkMode => false;
@@ -120,6 +122,7 @@ Future<List<Uri>> _pump(
       Provider<CatalogRepository>.value(value: CatalogRepository(api)),
       ChangeNotifierProvider<ThemeProvider>.value(value: _FakeTheme()),
       ChangeNotifierProvider(create: (_) => CartProvider()),
+      ...sessionProviders(api),
     ],
     child: const MaterialApp(home: StoreProfileScreen(vendorName: 'dapur-a')),
   ));

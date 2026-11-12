@@ -2,6 +2,9 @@ import '../../api/api_exception.dart';
 import '../../core/relative_time.dart';
 import '../../data/catalog_repository.dart';
 import '../../data/store_reviews.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/favorites_provider.dart';
+import '../../widgets/favorite_button.dart';
 import '../../widgets/menu_image.dart';
 import '../../widgets/add_to_cart.dart';
 import '../../widgets/primary_button.dart';
@@ -33,7 +36,6 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   List<ProductModel> _menus = const [];
   bool _loading = true;
   bool _failed = false;
-  bool _isStoreLiked = false;
   bool _isSearching = false;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
@@ -332,21 +334,29 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                   },
                 ),
                 const SizedBox(width: 8),
-                _buildCircleTopButton(
-                  icon: _isStoreLiked
-                      ? Icons.favorite_rounded
-                      : Icons.favorite_border_rounded,
-                  iconColor:
-                      _isStoreLiked ? AppColors.danger : AppColors.textPrimary,
-                  onTap: () {
-                    setState(() => _isStoreLiked = !_isStoreLiked);
-                    _showToast(
-                      _isStoreLiked
-                          ? '${_vendor.businessName} disimpan ke Dapur Favorit'
-                          : '${_vendor.businessName} dihapus dari Dapur Favorit',
-                    );
-                  },
-                ),
+                Builder(builder: (context) {
+                  // Dapur Favorit dari server; tamu selalu melihat hati kosong.
+                  final liked =
+                      context.select<AuthProvider, bool>((a) => a.isLoggedIn) &&
+                          context
+                              .watch<FavoritesProvider>()
+                              .isFavoriteMerchant(_vendor);
+                  return Semantics(
+                    button: true,
+                    label: liked
+                        ? 'Hapus dari Dapur Favorit'
+                        : 'Simpan ke Dapur Favorit',
+                    child: _buildCircleTopButton(
+                      key: const ValueKey('store-favorite'),
+                      icon: liked
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      iconColor:
+                          liked ? AppColors.danger : AppColors.textPrimary,
+                      onTap: () => toggleFavoriteMerchant(context, _vendor),
+                    ),
+                  );
+                }),
                 const SizedBox(width: 8),
                 _buildCircleTopButton(
                   icon: Icons.share_outlined,
@@ -510,11 +520,13 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   }
 
   Widget _buildCircleTopButton({
+    Key? key,
     required IconData icon,
     Color? iconColor,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
+      key: key,
       onTap: onTap,
       child: Container(
         width: 38,

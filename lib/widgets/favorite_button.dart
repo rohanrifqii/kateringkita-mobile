@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../api/api_exception.dart';
 import '../core/app_colors.dart';
 import '../core/require_login.dart';
+import '../data/catalog_repository.dart';
 import '../models/product_model.dart';
 import '../providers/auth_provider.dart';
 import '../providers/favorites_provider.dart';
@@ -13,10 +14,47 @@ import '../providers/favorites_provider.dart';
 /// Tamu diarahkan ke Login lebih dulu; bila login berhasil menu langsung
 /// disimpan. Perubahan optimistis lewat [FavoritesProvider] dan dikembalikan
 /// bila server menolak.
-Future<void> toggleFavorite(BuildContext context, ProductModel menu) async {
-  final messenger = ScaffoldMessenger.of(context);
+Future<void> toggleFavorite(BuildContext context, ProductModel menu) {
   final favorites = context.read<FavoritesProvider>();
-  if (favorites.isBusy(menu.id)) return;
+  return _toggle(
+    context,
+    busy: favorites.isBusy(menu.id),
+    current: () => favorites.isFavorite(menu),
+    save: (v) => favorites.setFavorite(menu, v),
+    guestText: 'Masuk dulu untuk menyimpan menu favorit.',
+    doneText: (v) => v
+        ? 'Ditambahkan ke favorit: ${menu.name}'
+        : 'Dihapus dari favorit: ${menu.name}',
+  );
+}
+
+/// Simpan / hapus toko dari "Dapur Favorit"; aturan sama dengan
+/// [toggleFavorite].
+Future<void> toggleFavoriteMerchant(
+    BuildContext context, MerchantProfile merchant) {
+  final favorites = context.read<FavoritesProvider>();
+  return _toggle(
+    context,
+    busy: favorites.isMerchantBusy(merchant.id),
+    current: () => favorites.isFavoriteMerchant(merchant),
+    save: (v) => favorites.setFavoriteMerchant(merchant, v),
+    guestText: 'Masuk dulu untuk menyimpan Dapur Favorit.',
+    doneText: (v) => v
+        ? '${merchant.businessName} disimpan ke Dapur Favorit'
+        : '${merchant.businessName} dihapus dari Dapur Favorit',
+  );
+}
+
+Future<void> _toggle(
+  BuildContext context, {
+  required bool busy,
+  required bool Function() current,
+  required Future<void> Function(bool value) save,
+  required String guestText,
+  required String Function(bool value) doneText,
+}) async {
+  if (busy) return;
+  final messenger = ScaffoldMessenger.of(context);
   void snack(String text) {
     messenger
       ..hideCurrentSnackBar()
@@ -28,15 +66,15 @@ Future<void> toggleFavorite(BuildContext context, ProductModel menu) async {
 
   final bool value;
   if (context.read<AuthProvider>().isLoggedIn) {
-    value = !favorites.isFavorite(menu);
+    value = !current();
   } else {
-    snack('Masuk dulu untuk menyimpan menu favorit.');
+    snack(guestText);
     if (!await requireLogin(context)) return;
     value = true;
   }
 
   try {
-    await favorites.setFavorite(menu, value);
+    await save(value);
   } on ApiException catch (e) {
     snack(e.message);
     return;
@@ -44,9 +82,7 @@ Future<void> toggleFavorite(BuildContext context, ProductModel menu) async {
     snack('Favorit gagal diperbarui. Coba lagi.');
     return;
   }
-  snack(value
-      ? 'Ditambahkan ke favorit: ${menu.name}'
-      : 'Dihapus dari favorit: ${menu.name}');
+  snack(doneText(value));
 }
 
 /// Ikon hati untuk kartu/detail menu. Status dari server (`is_favorite`)

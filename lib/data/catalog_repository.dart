@@ -45,6 +45,10 @@ class MerchantProfile {
   final int ratingCount;
   final List<PickupPoint> pickupPoints;
 
+  /// Toko favorit pembeli ("Dapur Favorit"); false untuk tamu, peran lain,
+  /// dan server yang belum memuat kolom ini.
+  final bool isFavorite;
+
   const MerchantProfile({
     required this.id,
     required this.slug,
@@ -58,6 +62,7 @@ class MerchantProfile {
     required this.ratingAvg,
     required this.ratingCount,
     this.pickupPoints = const [],
+    this.isFavorite = false,
   });
 
   factory MerchantProfile.fromJson(Map<String, dynamic> json) =>
@@ -77,6 +82,7 @@ class MerchantProfile {
         pickupPoints: ((json['pickup_points'] as List?) ?? const [])
             .map((e) => PickupPoint.fromJson(e as Map<String, dynamic>))
             .toList(),
+        isFavorite: (json['is_favorite'] as bool?) ?? false,
       );
 }
 

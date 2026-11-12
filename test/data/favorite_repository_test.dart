@@ -90,4 +90,78 @@ void main() {
           .having((e) => e.message, 'message', 'Menu tidak ditemukan.')),
     );
   });
+
+  group('toko favorit (Dapur Favorit)', () {
+    Map<String, dynamic> store(int id, {Object? fav = true}) => {
+          'id': id,
+          'slug': 'dapur-$id',
+          'business_name': 'Dapur $id',
+          'description': null,
+          'logo_url': null,
+          'merchant_type': {'id': 1, 'name': 'Katering'},
+          'is_open': false,
+          'open_time': '08:00',
+          'close_time': '17:00',
+          'rating_avg': 4.5,
+          'rating_count': 10,
+          'pickup_points': [
+            {'id': 1, 'name': 'Gerbang Barat', 'description': null}
+          ],
+          'is_favorite': ?fav,
+        };
+
+    test('listMerchants: GET /me/favorite-merchants, kartu toko + total',
+        () async {
+      late Uri url;
+      final r = _repo((req) async {
+        url = req.url;
+        return _json(200, {
+          'data': [store(3), store(4)],
+          'meta': {'page': 1, 'limit': 50, 'total': 2},
+        });
+      });
+      final page = await r.listMerchants(limit: 50);
+      expect(url.path, '/api/v1/me/favorite-merchants');
+      expect(url.queryParameters, {'page': '1', 'limit': '50'});
+      expect(page.items.map((m) => m.slug), ['dapur-3', 'dapur-4']);
+      expect(page.items.first.isFavorite, isTrue);
+      expect(page.items.first.isOpen, isFalse);
+      expect(page.items.first.pickupPoints.single.name, 'Gerbang Barat');
+      expect(page.total, 2);
+    });
+
+    test('addMerchant/removeMerchant: PUT/DELETE, 204', () async {
+      final seen = <http.Request>[];
+      final r = _repo((req) async {
+        seen.add(req);
+        return http.Response('', 204);
+      });
+      await r.addMerchant(3);
+      await r.removeMerchant(3);
+      expect(seen.map((s) => '${s.method} ${s.url.path}'), [
+        'PUT /api/v1/me/favorite-merchants/3',
+        'DELETE /api/v1/me/favorite-merchants/3',
+      ]);
+    });
+
+    test('addMerchant: toko tidak ada -> 404 "Toko tidak ditemukan."',
+        () async {
+      final r = _repo((req) async => _json(404, {
+            'error': {'code': 'NOT_FOUND', 'message': 'Toko tidak ditemukan.'}
+          }));
+      expect(
+        () => r.addMerchant(99),
+        throwsA(isA<ApiException>()
+            .having((e) => e.message, 'message', 'Toko tidak ditemukan.')),
+      );
+    });
+
+    test('is_favorite toleran: tidak ada / null -> false', () async {
+      final r = _repo((req) async => _json(200, {
+            'data': [store(3, fav: null)],
+          }));
+      final page = await r.listMerchants();
+      expect(page.items.single.isFavorite, isFalse);
+    });
+  });
 }

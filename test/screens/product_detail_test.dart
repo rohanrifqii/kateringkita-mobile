@@ -67,7 +67,10 @@ Widget _wrap(Widget screen, Object? args,
     FakeAuth? auth,
     List<http.Request>? favLog,
     int favStatus = 204,
-    bool favorite = false}) {
+    bool favorite = false,
+    bool storeFavorite = false,
+    List<http.Request>? storeLog,
+    int storeStatus = 204}) {
   final api = ApiClient(
     baseUrl: 'https://x.test/api/v1',
     client: MockClient((req) async {
@@ -106,8 +109,17 @@ Widget _wrap(Widget screen, Object? args,
             'merchant_type': {'name': 'Danusan'},
             'rating_avg': 4.5,
             'rating_count': 12,
+            // Production lama belum memuat is_favorite (dianggap false).
+            if (storeFavorite) 'is_favorite': true,
           }
         });
+      }
+      if (p.contains('/me/favorite-merchants/')) {
+        storeLog?.add(req);
+        if (storeStatus == 204) return http.Response('', 204);
+        return _json({
+          'error': {'code': 'NOT_FOUND', 'message': 'Toko tidak ditemukan.'}
+        }, storeStatus);
       }
       if (p.endsWith('/menus')) {
         return _json({
@@ -336,6 +348,83 @@ void main() {
       expect(log, isEmpty);
       expect(heartOff(), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Dapur Favorit di profil toko', () {
+    Finder heart() => find.byKey(const ValueKey('store-favorite'));
+    Finder on() => find.descendant(
+        of: heart(), matching: find.byIcon(Icons.favorite_rounded));
+    Finder off() => find.descendant(
+        of: heart(), matching: find.byIcon(Icons.favorite_border_rounded));
+
+    testWidgets('pembeli: is_favorite toko dari server tampil penuh',
+        (tester) async {
+      await _open(
+          tester,
+          _wrap(const StoreProfileScreen(), 'dapur-a',
+              auth: FakeAuth(loggedIn: true), storeFavorite: true));
+      expect(on(), findsOneWidget);
+    });
+
+    testWidgets('server lama tanpa is_favorite: hati kosong, tanpa crash',
+        (tester) async {
+      await _open(
+          tester,
+          _wrap(const StoreProfileScreen(), 'dapur-a',
+              auth: FakeAuth(loggedIn: true)));
+      expect(off(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('ketuk: optimistis PUT, ketuk lagi DELETE', (tester) async {
+      final log = <http.Request>[];
+      await _open(
+          tester,
+          _wrap(const StoreProfileScreen(), 'dapur-a',
+              auth: FakeAuth(loggedIn: true), storeLog: log));
+      await tester.tap(heart());
+      await tester.pump();
+      expect(on(), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(log.single.method, 'PUT');
+      expect(log.single.url.path, '/api/v1/me/favorite-merchants/1');
+      expect(find.text('Dapur A disimpan ke Dapur Favorit'), findsOneWidget);
+
+      await tester.tap(heart());
+      await tester.pumpAndSettle();
+      expect(log.last.method, 'DELETE');
+      expect(off(), findsOneWidget);
+    });
+
+    testWidgets('server menolak: hati kembali + pesan', (tester) async {
+      await _open(
+          tester,
+          _wrap(const StoreProfileScreen(), 'dapur-a',
+              auth: FakeAuth(loggedIn: true), storeStatus: 404));
+      await tester.tap(heart());
+      await tester.pumpAndSettle();
+      expect(off(), findsOneWidget);
+      expect(find.text('Toko tidak ditemukan.'), findsOneWidget);
+    });
+
+    testWidgets('tamu: login dulu, lalu toko langsung disimpan',
+        (tester) async {
+      final auth = FakeAuth();
+      final log = <http.Request>[];
+      await _open(
+          tester,
+          _wrap(const StoreProfileScreen(), 'dapur-a',
+              auth: auth, storeLog: log));
+      await tester.tap(heart());
+      await tester.pumpAndSettle();
+      expect(find.text('Masuk dulu untuk menyimpan Dapur Favorit.'),
+          findsOneWidget);
+      expect(log, isEmpty);
+      await tester.tap(find.text('login-palsu'));
+      await tester.pumpAndSettle();
+      expect(log.single.method, 'PUT');
+      expect(on(), findsOneWidget);
     });
   });
 

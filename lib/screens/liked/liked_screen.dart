@@ -13,6 +13,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/favorites_provider.dart';
 import '../../widgets/favorite_button.dart';
 import '../../widgets/menu_image.dart';
+import 'favorite_merchants_view.dart';
 
 /// Daftar menu favorit pembeli dari `GET /me/favorites`.
 ///
@@ -36,6 +37,9 @@ class _LikedScreenState extends State<LikedScreen> {
   bool _loadingMore = false;
   String? _error;
   int _seq = 0;
+
+  /// 0 = Menu, 1 = Toko (Dapur Favorit).
+  int _segment = 0;
   bool _visible = true;
   bool _dirty = false;
   late final AuthProvider _auth;
@@ -180,17 +184,70 @@ class _LikedScreenState extends State<LikedScreen> {
       backgroundColor: AppColors.background,
       body: SafeArea(
         bottom: false,
-        child: RefreshIndicator(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Liked',
+                    style: AppTextStyles.h2.copyWith(fontSize: 24),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      _segmentChip('Menu', 0),
+                      const SizedBox(width: 8),
+                      _segmentChip('Toko', 1),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: !loggedIn
+                  ? ListView(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+                      children: [_guestPrompt()],
+                    )
+                  : _segment == 1
+                      ? const FavoriteMerchantsView()
+                      : _menuList(shown, count),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _segmentChip(String label, int index) {
+    final selected = _segment == index;
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      showCheckmark: false,
+      onSelected: (_) => setState(() => _segment = index),
+      selectedColor: AppColors.primary,
+      backgroundColor: AppColors.surface,
+      side: BorderSide(
+          color: selected ? AppColors.primary : AppColors.cardBorder),
+      labelStyle: TextStyle(
+        fontSize: 12.5,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+        color: selected ? Colors.white : AppColors.textPrimary,
+      ),
+    );
+  }
+
+  Widget _menuList(List<ProductModel> shown, int count) => RefreshIndicator(
           onRefresh: () => _load(silent: true),
           child: ListView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
             children: [
-              Text(
-                'Liked',
-                style: AppTextStyles.h2.copyWith(fontSize: 24),
-              ),
-              const SizedBox(height: 2),
               Text(
                 '$count Menu Favorit Tersimpan',
                 style: AppTextStyles.bodySmall.copyWith(
@@ -198,10 +255,8 @@ class _LikedScreenState extends State<LikedScreen> {
                   fontSize: 12,
                 ),
               ),
-              const SizedBox(height: 18),
-              if (!loggedIn)
-                _guestPrompt()
-              else if (_loading && _items.isEmpty)
+              const SizedBox(height: 14),
+              if (_loading && _items.isEmpty)
                 const Padding(
                   padding: EdgeInsets.symmetric(vertical: 60),
                   child: Center(child: CircularProgressIndicator()),
@@ -230,10 +285,7 @@ class _LikedScreenState extends State<LikedScreen> {
               ],
             ],
           ),
-        ),
-      ),
-    );
-  }
+        );
 
   Widget _statusIcon(IconData icon) => Container(
         width: 70,
@@ -252,13 +304,13 @@ class _LikedScreenState extends State<LikedScreen> {
             _statusIcon(Icons.favorite_border_rounded),
             const SizedBox(height: 16),
             Text(
-              'Masuk untuk melihat menu favoritmu',
+              'Masuk untuk melihat favoritmu',
               textAlign: TextAlign.center,
               style: AppTextStyles.h3.copyWith(fontSize: 16),
             ),
             const SizedBox(height: 6),
             Text(
-              'Menu yang kamu simpan dengan ikon hati akan muncul di sini.',
+              'Menu dan dapur yang kamu simpan dengan ikon hati akan muncul di sini.',
               textAlign: TextAlign.center,
               style: AppTextStyles.bodySmall.copyWith(
                 color: AppColors.textSecondary,

@@ -26,12 +26,32 @@ class _Repo implements FavoriteRepository {
   Future<void> remove(int menuId) => _call('DELETE $menuId');
 
   @override
+  Future<void> addMerchant(int merchantId) => _call('PUT toko $merchantId');
+
+  @override
+  Future<void> removeMerchant(int merchantId) =>
+      _call('DELETE toko $merchantId');
+
+  @override
   Future<MenuPage> list({int page = 1, int limit = 20}) =>
       throw UnimplementedError();
 
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
+
+MerchantProfile _store(int id, {bool fav = false}) => MerchantProfile(
+      id: id,
+      slug: 'dapur-$id',
+      businessName: 'Dapur $id',
+      merchantTypeName: 'Katering',
+      isOpen: true,
+      openTime: '08:00',
+      closeTime: '17:00',
+      ratingAvg: 4.5,
+      ratingCount: 2,
+      isFavorite: fav,
+    );
 
 ProductModel _menu(int id, {bool fav = false}) => ProductModel(
       id: id,
@@ -142,5 +162,60 @@ void main() {
     await expectLater(f, throwsA(_err));
     expect(p.isFavorite(menu), isFalse);
     expect(p.isBusy(7), isFalse);
+  });
+
+  group('toko favorit', () {
+    test('awal mengikuti is_favorite server', () {
+      final p = FavoritesProvider(_Repo());
+      expect(p.isFavoriteMerchant(_store(1, fav: true)), isTrue);
+      expect(p.isFavoriteMerchant(_store(2)), isFalse);
+    });
+
+    test('optimistis lalu PUT; merchantRevision naik, revision menu tidak',
+        () async {
+      final repo = _Repo()..gate = Completer<void>();
+      final p = FavoritesProvider(repo);
+      final s = _store(3);
+      final rev = p.revision;
+      final mrev = p.merchantRevision;
+      final f = p.setFavoriteMerchant(s, true);
+      expect(p.isFavoriteMerchant(s), isTrue);
+      expect(p.isMerchantBusy(3), isTrue);
+      repo.gate!.complete();
+      await f;
+      expect(repo.calls, ['PUT toko 3']);
+      expect(p.merchantRevision, greaterThan(mrev));
+      expect(p.revision, rev);
+      expect(p.isMerchantBusy(3), isFalse);
+    });
+
+    test('gagal: kembali + galat diteruskan', () async {
+      final repo = _Repo()..fail = _err;
+      final p = FavoritesProvider(repo);
+      final s = _store(3, fav: true);
+      await expectLater(p.setFavoriteMerchant(s, false), throwsA(_err));
+      expect(repo.calls, ['DELETE toko 3']);
+      expect(p.isFavoriteMerchant(s), isTrue);
+    });
+
+    test('id menu dan id toko tidak saling bertabrakan', () async {
+      final p = FavoritesProvider(_Repo());
+      await p.setFavoriteMerchant(_store(7), true);
+      expect(p.isFavorite(_menu(7)), isFalse);
+      expect(p.isFavoriteMerchant(_store(7)), isTrue);
+    });
+
+    test('clear (keluar) membuang status toko juga', () async {
+      final repo = _Repo()..gate = Completer<void>();
+      final p = FavoritesProvider(repo);
+      final s = _store(3);
+      final f = p.setFavoriteMerchant(s, true);
+      p.clear();
+      expect(p.isFavoriteMerchant(s), isFalse);
+      expect(p.isMerchantBusy(3), isFalse);
+      repo.gate!.complete();
+      await f;
+      expect(p.isFavoriteMerchant(s), isFalse);
+    });
   });
 }
