@@ -99,9 +99,10 @@ Supaya kalian paham cara kerja fitur-fitur yang udah jalan di Mobile saat ini:
 ### 💳 C. Bagian Pembayaran & Integrasi Backend (Untuk Rohan, Ammar, & Diego)
 - Aplikasi sekarang sudah **tersambung ke backend API** (bukan lagi database lokal). Base URL default-nya server produksi: `https://ketring-45f82aef1ca0.herokuapp.com/api/v1`. Mau pakai server lain (misal backend lokal)? Jalankan dengan `flutter run --dart-define=API_BASE_URL=https://alamat-server-kamu/api/v1`.
 - **Login** bisa pakai **email atau nomor WA** + password.
-- **Pembayaran hanya lewat Midtrans**: Virtual Account (VA) dan QRIS/e-wallet, dibuka lewat Snap di dalam aplikasi. Selama pengujian, Midtrans masih mode **sandbox** (uang tidak sungguhan).
+- **Pembayaran hanya lewat Midtrans**: Virtual Account (VA) dan QRIS/e-wallet, dibuka lewat Snap di dalam aplikasi.
+- **Sebelum ngetes pembayaran:** cek dulu di Heroku (Settings → Config Vars) bahwa `MIDTRANS_IS_PRODUCTION` **kosong/`false`** (mode sandbox), supaya tidak ada uang sungguhan yang berpindah.
 - Mau isi toko demo supaya katalog nggak kosong? Jalankan `dart run tool/seed_toko.dart` (detail lengkap ada di `tool/README.md`).
-- Untuk **Rohan (Payment):** Alur checkout ada di `lib/screens/orders/checkout_screen.dart` dan halaman pembayaran ada di `lib/screens/orders/payment_screen.dart`. Kalau mau diintegrasikan ke Midtrans / Payment Gateway, kamu bisa langsung masuk dari kedua file tersebut.
+- **Midtrans sudah terintegrasi.** Alur checkout (buat pesanan) ada di `lib/screens/orders/checkout_screen.dart`, sedangkan halaman pembayaran (VA, QRIS/e-wallet lewat Snap, dan pengecekan status) ada di `lib/screens/orders/payment_screen.dart`.
 
 ---
 
