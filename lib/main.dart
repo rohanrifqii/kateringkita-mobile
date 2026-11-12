@@ -12,6 +12,7 @@ import 'core/app_routes.dart';
 import 'data/app_database.dart';
 import 'data/auth_repository.dart';
 import 'data/catalog_repository.dart';
+import 'data/order_repository.dart';
 import 'data/token_store.dart';
 import 'providers/auth_provider.dart';
 import 'data/liked_store.dart';
@@ -87,6 +88,7 @@ Widget buildAppProviders({
       Provider<AuthRepository>.value(value: repo),
       ChangeNotifierProvider<AuthProvider>.value(value: auth),
       Provider<CatalogRepository>.value(value: CatalogRepository(api)),
+      Provider<OrderRepository>.value(value: OrderRepository(api)),
       Provider<AppDb>(create: (_) => AppDb(), dispose: (_, db) => db.close()),
     ],
     child: child,

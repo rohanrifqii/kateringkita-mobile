@@ -3,7 +3,20 @@ import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/app_text_styles.dart';
 
-enum PaymentMethod { qris, virtualAccount, cod }
+/// Metode bayar yang didukung backend (tanpa tunai).
+enum PaymentMethod {
+  /// Midtrans Snap: QRIS / e-wallet.
+  online,
+
+  /// Virtual Account bank.
+  virtualAccount;
+
+  /// Nilai `payment_method` untuk API.
+  String get apiValue => switch (this) {
+        PaymentMethod.online => 'online',
+        PaymentMethod.virtualAccount => 'va',
+      };
+}
 
 class PaymentMethodOption {
   final PaymentMethod method;

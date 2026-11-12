@@ -1,4 +1,3 @@
-import '../../widgets/menu_image.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,10 +8,12 @@ import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../data/app_database.dart';
-import '../../models/product_model.dart';
+import '../../models/order_api_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/payment_method_tile.dart';
 
-/// Halaman Gateway Pembayaran Mandiri (QRIS, Virtual Account, & COD)
+/// Halaman pembayaran pesanan (argumen rute: [OrderApiModel]).
+/// Sementara masih tampilan lama; VA/Snap sungguhan menyusul.
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({super.key});
 
@@ -22,7 +23,7 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen> {
   bool _argsLoaded = false;
-  late ProductModel _product;
+  late OrderApiModel _order;
   late int _quantity;
   late double _total;
   late String _orderCode;
@@ -31,7 +32,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
   late String _name;
   late String _phone;
   late String _location;
-  late String _locationAddress;
   late String _note;
 
   // State untuk Virtual Account
@@ -52,38 +52,31 @@ class _PaymentScreenState extends State<PaymentScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_argsLoaded) {
-      final args =
-          ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>? ??
-              {};
-      final p = args['product'] as ProductModel?;
-      if (p == null) {
+      final order = ModalRoute.of(context)?.settings.arguments;
+      if (order is! OrderApiModel) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) Navigator.pop(context);
         });
         return;
       }
-      _product = p;
-      _quantity = args['quantity'] as int? ?? 1;
-      _total = args['total'] as double? ?? (_product.price * _quantity).toDouble();
-      _orderCode = args['orderCode'] as String? ??
-          '#KK-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch % 900 + 100}';
-      _paymentMethod =
-          args['paymentMethod'] as PaymentMethod? ?? PaymentMethod.qris;
-      _paymentLabel = args['paymentLabel'] as String? ?? 'QRIS';
-      _name = args['name'] as String? ?? 'Mahasiswa UB';
-      _phone = args['phone'] as String? ?? '0858-5215-7352';
-      _location = args['location'] as String? ?? 'Perpustakaan Pusat UB';
-      _locationAddress = args['locationAddress'] as String? ??
-          'Gedung Perpustakaan Pusat Universitas Brawijaya, Malang';
-      _note = args['note'] as String? ?? '-';
+      final user = context.read<AuthProvider>().user;
+      _order = order;
+      _quantity = order.items.fold(0, (s, i) => s + i.qty);
+      _total = order.total.toDouble();
+      _orderCode = order.code;
+      _paymentMethod = order.paymentMethod == 'va'
+          ? PaymentMethod.virtualAccount
+          : PaymentMethod.online;
+      _paymentLabel = _paymentMethod == PaymentMethod.virtualAccount
+          ? 'Virtual Account'
+          : 'QRIS / E-Wallet';
+      _name = user?.fullName ?? '';
+      _phone = user?.phone ?? '';
+      _location = order.pickupPoint.name;
+      _note = order.note ?? '-';
 
-      // 1 jam (3600 detik) untuk QRIS & Virtual Account. COD tidak memerlukan hitung mundur/timer.
-      if (_paymentMethod != PaymentMethod.cod) {
-        _remainingSeconds = 3600;
-        _startTimer();
-      } else {
-        _remainingSeconds = 0;
-      }
+      _remainingSeconds = order.secondsLeft ?? 3600;
+      _startTimer();
       _argsLoaded = true;
     }
   }
@@ -151,7 +144,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
     // Simpan pesanan ke database SQLite lokal
     await db.addOrder(
       orderCode: _orderCode,
-      productName: _product.name,
+      productName: _order.items.isEmpty
+          ? _orderCode
+          : _order.items.map((i) => i.menuName).join(', '),
       quantity: _quantity,
       totalPrice: _total,
     );
@@ -192,9 +187,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  _paymentMethod == PaymentMethod.cod
-                      ? 'Pesanan COD Berhasil Dibuat!'
-                      : 'Pembayaran Berhasil Diverifikasi!',
+                  'Pembayaran Berhasil Diverifikasi!',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.h2.copyWith(fontSize: 18),
                 ),
@@ -307,7 +300,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         context,
                         AppRoutes.whatsappGenerator,
                         arguments: {
-                          'product': _product,
                           'quantity': _quantity,
                           'total': _total,
                           'orderCode': _orderCode,
@@ -379,19 +371,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Timer countdown banner (Hanya untuk QRIS & Virtual Account, TIDAK untuk COD)
-            if (_paymentMethod != PaymentMethod.cod) ...[
-              _buildTimerCard(),
-              const SizedBox(height: 16),
-            ],
+            // Timer countdown banner
+            _buildTimerCard(),
+            const SizedBox(height: 16),
 
             // Card Konten Pembayaran sesuai Metode
-            if (_paymentMethod == PaymentMethod.qris)
+            if (_paymentMethod == PaymentMethod.online)
               _buildQrisSection()
-            else if (_paymentMethod == PaymentMethod.virtualAccount)
-              _buildVirtualAccountSection()
             else
-              _buildCodSection(),
+              _buildVirtualAccountSection(),
 
             const SizedBox(height: 16),
 
@@ -454,23 +442,19 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   String _getAppBarTitle() {
     switch (_paymentMethod) {
-      case PaymentMethod.qris:
+      case PaymentMethod.online:
         return 'Pembayaran QRIS';
       case PaymentMethod.virtualAccount:
         return 'Transfer Virtual Account';
-      case PaymentMethod.cod:
-        return 'Tunai saat Pengambilan';
     }
   }
 
   String _getConfirmButtonLabel() {
     switch (_paymentMethod) {
-      case PaymentMethod.qris:
+      case PaymentMethod.online:
         return 'Saya Sudah Membayar';
       case PaymentMethod.virtualAccount:
         return 'Cek Status Pembayaran';
-      case PaymentMethod.cod:
-        return 'Konfirmasi Pesanan COD';
     }
   }
 
@@ -940,144 +924,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
-  // ---------- 3. COD SECTION ----------
-  Widget _buildCodSection() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.cardBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFEF3C7),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.payments_outlined,
-                  color: Color(0xFFD97706),
-                  size: 24,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Tunai saat Pengambilan (COD)',
-                      style: AppTextStyles.h4.copyWith(fontSize: 15),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Bayar langsung kepada kurir / booth katering',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textSecondary,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: AppColors.secondaryBg,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Total Uang Pas Disiapkan',
-                        style: AppTextStyles.bodySmall.copyWith(
-                            color: AppColors.textSecondary, fontSize: 12)),
-                    Text(
-                      AppCurrency.format(_total),
-                      style: AppTextStyles.h3.copyWith(
-                        color: AppColors.primary,
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Divider(height: 1, color: AppColors.cardBorder),
-                const SizedBox(height: 10),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.location_on_outlined,
-                        size: 16, color: AppColors.textSecondary),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            _location,
-                            style: AppTextStyles.bodySmall.copyWith(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 11.5,
-                            ),
-                          ),
-                          Text(
-                            _locationAddress,
-                            style: AppTextStyles.bodySmall.copyWith(
-                              color: AppColors.textMuted,
-                              fontSize: 10.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEFF6FF),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: const Color(0xFFBFDBFE)),
-            ),
-            child: Row(
-              children: const [
-                Icon(Icons.info_outline, size: 16, color: Color(0xFF005AF5)),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Disarankan menyiapkan uang pas demi kelancaran antrean pengambilan makanan.',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFF1E40AF),
-                      height: 1.3,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ---------- RINGKASAN PESANAN ----------
   Widget _buildOrderSummaryCard() {
     return Container(
@@ -1111,37 +957,50 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: MenuImage(_product.imageUrl,
-                  width: 50,
-                  height: 50,
-                  fit: BoxFit.cover,
-                ),
+          for (final item in _order.items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.menuName,
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${item.qty} Porsi x ${AppCurrency.format(item.unitPrice)}',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.textSecondary,
+                            fontSize: 11.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Text(
+                    AppCurrency.format(item.lineTotal),
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _product.name,
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '$_quantity Porsi x ${AppCurrency.format(_product.price)}',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textSecondary,
-                        fontSize: 11.5,
-                      ),
-                    ),
-                  ],
+            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Total ($_quantity Porsi)',
+                style: AppTextStyles.bodyMedium.copyWith(
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               Text(
@@ -1178,7 +1037,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          if (_paymentMethod == PaymentMethod.qris) ...[
+          if (_paymentMethod == PaymentMethod.online) ...[
             _stepRow('1', 'Buka aplikasi e-Wallet atau m-Banking pilihanmu.'),
             _stepRow('2', 'Pilih menu "Bayar" atau "Scan QRIS".'),
             _stepRow('3', 'Arahkan kamera ke kode QRIS di atas.'),
@@ -1186,7 +1045,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                 'Pastikan nama merchant "KateringKita UB Official" dan nominal cocok.'),
             _stepRow(
                 '5', 'Masukkan PIN Anda lalu klik "Saya Sudah Membayar".'),
-          ] else if (_paymentMethod == PaymentMethod.virtualAccount) ...[
+          ] else ...[
             _stepRow('1', 'Buka m-Banking $_selectedBank atau datangi ATM.'),
             _stepRow(
                 '2', 'Pilih menu Transfer > Virtual Account / Pembayaran.'),
@@ -1195,12 +1054,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
             _stepRow('4',
                 'Periksa rincian: KATERINGKITA - ${_name.toUpperCase()} & ${AppCurrency.format(_total)}.'),
             _stepRow('5', 'Konfirmasi transfer lalu klik tombol cek status.'),
-          ] else ...[
-            _stepRow('1',
-                'Simpan kode pesanan $_orderCode atau tunjukkan saat tiba di lokasi.'),
-            _stepRow('2', 'Datangi booth katering di titik temu: $_location.'),
-            _stepRow('3',
-                'Serahkan uang tunai pas ${AppCurrency.format(_total)} kepada petugas.'),
           ],
         ],
       ),
