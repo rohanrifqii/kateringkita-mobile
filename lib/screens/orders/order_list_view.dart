@@ -47,13 +47,37 @@ class _OrderListViewState extends State<OrderListView>
   bool _wasVisible = true;
   Timer? _timer;
   final Set<String> _busy = {};
+  late final AuthProvider _auth;
+  late bool _wasLoggedIn;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _auth = context.read<AuthProvider>();
+    _wasLoggedIn = _auth.isLoggedIn;
+    _auth.addListener(_onAuthChanged);
     _timer = Timer.periodic(const Duration(seconds: 15), (_) => _poll());
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+  }
+
+  /// Login (di layar mana pun) langsung memuat daftar; keluar membuang daftar
+  /// milik akun sebelumnya.
+  void _onAuthChanged() {
+    final now = _auth.isLoggedIn;
+    if (now == _wasLoggedIn || !mounted) return;
+    _wasLoggedIn = now;
+    if (now) {
+      _load();
+    } else {
+      _seq++;
+      _fetching = false;
+      setState(() {
+        _orders = const [];
+        _error = null;
+        _loading = false;
+      });
+    }
   }
 
   @override
@@ -80,6 +104,7 @@ class _OrderListViewState extends State<OrderListView>
   @override
   void dispose() {
     _timer?.cancel();
+    _auth.removeListener(_onAuthChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -96,7 +121,12 @@ class _OrderListViewState extends State<OrderListView>
   /// Setiap pemuatan mengambil nomor urut; hasil dari permintaan yang lebih
   /// lama (mis. query sudah berganti) diabaikan.
   Future<void> _load({bool silent = false}) async {
-    if (!mounted || !_loggedIn) return;
+    if (!mounted) return;
+    if (!_loggedIn) {
+      // Tamu: tidak ada yang dimuat, jangan tinggalkan status memuat.
+      if (_loading) setState(() => _loading = false);
+      return;
+    }
     final seq = ++_seq;
     _fetching = true;
     if (!silent) setState(() => _loading = true);
@@ -139,11 +169,11 @@ class _OrderListViewState extends State<OrderListView>
     }
   }
 
-  Future<bool> _confirm(String title, String body, String no, String yes) async {
+  Future<bool> _confirm(String? title, String body, String no, String yes) async {
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => AlertDialog(
-        title: Text(title),
+        title: title == null ? null : Text(title),
         content: Text(body),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c, false), child: Text(no)),
@@ -199,7 +229,20 @@ class _OrderListViewState extends State<OrderListView>
   static const _unavailable =
       'Beberapa pilihan menu sudah tidak tersedia. Silakan pesan ulang dari halaman menu.';
 
-  Future<void> _reorder(OrderApiModel o) => _run(o, () async {
+  /// Keranjang berisi: tanya dulu sebelum menggantinya. "Tidak" = batal.
+  Future<void> _reorder(OrderApiModel o) async {
+    if (_busy.contains(o.code)) return;
+    final cart = context.read<CartProvider>();
+    if (cart.items.isNotEmpty) {
+      final body = cart.merchantId != o.merchantId
+          ? 'Keranjang berisi menu dari toko lain. Kosongkan dan ganti?'
+          : 'Keranjang akan diganti dengan isi pesanan ini. Lanjutkan?';
+      if (!await _confirm(null, body, 'Tidak', 'Ya') || !mounted) return;
+    }
+    await _doReorder(o);
+  }
+
+  Future<void> _doReorder(OrderApiModel o) => _run(o, () async {
         final orders = context.read<OrderRepository>();
         final catalog = context.read<CatalogRepository>();
         final cart = context.read<CartProvider>();
@@ -300,9 +343,8 @@ class _OrderListViewState extends State<OrderListView>
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12)),
                 ),
-                onPressed: () async {
-                  if (await requireLogin(context)) _load();
-                },
+                // Daftar dimuat oleh listener AuthProvider setelah login.
+                onPressed: () => requireLogin(context),
                 child: const Text('Masuk'),
               ),
             ],

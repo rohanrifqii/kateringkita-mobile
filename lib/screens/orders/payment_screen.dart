@@ -218,9 +218,16 @@ class _PaymentScreenState extends State<PaymentScreen>
       _error = null;
     });
     try {
-      final o = await _repo.startOnline(_order.code);
-      if (!mounted) return;
-      final url = o.payment?.paymentUrl;
+      // Tautan Snap yang sudah ada dipakai lagi; transaksi baru hanya dibuat
+      // bila belum ada tautan.
+      var url = _order.payment?.paymentUrl;
+      if (url == null || url.isEmpty) {
+        final o = await _repo.startOnline(_order.code);
+        if (!mounted) return;
+        _apply(o);
+        if (_order.isPaid) return;
+        url = o.payment?.paymentUrl;
+      }
       if (url == null || url.isEmpty) {
         setState(() => _error = 'Tautan pembayaran belum tersedia. Coba lagi.');
         return;

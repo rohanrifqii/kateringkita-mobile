@@ -145,6 +145,12 @@ Future<void> _close(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
 }
 
+/// Status paid tetap: banner diterima tampil, hitung mundur tidak.
+void _expectPaidBanner() {
+  expect(find.text('Pembayaran sudah diterima.'), findsOneWidget);
+  expect(find.text('Selesaikan pembayaran sebelum waktu habis'), findsNothing);
+}
+
 void main() {
   testWidgets('VA tanpa nomor: pilih bank -> POST /va lalu tampil va_number', (
     tester,
@@ -316,6 +322,104 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
     expect(n, greaterThanOrEqualTo(3));
     expect(find.textContaining('Pembayaran Berhasil'), findsOneWidget);
+    _expectPaidBanner();
+    await _close(tester);
+  });
+
+  testWidgets('guard isPaid: unpaid terlambat dengan updatedAt lebih baru '
+      'tidak membatalkan paid', (tester) async {
+    var n = 0;
+    await _open(
+      tester,
+      arg: _order(payment: _va()),
+      handler: (r) async {
+        n++;
+        if (n == 1) return _json({'data': _order(payment: _va())});
+        if (n == 2) {
+          return _json({
+            'data': _order(
+              status: 'confirmed',
+              payStatus: 'paid',
+              payment: _va(),
+              updatedAt: '2026-11-12T03:05:00Z',
+            ),
+          });
+        }
+        // Lebih baru dari respons paid, tetapi unpaid (mis. replika usang).
+        return _json({
+          'data': _order(payment: _va(), updatedAt: '2026-11-12T03:10:00Z'),
+        });
+      },
+    );
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(milliseconds: 500));
+    _expectPaidBanner();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(n, greaterThanOrEqualTo(3));
+    _expectPaidBanner();
+    await _close(tester);
+  });
+
+  testWidgets('guard updatedAt: unpaid lama setelah unpaid baru diabaikan', (
+    tester,
+  ) async {
+    var n = 0;
+    await _open(
+      tester,
+      arg: _order(payment: _va()),
+      handler: (r) async {
+        n++;
+        if (n == 1) {
+          return _json({
+            'data': _order(
+              payment: _va(),
+              secondsLeft: 300,
+              updatedAt: '2026-11-12T03:05:00Z',
+            ),
+          });
+        }
+        return _json({
+          'data': _order(
+            payment: _va(),
+            secondsLeft: 900,
+            updatedAt: '2026-11-12T03:01:00Z',
+          ),
+        });
+      },
+    );
+    expect(find.text('00:05:00'), findsOneWidget);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(n, greaterThanOrEqualTo(2));
+    expect(find.text('00:15:00'), findsNothing);
+    expect(find.text('00:05:00'), findsOneWidget);
+    await _close(tester);
+  });
+
+  testWidgets('online dengan payment_url tersimpan: Snap dibuka langsung', (
+    tester,
+  ) async {
+    const url = 'https://app.sandbox.midtrans.com/snap/v4/lama';
+    final withUrl = _order(
+      method: 'online',
+      payment: {
+        'method': 'online',
+        'status': 'pending',
+        'amount': 99000,
+        'payment_url': url,
+      },
+    );
+    final h = await _open(
+      tester,
+      arg: withUrl,
+      handler: (r) async => _json({'data': withUrl}),
+    );
+    await tester.tap(find.text('Bayar dengan QRIS / E-Wallet'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(h.snapUrl, url);
+    expect(h.reqs.where((r) => r.url.path.endsWith('/online')), isEmpty);
     await _close(tester);
   });
 

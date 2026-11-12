@@ -10,6 +10,7 @@ import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/data/catalog_repository.dart';
 import 'package:kateringkita_pbl/data/order_repository.dart';
 import 'package:kateringkita_pbl/models/order_api_model.dart';
+import 'package:kateringkita_pbl/models/product_model.dart';
 import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:kateringkita_pbl/providers/cart_provider.dart';
 import 'package:kateringkita_pbl/screens/orders/orders_screen.dart';
@@ -18,9 +19,14 @@ import 'package:provider/provider.dart';
 
 class _FakeAuth extends ChangeNotifier implements AuthProvider {
   _FakeAuth(this.loggedIn);
-  final bool loggedIn;
+  bool loggedIn;
   @override
   bool get isLoggedIn => loggedIn;
+  void set(bool v) {
+    loggedIn = v;
+    notifyListeners();
+  }
+
   @override
   dynamic noSuchMethod(Invocation i) => super.noSuchMethod(i);
 }
@@ -75,6 +81,7 @@ Map<String, dynamic> _order(String code,
 Widget _wrap(
   Future<http.Response> Function(http.Request) handler, {
   bool loggedIn = true,
+  _FakeAuth? auth,
   CartProvider? cart,
   Map<String, WidgetBuilder> routes = const {},
 }) {
@@ -85,7 +92,8 @@ Widget _wrap(
       Provider<OrderRepository>.value(value: OrderRepository(api)),
       Provider<CatalogRepository>.value(value: CatalogRepository(api)),
       ChangeNotifierProvider<CartProvider>.value(value: cart ?? CartProvider()),
-      ChangeNotifierProvider<AuthProvider>.value(value: _FakeAuth(loggedIn)),
+      ChangeNotifierProvider<AuthProvider>.value(
+          value: auth ?? _FakeAuth(loggedIn)),
     ],
     child: MaterialApp(home: const OrdersScreen(), routes: routes),
   );
@@ -189,6 +197,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(calls, 0);
     expect(find.text('Masuk'), findsOneWidget);
+  });
+
+  testWidgets('tamu lalu login di tempat lain: daftar langsung dimuat',
+      (tester) async {
+    final auth = _FakeAuth(false);
+    var calls = 0;
+    await tester.pumpWidget(_wrap((req) async {
+      calls++;
+      return _json({
+        'data': [_order('KK-1')],
+        'meta': {'total': 1}
+      });
+    }, auth: auth));
+    await tester.pumpAndSettle();
+    expect(calls, 0);
+
+    auth.set(true);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(calls, 1);
+    expect(find.text('KK-1'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    // Keluar: daftar milik akun sebelumnya tidak tersisa.
+    auth.set(false);
+    await tester.pump();
+    expect(find.text('Masuk'), findsOneWidget);
+    expect(find.text('KK-1'), findsNothing);
   });
 
   test('orderStatusLabel', () {
@@ -356,6 +392,62 @@ void main() {
       expect(cart.items, isEmpty);
       expect(find.text('CHECKOUT'), findsNothing);
       expect(find.textContaining('sudah tidak tersedia'), findsOneWidget);
+    });
+
+    ProductModel product(int id, int merchant) =>
+        ProductModel.fromJson(menu(id)..['merchant']['id'] = merchant);
+
+    testWidgets('keranjang toko lain: "Tidak" membiarkan keranjang',
+        (tester) async {
+      final cart = CartProvider()..add(product(50, 2), qty: 3);
+      var reorderCalls = 0;
+      final h = handler(items: [
+        {'menu_id': 7, 'qty': 1, 'option_ids': []},
+      ]);
+      await tester.pumpWidget(_wrap(
+        (req) {
+          if (req.url.path.endsWith('/reorder')) reorderCalls++;
+          return h(req);
+        },
+        cart: cart,
+        routes: {AppRoutes.checkout: (_) => const Text('CHECKOUT')},
+      ));
+      await openCompleted(tester);
+      await tester.tap(find.text('Pesan Lagi'));
+      await tester.pumpAndSettle();
+      expect(
+          find.text(
+              'Keranjang berisi menu dari toko lain. Kosongkan dan ganti?'),
+          findsOneWidget);
+      await tester.tap(find.text('Tidak'));
+      await tester.pumpAndSettle();
+      expect(cart.items.single.menu.id, 50);
+      expect(cart.items.single.qty, 3);
+      expect(reorderCalls, 0);
+      expect(find.text('CHECKOUT'), findsNothing);
+    });
+
+    testWidgets('keranjang toko sama: tanya dulu, "Ya" mengganti isi',
+        (tester) async {
+      final cart = CartProvider()..add(product(50, 1));
+      await tester.pumpWidget(_wrap(
+        handler(items: [
+          {'menu_id': 7, 'qty': 2, 'option_ids': []},
+        ]),
+        cart: cart,
+        routes: {AppRoutes.checkout: (_) => const Text('CHECKOUT')},
+      ));
+      await openCompleted(tester);
+      await tester.tap(find.text('Pesan Lagi'));
+      await tester.pumpAndSettle();
+      expect(
+          find.text('Keranjang akan diganti dengan isi pesanan ini. Lanjutkan?'),
+          findsOneWidget);
+      await tester.tap(find.text('Ya'));
+      await tester.pumpAndSettle();
+      expect(cart.items.single.menu.id, 7);
+      expect(cart.items.single.qty, 2);
+      expect(find.text('CHECKOUT'), findsOneWidget);
     });
   });
 }
