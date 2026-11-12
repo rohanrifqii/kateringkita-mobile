@@ -19,3 +19,23 @@ String normalizePhone(String input) {
 
 /// HPP = 60% harga, dibulatkan ke bawah ke kelipatan 500.
 int hppFor(int price) => (price * 6 ~/ 10) ~/ 500 * 500;
+
+/// Deteksi tipe gambar dari magic bytes (JPEG/PNG/WEBP).
+String contentTypeOf(List<int> bytes) {
+  bool at(int i, List<int> sig) {
+    if (bytes.length < i + sig.length) return false;
+    for (var k = 0; k < sig.length; k++) {
+      if (bytes[i + k] != sig[k]) return false;
+    }
+    return true;
+  }
+
+  if (at(0, [0xFF, 0xD8, 0xFF])) return 'image/jpeg';
+  if (at(0, [0x89, 0x50, 0x4E, 0x47])) return 'image/png';
+  if (at(0, [0x52, 0x49, 0x46, 0x46]) && at(8, [0x57, 0x45, 0x42, 0x50])) {
+    return 'image/webp';
+  }
+  throw const FormatException(
+    'Tipe gambar tidak didukung (harus JPEG, PNG, atau WEBP).',
+  );
+}
