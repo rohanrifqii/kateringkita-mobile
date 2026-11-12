@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
+import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/data/catalog_repository.dart';
 import 'package:kateringkita_pbl/providers/cart_provider.dart';
 import 'package:kateringkita_pbl/screens/home/home_screen.dart';
@@ -46,7 +47,8 @@ const _cats = {
 Widget _wrap(List<http.Request> log, Widget child,
     {Map<String, dynamic> menus = const {'data': [], 'meta': {'total': 0}},
     bool fail = false,
-    FakeAuth? auth}) {
+    FakeAuth? auth,
+    Map<String, WidgetBuilder> routes = const {}}) {
   final api = ApiClient(
     baseUrl: 'https://x.test/api/v1',
     client: MockClient((req) async {
@@ -62,13 +64,77 @@ Widget _wrap(List<http.Request> log, Widget child,
       ChangeNotifierProvider(create: (_) => CartProvider()),
       ...sessionProviders(api, auth: auth),
     ],
-    child: MaterialApp(home: child),
+    child: MaterialApp(home: child, routes: routes),
   );
 }
 
 void main() {
   _raceTest();
   setUp(() => SharedPreferences.setMockInitialValues({}));
+
+  group('banner info layanan', () {
+    final stubRoutes = <String, WidgetBuilder>{
+      AppRoutes.search: (_) => const Scaffold(body: Text('layar-cari')),
+      AppRoutes.orders: (_) => const Scaffold(body: Text('layar-pesanan')),
+      AppRoutes.aiAssistant: (_) => const Scaffold(body: Text('layar-ai')),
+    };
+
+    Future<void> nextBanner(WidgetTester tester) async {
+      await tester.drag(find.byType(PageView), const Offset(-600, 0));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('tanpa janji diskon/ongkir; CTA ke tab yang ada',
+        (tester) async {
+      final tabs = <int>[];
+      await tester.pumpWidget(_wrap(
+          <http.Request>[], HomeScreen(onTabChange: tabs.add),
+          routes: stubRoutes));
+      await tester.pumpAndSettle();
+
+      for (final fake in [
+        'Summer Sale',
+        'GRATIS ONGKIR',
+        'Antar Seluruh UB',
+        'Klaim Promo →',
+      ]) {
+        expect(find.text(fake), findsNothing);
+      }
+      expect(find.textContaining(RegExp('diskon|ongkir', caseSensitive: false)),
+          findsNothing);
+
+      expect(find.text('Ambil di Titik Temu'), findsOneWidget);
+      await nextBanner(tester);
+      expect(find.text('VA, QRIS & E-Wallet'), findsOneWidget);
+      await tester.tap(find.text('Lihat Pesanan →'));
+      await tester.pumpAndSettle();
+      await nextBanner(tester);
+      expect(find.text('Atur Waktu Ambil'), findsOneWidget);
+      await tester.tap(find.text('Tanya AI →'));
+      await tester.pumpAndSettle();
+      expect(tabs, [1, 2]);
+    });
+
+    testWidgets('Cari Menu membuka layar Cari', (tester) async {
+      await tester.pumpWidget(
+          _wrap(<http.Request>[], const HomeScreen(), routes: stubRoutes));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cari Menu →'));
+      await tester.pumpAndSettle();
+      expect(find.text('layar-cari'), findsOneWidget);
+    });
+
+    testWidgets('Home tanpa tab: CTA Pesanan membuka rute Pesanan',
+        (tester) async {
+      await tester.pumpWidget(
+          _wrap(<http.Request>[], const HomeScreen(), routes: stubRoutes));
+      await tester.pumpAndSettle();
+      await nextBanner(tester);
+      await tester.tap(find.text('Lihat Pesanan →'));
+      await tester.pumpAndSettle();
+      expect(find.text('layar-pesanan'), findsOneWidget);
+    });
+  });
 
   testWidgets('empty menus shows empty text', (tester) async {
     final log = <http.Request>[];

@@ -24,6 +24,30 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+enum _BannerAction { search, orders, assistant }
+
+/// Banner informasi layanan. Backend tidak punya promo publik (promo hanya
+/// kode di checkout), jadi banner tidak menjanjikan diskon atau pengantaran.
+class _InfoBanner {
+  const _InfoBanner({
+    required this.tag,
+    required this.title,
+    required this.subtitle,
+    required this.image,
+    this.cta,
+    this.action,
+  });
+
+  final String tag;
+  final String title;
+  final String subtitle;
+  final String image;
+
+  /// Tanpa [cta]/[action] tombol tidak ditampilkan.
+  final String? cta;
+  final _BannerAction? action;
+}
+
 class _HomeScreenState extends State<HomeScreen> {
   String _selectedCategory = 'Semua';
   String? _selectedSlug;
@@ -38,29 +62,55 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentBannerIndex = 0;
   final PageController _bannerController = PageController();
 
-  static const List<Map<String, dynamic>> _promoBanners = [
-    {
-      'tag': 'SPECIAL PROMO',
-      'title': 'Summer Sale',
-      'subtitle': 'Diskon s/d 50% untuk Danusan',
-      'cta': 'Pesan Sekarang →',
-      'image': 'assets/images/banner_promo.png',
-    },
-    {
-      'tag': 'GRATIS ONGKIR',
-      'title': 'Antar Seluruh UB',
-      'subtitle': 'Bebas biaya kirim ke semua fakultas',
-      'cta': 'Klaim Promo →',
-      'image': 'assets/images/nasi_kuning.png',
-    },
-    {
-      'tag': 'PAKET DANUSAN',
-      'title': 'Paket Rapat Hemat',
-      'subtitle': 'Catering snack & makan siang organisasi',
-      'cta': 'Pilih Menu →',
-      'image': 'assets/images/lumpia_diego.png',
-    },
+  static const List<_InfoBanner> _infoBanners = [
+    _InfoBanner(
+      tag: 'TITIK TEMU',
+      title: 'Ambil di Titik Temu',
+      subtitle:
+          'Pilih titik temu kampus saat checkout, lalu ambil pesananmu di sana.',
+      cta: 'Cari Menu →',
+      action: _BannerAction.search,
+      image: 'assets/images/nasi_kuning.png',
+    ),
+    _InfoBanner(
+      tag: 'PEMBAYARAN',
+      title: 'VA, QRIS & E-Wallet',
+      subtitle: 'Bayar lewat Midtrans: VA BCA, BNI, BRI, atau QRIS & e-wallet.',
+      cta: 'Lihat Pesanan →',
+      action: _BannerAction.orders,
+      image: 'assets/images/lumpia_diego.png',
+    ),
+    _InfoBanner(
+      tag: 'UNTUK ACARA',
+      title: 'Atur Waktu Ambil',
+      subtitle:
+          'Pilih tanggal & jam ambil hingga 7 hari ke depan untuk acaramu.',
+      cta: 'Tanya AI →',
+      action: _BannerAction.assistant,
+      image: 'assets/images/banner_promo.png',
+    ),
   ];
+
+  /// Tab di MainNavigationScreen; bila Home dibuka sendiri, rute biasa.
+  void _onBannerTap(_BannerAction action) {
+    final tab = widget.onTabChange;
+    switch (action) {
+      case _BannerAction.search:
+        Navigator.pushNamed(context, AppRoutes.search);
+      case _BannerAction.orders:
+        if (tab != null) {
+          tab(1);
+        } else {
+          Navigator.pushNamed(context, AppRoutes.orders);
+        }
+      case _BannerAction.assistant:
+        if (tab != null) {
+          tab(2);
+        } else {
+          Navigator.pushNamed(context, AppRoutes.aiAssistant);
+        }
+    }
+  }
 
   late final AuthProvider _auth;
   late bool _wasLoggedIn;
@@ -422,18 +472,18 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 20),
 
-              // ---------------- PROMO BANNER CAROUSEL (FIGMA) ----------------
+              // ---------------- BANNER INFO LAYANAN ----------------
               SizedBox(
                 width: double.infinity,
                 height: 172,
                 child: PageView.builder(
                   controller: _bannerController,
-                  itemCount: _promoBanners.length,
+                  itemCount: _infoBanners.length,
                   onPageChanged: (index) {
                     setState(() => _currentBannerIndex = index);
                   },
                   itemBuilder: (context, index) {
-                    final banner = _promoBanners[index];
+                    final banner = _infoBanners[index];
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 2),
                       decoration: BoxDecoration(
@@ -453,7 +503,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(20),
                               child: Image.asset(
-                                banner['image'] as String,
+                                banner.image,
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) => Container(
                                   color: AppColors.primary,
@@ -494,7 +544,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    banner['tag'] as String,
+                                    banner.tag,
                                     style: AppTextStyles.badge.copyWith(
                                       color: Colors.white,
                                       fontSize: 10,
@@ -505,7 +555,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  banner['title'] as String,
+                                  banner.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: AppTextStyles.h2.copyWith(
                                     color: Colors.white,
                                     fontSize: 22,
@@ -514,40 +566,38 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  banner['subtitle'] as String,
+                                  banner.subtitle,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                   style: AppTextStyles.bodySmall.copyWith(
                                     color: const Color(0xFFFEF3C7),
                                     fontWeight: FontWeight.w500,
                                     fontSize: 12,
                                   ),
                                 ),
-                                const SizedBox(height: 12),
-                                GestureDetector(
-                                  onTap: () {
-                                    Navigator.pushNamed(
-                                        context, AppRoutes.search);
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          banner['cta'] as String,
-                                          style: AppTextStyles.bodySmall.copyWith(
-                                            color: AppColors.primary,
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 11,
-                                          ),
+                                if (banner.cta != null &&
+                                    banner.action != null) ...[
+                                  const SizedBox(height: 12),
+                                  GestureDetector(
+                                    onTap: () => _onBannerTap(banner.action!),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 14, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Text(
+                                        banner.cta!,
+                                        style: AppTextStyles.bodySmall.copyWith(
+                                          color: AppColors.primary,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 11,
                                         ),
-                                      ],
+                                      ),
                                     ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           ),
@@ -561,7 +611,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // Dots Indicator
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(_promoBanners.length, (index) {
+                children: List.generate(_infoBanners.length, (index) {
                   final isSelected = _currentBannerIndex == index;
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
