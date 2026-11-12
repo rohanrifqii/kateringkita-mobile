@@ -9,6 +9,7 @@ import 'core/app_router.dart';
 import 'core/app_theme.dart';
 import 'api/api_client.dart';
 import 'core/app_routes.dart';
+import 'data/ai_history_store.dart';
 import 'data/assistant_repository.dart';
 import 'data/auth_repository.dart';
 import 'data/catalog_repository.dart';
@@ -117,6 +118,7 @@ Widget buildAppProviders({
       Provider<NotificationRepository>.value(value: notificationRepo),
       ChangeNotifierProvider<NotificationProvider>.value(value: notifications),
       Provider<AssistantRepository>.value(value: AssistantRepository(api)),
+      Provider<AiHistoryStore>.value(value: AiHistoryStore()),
     ],
     child: child,
   );

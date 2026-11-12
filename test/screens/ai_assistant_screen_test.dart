@@ -6,13 +6,18 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/core/app_routes.dart';
+import 'package:kateringkita_pbl/data/ai_history_store.dart';
 import 'package:kateringkita_pbl/data/assistant_repository.dart';
 import 'package:kateringkita_pbl/data/catalog_repository.dart';
+import 'package:kateringkita_pbl/models/ai_session.dart';
 import 'package:kateringkita_pbl/models/api_user.dart';
 import 'package:kateringkita_pbl/models/product_model.dart';
+import 'package:kateringkita_pbl/models/recommendation.dart';
 import 'package:kateringkita_pbl/providers/cart_provider.dart';
 import 'package:kateringkita_pbl/screens/ai/ai_assistant_screen.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import '../support/session.dart';
 
@@ -111,6 +116,7 @@ class _Harness {
     return MultiProvider(
       providers: [
         Provider<AssistantRepository>.value(value: AssistantRepository(api)),
+        Provider<AiHistoryStore>.value(value: AiHistoryStore()),
         Provider<CatalogRepository>.value(value: CatalogRepository(api)),
         ChangeNotifierProvider<CartProvider>.value(value: cart),
         ...sessionProviders(api, auth: auth),
@@ -144,7 +150,207 @@ Future<void> _ask(WidgetTester tester, String question,
   await tester.pumpAndSettle();
 }
 
+FakeAuth _user(int id, String name) => FakeAuth(
+      loggedIn: true,
+      user: ApiUser(id: id, role: 'customer', fullName: name, phone: '08123'),
+    );
+
+Future<void> _openHistory(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Riwayat'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
+  setUp(() {
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.empty();
+  });
+
+  group('riwayat percakapan', () {
+    testWidgets('kosong di awal (tanpa sesi contoh), tersimpan setelah tanya',
+        (tester) async {
+      final h = _Harness((req) async => _json(_recommendation()));
+      await tester.pumpWidget(h.app());
+      await tester.pumpAndSettle();
+      await _openHistory(tester);
+      expect(find.textContaining('Belum ada riwayat'), findsOneWidget);
+      await tester.tap(find.byTooltip('Tutup'));
+      await tester.pumpAndSettle();
+
+      await _ask(tester, 'danusan nasi box', budget: '600000', portions: '30');
+      await _openHistory(tester);
+      final drawer = find.byType(Drawer);
+      expect(find.descendant(of: drawer, matching: find.text('danusan nasi box')),
+          findsOneWidget);
+      expect(
+          find.descendant(
+              of: drawer, matching: find.textContaining('Rp 540.000')),
+          findsOneWidget);
+
+      // Tersimpan di perangkat dengan kunci id pengguna.
+      final saved = await AiHistoryStore().load(1);
+      expect(saved.single.question, 'danusan nasi box');
+      expect(saved.single.budget, 600000);
+      expect(saved.single.portions, 30);
+      expect(saved.single.result.total, 540000);
+    });
+
+    testWidgets('buka sesi lama: snapshot + catatan, Perbarui memanggil API',
+        (tester) async {
+      final now = DateTime.now().toUtc();
+      await AiHistoryStore().upsert(
+          1,
+          AiSession(
+            id: 'lama',
+            question: 'snack seminar 50 orang',
+            budget: 600000,
+            portions: 50,
+            sellPrice: 25000,
+            category: 'snack',
+            result: Recommendation.fromJson(
+                _recommendation()['data'] as Map<String, dynamic>),
+            savedAt: now.subtract(const Duration(hours: 3)),
+          ));
+      final h = _Harness((req) async => _json(_recommendation()));
+      await tester.pumpWidget(h.app());
+      await tester.pumpAndSettle();
+      expect(h.posts, isEmpty);
+
+      await _openHistory(tester);
+      await tester.tap(find.text('snack seminar 50 orang'));
+      await tester.pumpAndSettle();
+
+      final note = find.byKey(const ValueKey('ai-snapshot-note'));
+      expect(note, findsOneWidget);
+      expect(find.textContaining('Harga & stok bisa sudah berubah'),
+          findsOneWidget);
+      expect(find.text('Nasi Box'), findsOneWidget);
+      // Parameter sesi dipulihkan, termasuk harga jual -> kalkulator terisi.
+      expect(
+          tester.widget<Text>(find.byKey(const ValueKey('ai-roi'))).data,
+          '+177,8%');
+      final q = tester.widget<TextField>(
+          find.byKey(const ValueKey('ai-question')));
+      expect(q.controller!.text, 'snack seminar 50 orang');
+
+      await tester.ensureVisible(find.text('Perbarui'));
+      await tester.tap(find.text('Perbarui'));
+      await tester.pumpAndSettle();
+      expect(jsonDecode(h.posts.single.body), {
+        'question': 'snack seminar 50 orang',
+        'budget': 600000,
+        'portions': 50,
+        'category': 'snack',
+      });
+      expect(note, findsNothing);
+      final saved = (await AiHistoryStore().load(1)).single;
+      expect(saved.id, 'lama');
+      expect(saved.savedAt.isAfter(now.subtract(const Duration(minutes: 1))),
+          isTrue);
+    });
+
+    testWidgets('Perbarui gagal (429): pesan di catatan, snapshot tetap',
+        (tester) async {
+      await AiHistoryStore().upsert(
+          1,
+          AiSession(
+            id: 'lama',
+            question: 'snack seminar',
+            result: Recommendation.fromJson(
+                _recommendation()['data'] as Map<String, dynamic>),
+            savedAt: DateTime.now().toUtc(),
+          ));
+      final h = _Harness((req) async => _err(429, 'RATE_LIMITED', 'x'));
+      await tester.pumpWidget(h.app());
+      await tester.pumpAndSettle();
+      await _openHistory(tester);
+      await tester.tap(find.text('snack seminar'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Perbarui'));
+      await tester.tap(find.text('Perbarui'));
+      await tester.pumpAndSettle();
+      expect(
+          find.text('Terlalu banyak pertanyaan. Coba lagi beberapa menit lagi.'),
+          findsOneWidget);
+      expect(find.byKey(const ValueKey('ai-snapshot-note')), findsOneWidget);
+    });
+
+    testWidgets('hapus per sesi dan hapus semua', (tester) async {
+      final store = AiHistoryStore();
+      final rec = Recommendation.fromJson(
+          _recommendation()['data'] as Map<String, dynamic>);
+      final t = DateTime.now().toUtc();
+      await store.upsert(1, AiSession(id: 'a', question: 'tanya satu',
+          result: rec, savedAt: t));
+      await store.upsert(1, AiSession(id: 'b', question: 'tanya dua',
+          result: rec, savedAt: t.add(const Duration(seconds: 1))));
+      final h = _Harness((req) async => _json(_recommendation()));
+      await tester.pumpWidget(h.app());
+      await tester.pumpAndSettle();
+
+      await _openHistory(tester);
+      await tester.tap(find.byTooltip('Hapus riwayat').first);
+      await tester.pumpAndSettle();
+      expect(find.text('tanya dua'), findsNothing);
+      expect(find.text('tanya satu'), findsOneWidget);
+      expect((await store.load(1)).map((s) => s.id), ['a']);
+
+      await tester.tap(find.text('Hapus Semua'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Hapus'));
+      await tester.pumpAndSettle();
+      expect(find.text('tanya satu'), findsNothing);
+      expect(await store.load(1), isEmpty);
+    });
+
+    testWidgets('akun lain di HP yang sama tidak melihat riwayat',
+        (tester) async {
+      await AiHistoryStore().upsert(
+          1,
+          AiSession(
+            id: 'milik-budi',
+            question: 'rahasia budi',
+            result: Recommendation.fromJson(
+                _recommendation()['data'] as Map<String, dynamic>),
+            savedAt: DateTime.now().toUtc(),
+          ));
+      final h = _Harness((req) async => _json(_recommendation()),
+          auth: _user(2, 'Sari'));
+      await tester.pumpWidget(h.app());
+      await tester.pumpAndSettle();
+      await _openHistory(tester);
+      expect(find.text('rahasia budi'), findsNothing);
+      expect(find.textContaining('Belum ada riwayat'), findsOneWidget);
+    });
+
+    testWidgets('keluar membuang riwayat di layar; masuk lagi memuatnya',
+        (tester) async {
+      final h = _Harness((req) async => _json(_recommendation()));
+      await tester.pumpWidget(h.app());
+      await tester.pumpAndSettle();
+      await _ask(tester, 'danusan nasi box');
+      h.auth.set(false);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Riwayat'), findsNothing);
+      h.auth.set(true);
+      await tester.pumpAndSettle();
+      await _openHistory(tester);
+      expect(find.text('danusan nasi box'), findsOneWidget);
+    });
+
+    testWidgets('harga jual yang diubah ikut tersimpan di sesi', (tester) async {
+      final h = _Harness((req) async => _json(_recommendation()));
+      await tester.pumpWidget(h.app());
+      await tester.pumpAndSettle();
+      await _ask(tester, 'danusan nasi box');
+      final price = find.byKey(const ValueKey('ai-sell-price'));
+      await tester.ensureVisible(price);
+      await tester.enterText(price, '9000');
+      await tester.pumpAndSettle();
+      expect((await AiHistoryStore().load(1)).single.sellPrice, 9000);
+    });
+  });
+
   testWidgets('tamu: ajakan masuk tanpa permintaan apa pun', (tester) async {
     final h = _Harness((req) async => _json(_recommendation()),
         auth: FakeAuth());

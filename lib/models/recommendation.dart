@@ -59,11 +59,15 @@ class Recommendation {
   final List<RecommendationGroup> groups;
   final int total;
 
+  /// JSON mentah dari server, disimpan apa adanya sebagai snapshot riwayat.
+  final Map<String, dynamic> json;
+
   const Recommendation({
     required this.source,
     required this.summary,
     required this.groups,
     required this.total,
+    this.json = const {},
   });
 
   bool get isAi => source == 'ai';
@@ -76,5 +80,6 @@ class Recommendation {
                 RecommendationGroup.fromJson(e as Map<String, dynamic>))
             .toList(),
         total: (json['total'] as num?)?.toInt() ?? 0,
+        json: json,
       );
 }

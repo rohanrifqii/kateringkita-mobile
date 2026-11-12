@@ -5,11 +5,14 @@ import 'package:provider/provider.dart';
 import '../../api/api_exception.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
-import '../../core/danusan_calculator.dart';
 import '../../core/app_routes.dart';
+import '../../core/danusan_calculator.dart';
+import '../../core/relative_time.dart';
 import '../../core/require_login.dart';
+import '../../data/ai_history_store.dart';
 import '../../data/assistant_repository.dart';
 import '../../data/catalog_repository.dart';
+import '../../models/ai_session.dart';
 import '../../models/category_model.dart';
 import '../../models/product_model.dart';
 import '../../models/recommendation.dart';
@@ -42,6 +45,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   final _sellPriceController = TextEditingController();
   final _scrollController = ScrollController();
   final _resultKey = GlobalKey();
+  final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   List<CategoryModel> _categories = const [];
   String? _categorySlug;
@@ -57,6 +61,22 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   String? _budgetError;
   String? _portionsError;
 
+  // Riwayat di perangkat, per akun.
+  late final AiHistoryStore _store;
+  List<AiSession> _history = const [];
+  int? _historyUserId;
+
+  /// Sesi yang sedang tampil (null = belum ada hasil / tidak tersimpan).
+  AiSession? _session;
+
+  /// true bila [_result] dibuka dari riwayat (snapshot lama).
+  bool _isSnapshot = false;
+  bool _refreshing = false;
+  String? _refreshError;
+
+  /// Penulisan riwayat diurutkan supaya tidak saling menimpa.
+  Future<void> _saveChain = Future.value();
+
   late final AuthProvider _auth;
   late bool _wasLoggedIn;
 
@@ -64,9 +84,13 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   void initState() {
     super.initState();
     _auth = context.read<AuthProvider>();
+    _store = context.read<AiHistoryStore>();
     _wasLoggedIn = _auth.isLoggedIn;
     _auth.addListener(_onAuthChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCategories());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadCategories();
+      _loadHistory();
+    });
   }
 
   @override
@@ -80,26 +104,189 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     super.dispose();
   }
 
-  /// Keluar: hasil milik akun sebelumnya dibuang.
+  /// Masuk: muat riwayat akun ini. Keluar: hasil & riwayat di layar dibuang
+  /// (tetap tersimpan di perangkat untuk akun itu saja).
   void _onAuthChanged() {
     final now = _auth.isLoggedIn;
     if (now == _wasLoggedIn || !mounted) return;
     _wasLoggedIn = now;
     if (now) {
       _loadCategories();
+      _loadHistory();
       return;
     }
+    _resetScreen(clearHistory: true);
+  }
+
+  /// Kosongkan isian & hasil (percakapan baru / keluar).
+  void _resetScreen({bool clearHistory = false}) {
     _seq++;
     setState(() {
       _loading = false;
+      _refreshing = false;
+      _refreshError = null;
       _result = null;
       _resultBudget = null;
+      _session = null;
+      _isSnapshot = false;
       _error = null;
+      _questionError = null;
+      _budgetError = null;
+      _portionsError = null;
       _questionController.clear();
       _budgetController.clear();
       _portionsController.clear();
       _sellPriceController.clear();
       _categorySlug = null;
+      if (clearHistory) {
+        _history = const [];
+        _historyUserId = null;
+      }
+    });
+  }
+
+  Future<void> _loadHistory() async {
+    final uid = _auth.user?.id;
+    if (!_auth.isLoggedIn || uid == null) return;
+    try {
+      final list = await _store.load(uid);
+      if (!mounted || _auth.user?.id != uid) return;
+      setState(() {
+        _history = list;
+        _historyUserId = uid;
+      });
+    } catch (_) {
+      // Riwayat hanya pelengkap; layar tetap bisa dipakai.
+    }
+  }
+
+  void _persist(AiSession s) {
+    final uid = _historyUserId ?? _auth.user?.id;
+    if (uid == null) return;
+    _saveChain = _saveChain.then((_) async {
+      final list = await _store.upsert(uid, s);
+      if (mounted && _auth.user?.id == uid) setState(() => _history = list);
+    }).catchError((_) {});
+  }
+
+  void _onSellPriceChanged(String _) {
+    final s = _session;
+    if (s != null) {
+      _session = s.withSellPrice(_parse(_sellPriceController));
+      _persist(_session!);
+    }
+    setState(() {});
+  }
+
+  void _openSession(AiSession s) {
+    _seq++;
+    setState(() {
+      _session = s;
+      _result = s.result;
+      _resultBudget = s.budget;
+      _isSnapshot = true;
+      _loading = false;
+      _refreshing = false;
+      _refreshError = null;
+      _error = null;
+      _questionError = null;
+      _budgetError = null;
+      _portionsError = null;
+      _questionController.text = s.question;
+      _budgetController.text = s.budget?.toString() ?? '';
+      _portionsController.text = s.portions?.toString() ?? '';
+      _sellPriceController.text = s.sellPrice?.toString() ?? '';
+      _categorySlug = s.category;
+    });
+    _scrollToResult();
+  }
+
+  /// Panggil ulang API dengan parameter sesi lama; sesi diganti hasil baru.
+  Future<void> _refreshSession() async {
+    final s = _session;
+    if (s == null || _refreshing || _loading) return;
+    final repo = context.read<AssistantRepository>();
+    final seq = ++_seq;
+    setState(() {
+      _refreshing = true;
+      _refreshError = null;
+    });
+    try {
+      final r = await repo.recommend(
+        question: s.question,
+        budget: s.budget,
+        portions: s.portions,
+        category: s.category,
+      );
+      if (!mounted || seq != _seq) return;
+      final updated = s
+          .withResult(r, DateTime.now().toUtc())
+          .withSellPrice(_parse(_sellPriceController));
+      setState(() {
+        _session = updated;
+        _result = r;
+        _resultBudget = s.budget;
+        _isSnapshot = false;
+        _refreshing = false;
+      });
+      _persist(updated);
+    } catch (e) {
+      if (!mounted || seq != _seq) return;
+      setState(() {
+        _refreshing = false;
+        _refreshError = _errorText(e);
+      });
+    }
+  }
+
+  Future<void> _deleteSession(AiSession s) async {
+    final uid = _historyUserId;
+    if (uid == null) return;
+    if (_session?.id == s.id) _resetScreen();
+    setState(() => _history = [
+          for (final h in _history)
+            if (h.id != s.id) h
+        ]);
+    _saveChain = _saveChain.then((_) async {
+      final list = await _store.remove(uid, s.id);
+      if (mounted && _auth.user?.id == uid) setState(() => _history = list);
+    }).catchError((_) {});
+  }
+
+  Future<void> _clearHistory() async {
+    final uid = _historyUserId;
+    if (uid == null) return;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Hapus semua riwayat?'),
+        content: const Text(
+            'Semua riwayat Asisten AI akunmu di perangkat ini akan dihapus.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(c, false),
+              child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('Hapus')),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    if (_session != null) _resetScreen();
+    setState(() => _history = const []);
+    _saveChain =
+        _saveChain.then((_) => _store.clear(uid)).catchError((_) {});
+  }
+
+  void _scrollToResult() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final ctx = _resultKey.currentContext;
+      if (ctx != null && ctx.mounted) {
+        Scrollable.ensureVisible(ctx,
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOutCubic);
+      }
     });
   }
 
@@ -149,7 +336,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   }
 
   Future<void> _submit() async {
-    if (_loading) return;
+    if (_loading || _refreshing) return;
     FocusScope.of(context).unfocus();
     if (!_validate()) return;
     final repo = context.read<AssistantRepository>();
@@ -158,28 +345,39 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       _loading = true;
       _error = null;
     });
+    final question = _questionController.text.trim();
     final budget = _parse(_budgetController);
+    final portions = _parse(_portionsController);
+    final category = _categorySlug;
     try {
       final result = await repo.recommend(
-        question: _questionController.text,
+        question: question,
         budget: budget,
-        portions: _parse(_portionsController),
-        category: _categorySlug,
+        portions: portions,
+        category: category,
       );
       if (!mounted || seq != _seq) return;
+      final now = DateTime.now().toUtc();
+      final session = AiSession(
+        id: '${now.microsecondsSinceEpoch}',
+        question: question,
+        budget: budget,
+        portions: portions,
+        sellPrice: _parse(_sellPriceController),
+        category: category,
+        result: result,
+        savedAt: now,
+      );
       setState(() {
         _result = result;
         _resultBudget = budget;
+        _session = session;
+        _isSnapshot = false;
+        _refreshError = null;
         _loading = false;
       });
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        final ctx = _resultKey.currentContext;
-        if (ctx != null && ctx.mounted) {
-          Scrollable.ensureVisible(ctx,
-              duration: const Duration(milliseconds: 350),
-              curve: Curves.easeOutCubic);
-        }
-      });
+      _persist(session);
+      _scrollToResult();
     } catch (e) {
       if (!mounted || seq != _seq) return;
       setState(() {
@@ -221,12 +419,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: AppColors.background,
+      endDrawer: auth.isLoggedIn ? _historyDrawer() : null,
       body: SafeArea(
         bottom: false,
         child: Column(
           children: [
-            _appBar(),
+            _appBar(auth.isLoggedIn),
             Expanded(
               child: SingleChildScrollView(
                 controller: _scrollController,
@@ -256,7 +456,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
-  Widget _appBar() => Padding(
+  Widget _appBar(bool loggedIn) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: SizedBox(
           height: 48,
@@ -281,10 +481,186 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                   letterSpacing: -0.3,
                 ),
               ),
+              if (loggedIn)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: IconButton(
+                    tooltip: 'Riwayat',
+                    icon: Icon(Icons.history_rounded,
+                        color: AppColors.textPrimary, size: 22),
+                    onPressed: () {
+                      FocusScope.of(context).unfocus();
+                      _scaffoldKey.currentState?.openEndDrawer();
+                    },
+                  ),
+                ),
             ],
           ),
         ),
       );
+
+  /// Riwayat sesi akun ini (terbaru di atas), seperti sidebar chat.
+  Widget _historyDrawer() {
+    final width = MediaQuery.sizeOf(context).width * 0.82;
+    return Drawer(
+      width: width > 360 ? 360 : width,
+      backgroundColor: AppColors.background,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(28),
+          bottomLeft: Radius.circular(28),
+        ),
+      ),
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 12, 6),
+              child: Row(
+                children: [
+                  _aiBadge(size: 34),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Riwayat Asisten',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Tutup',
+                    icon: Icon(Icons.close_rounded,
+                        color: AppColors.textSecondary, size: 22),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: _accent,
+                  side: const BorderSide(color: _accent),
+                  minimumSize: const Size.fromHeight(44),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24)),
+                ),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _resetScreen();
+                },
+                icon: const Icon(Icons.edit_note_rounded),
+                label: const Text('Percakapan baru'),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 12, 0),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Tersimpan di perangkat ini untuk akunmu',
+                      style: TextStyle(
+                          fontSize: 11, color: AppColors.textSecondary),
+                    ),
+                  ),
+                  if (_history.isNotEmpty)
+                    TextButton(
+                      onPressed: _clearHistory,
+                      style: TextButton.styleFrom(
+                          foregroundColor: AppColors.danger),
+                      child: const Text('Hapus Semua',
+                          style: TextStyle(
+                              fontSize: 11.5, fontWeight: FontWeight.w700)),
+                    ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: _history.isEmpty
+                  ? Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(28),
+                        child: Text(
+                          'Belum ada riwayat. Setiap rekomendasi tersimpan '
+                          'otomatis di sini.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.textMuted),
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                      itemCount: _history.length,
+                      itemBuilder: (_, i) => _historyTile(_history[i]),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _historyTile(AiSession s) {
+    final selected = s.id == _session?.id;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Material(
+        color: selected ? AppColors.primarySoft : Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () {
+            Navigator.of(context).pop();
+            _openSession(s);
+          },
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        s.question,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${relativeTimeWib(s.savedAt)} · '
+                        '${AppCurrency.format(s.result.total)}',
+                        style: TextStyle(
+                            fontSize: 11, color: AppColors.textMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Hapus riwayat',
+                  icon: Icon(Icons.delete_outline_rounded,
+                      size: 20, color: AppColors.textMuted),
+                  onPressed: () => _deleteSession(s),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   BoxDecoration _card() => BoxDecoration(
         color: AppColors.surface,
@@ -635,6 +1011,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 ),
               ],
             ),
+            if (_isSnapshot && _session != null) ...[
+              const SizedBox(height: 12),
+              _snapshotNote(_session!),
+            ],
             const SizedBox(height: 12),
             Container(
               width: double.infinity,
@@ -684,6 +1064,66 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               const SizedBox(height: 4),
               _calculator(r),
             ],
+          ],
+        ),
+      );
+
+  Widget _snapshotNote(AiSession s) => Container(
+        key: const ValueKey('ai-snapshot-note'),
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+        decoration: BoxDecoration(
+          color: AppColors.warningLight,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.history_rounded,
+                    color: AppColors.warning, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Hasil tersimpan ${relativeTimeWib(s.savedAt)}. '
+                    'Harga & stok bisa sudah berubah.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.35,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                _refreshing
+                    ? const Padding(
+                        padding: EdgeInsets.all(10),
+                        child: SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    : TextButton(
+                        onPressed: _loading ? null : _refreshSession,
+                        style: TextButton.styleFrom(foregroundColor: _accent),
+                        child: const Text('Perbarui',
+                            style: TextStyle(fontWeight: FontWeight.w800)),
+                      ),
+              ],
+            ),
+            if (_refreshError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, right: 6),
+                child: Text(
+                  _refreshError!,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.danger,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
           ],
         ),
       );
@@ -776,7 +1216,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               fontWeight: FontWeight.w600,
               color: AppColors.textPrimary,
             ),
-            onChanged: (_) => setState(() {}),
+            onChanged: _onSellPriceChanged,
             decoration: _input('Mis. 5000', suffix: 'Rp'),
           ),
           const SizedBox(height: 8),
