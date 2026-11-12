@@ -12,6 +12,7 @@ import '../../core/require_login.dart';
 import '../../data/catalog_repository.dart';
 import '../../data/order_repository.dart';
 import '../../models/order_api_model.dart';
+import '../../models/product_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/cart_provider.dart';
 import '../../widgets/menu_image.dart';
@@ -39,6 +40,7 @@ class _OrderListViewState extends State<OrderListView>
   bool _loading = true;
   String? _error;
   bool _fetching = false;
+  int _seq = 0;
   bool _foreground = true;
   bool _visible = true;
   bool _wasVisible = true;
@@ -84,32 +86,37 @@ class _OrderListViewState extends State<OrderListView>
   bool get _loggedIn => context.read<AuthProvider>().isLoggedIn;
 
   void _poll() {
-    if (!mounted || !_foreground || !_visible || !_loggedIn) return;
+    if (!mounted || !_foreground || !_visible || !_loggedIn || _fetching) {
+      return;
+    }
     _load(silent: true);
   }
 
+  /// Setiap pemuatan mengambil nomor urut; hasil dari permintaan yang lebih
+  /// lama (mis. query sudah berganti) diabaikan.
   Future<void> _load({bool silent = false}) async {
-    if (!mounted || !_loggedIn || _fetching) return;
+    if (!mounted || !_loggedIn) return;
+    final seq = ++_seq;
     _fetching = true;
     if (!silent) setState(() => _loading = true);
     try {
       final res = await context
           .read<OrderRepository>()
           .list(tab: widget.tab, q: widget.query);
-      if (!mounted) return;
+      if (!mounted || seq != _seq) return;
       setState(() {
         _orders = res.items;
         _error = null;
         _loading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || seq != _seq) return;
       setState(() {
         if (!silent || _orders.isEmpty) _error = _msg(e);
         _loading = false;
       });
     } finally {
-      _fetching = false;
+      if (seq == _seq) _fetching = false;
     }
   }
 
@@ -131,19 +138,47 @@ class _OrderListViewState extends State<OrderListView>
     }
   }
 
-  Future<void> _cancel(OrderApiModel o) => _run(o, () async {
-        await context.read<OrderRepository>().cancel(o.code);
-        if (!mounted) return;
-        _snack('Pesanan ${o.code} telah dibatalkan.');
-        await _load(silent: true);
-      });
+  Future<bool> _confirm(String title, String body, String no, String yes) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text(title),
+        content: Text(body),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: Text(no)),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: Text(yes)),
+        ],
+      ),
+    );
+    return ok == true;
+  }
 
-  Future<void> _complete(OrderApiModel o) => _run(o, () async {
-        await context.read<OrderRepository>().complete(o.code);
-        if (!mounted) return;
-        _snack('Pesanan ${o.code} selesai! Terima kasih.');
-        await _load(silent: true);
-      });
+  Future<void> _cancel(OrderApiModel o) async {
+    if (!await _confirm('Batalkan pesanan?',
+        'Pesanan ini akan dibatalkan dan tidak bisa dikembalikan.',
+        'Tidak', 'Ya, Batalkan')) {
+      return;
+    }
+    await _run(o, () async {
+      await context.read<OrderRepository>().cancel(o.code);
+      if (!mounted) return;
+      _snack('Pesanan ${o.code} telah dibatalkan.');
+      await _load(silent: true);
+    });
+  }
+
+  Future<void> _complete(OrderApiModel o) async {
+    if (!await _confirm('Pesanan sudah diambil?',
+        'Pesanan akan ditandai selesai.', 'Belum', 'Sudah')) {
+      return;
+    }
+    await _run(o, () async {
+      await context.read<OrderRepository>().complete(o.code);
+      if (!mounted) return;
+      _snack('Pesanan ${o.code} selesai! Terima kasih.');
+      await _load(silent: true);
+    });
+  }
 
   Future<void> _pay(OrderApiModel o) => _run(o, () async {
         final full = await context.read<OrderRepository>().get(o.code);
@@ -152,29 +187,44 @@ class _OrderListViewState extends State<OrderListView>
         if (mounted) _load(silent: true);
       });
 
+  static const _unavailable =
+      'Beberapa pilihan menu sudah tidak tersedia. Silakan pesan ulang dari halaman menu.';
+
   Future<void> _reorder(OrderApiModel o) => _run(o, () async {
         final orders = context.read<OrderRepository>();
         final catalog = context.read<CatalogRepository>();
         final cart = context.read<CartProvider>();
         final res = await orders.reorder(o.code);
-        final lines = (res.request['items'] as List).cast<Map>();
-        var first = true;
+        final lines = ((res.request['items'] as List?) ?? const []).cast<Map>();
+        if (lines.isEmpty) {
+          _snack(_unavailable);
+          return;
+        }
+        // Ambil & validasi semua menu dulu; keranjang baru diganti bila semua
+        // berhasil.
+        final resolved = <(ProductModel, MenuOption?, int)>[];
         for (final l in lines) {
           final menu = await catalog.menuDetail((l['menu_id'] as num).toInt());
           final ids = ((l['option_ids'] as List?) ?? const [])
               .map((e) => (e as num).toInt())
-              .toSet();
-          final opt = menu.options.where((x) => ids.contains(x.id));
-          final qty = (l['qty'] as num).toInt();
-          if (first) {
-            cart.replaceWith(menu,
-                option: opt.isEmpty ? null : opt.first, qty: qty);
-            first = false;
-          } else {
-            cart.add(menu, option: opt.isEmpty ? null : opt.first, qty: qty);
+              .toList();
+          final opts = menu.options.where((x) => ids.contains(x.id)).toList();
+          if (!menu.canOrder || opts.length != ids.length || ids.length > 1) {
+            if (mounted) _snack(_unavailable);
+            return;
           }
+          resolved.add(
+              (menu, opts.isEmpty ? null : opts.first, (l['qty'] as num).toInt()));
         }
         if (!mounted) return;
+        for (var i = 0; i < resolved.length; i++) {
+          final (menu, opt, qty) = resolved[i];
+          if (i == 0) {
+            cart.replaceWith(menu, option: opt, qty: qty);
+          } else {
+            cart.add(menu, option: opt, qty: qty);
+          }
+        }
         await Navigator.pushNamed(context, AppRoutes.checkout);
       });
 

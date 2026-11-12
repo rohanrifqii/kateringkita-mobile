@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -5,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
+import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/data/catalog_repository.dart';
 import 'package:kateringkita_pbl/data/order_repository.dart';
 import 'package:kateringkita_pbl/models/order_api_model.dart';
@@ -73,6 +75,8 @@ Map<String, dynamic> _order(String code,
 Widget _wrap(
   Future<http.Response> Function(http.Request) handler, {
   bool loggedIn = true,
+  CartProvider? cart,
+  Map<String, WidgetBuilder> routes = const {},
 }) {
   final api = ApiClient(
       baseUrl: 'https://x.test/api/v1', client: MockClient(handler));
@@ -80,10 +84,10 @@ Widget _wrap(
     providers: [
       Provider<OrderRepository>.value(value: OrderRepository(api)),
       Provider<CatalogRepository>.value(value: CatalogRepository(api)),
-      ChangeNotifierProvider<CartProvider>(create: (_) => CartProvider()),
+      ChangeNotifierProvider<CartProvider>.value(value: cart ?? CartProvider()),
       ChangeNotifierProvider<AuthProvider>.value(value: _FakeAuth(loggedIn)),
     ],
-    child: const MaterialApp(home: OrdersScreen()),
+    child: MaterialApp(home: const OrdersScreen(), routes: routes),
   );
 }
 
@@ -130,9 +134,11 @@ void main() {
 
     await tester.tap(find.text('Batalkan'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Ya, Batalkan'));
+    await tester.pumpAndSettle();
 
     expect(cancelled, isTrue);
-    expect(listCalls, 2);
+    expect(listCalls, greaterThanOrEqualTo(2));
     expect(find.text('KK-1'), findsNothing);
   });
 
@@ -163,5 +169,155 @@ void main() {
     expect(l('cancelled', by: 'merchant'), 'Dibatalkan oleh penjual');
     expect(l('cancelled', by: 'system'), 'Dibatalkan oleh sistem');
     expect(l('expired'), 'Kedaluwarsa');
+  });
+
+  testWidgets('batal: "Tidak" tidak mengirim request', (tester) async {
+    var posts = 0;
+    await tester.pumpWidget(_wrap((req) async {
+      if (req.method == 'POST') posts++;
+      return _json({
+        'data': [_order('KK-1', cancel: true)],
+        'meta': {'total': 1}
+      });
+    }));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Batalkan'));
+    await tester.pumpAndSettle();
+    expect(find.text('Batalkan pesanan?'), findsOneWidget);
+    await tester.tap(find.text('Tidak'));
+    await tester.pumpAndSettle();
+    expect(posts, 0);
+  });
+
+  testWidgets('ganti query saat poll berjalan: hanya hasil query baru',
+      (tester) async {
+    final oldPoll = Completer<http.Response>();
+    var calls = 0;
+    await tester.pumpWidget(_wrap((req) async {
+      calls++;
+      final q = req.url.queryParameters['q'];
+      if (q == 'baru') {
+        return _json({
+          'data': [_order('KK-BARU')],
+          'meta': {'total': 1}
+        });
+      }
+      if (calls == 2) return oldPoll.future; // poll 15 dtk
+      return _json({
+        'data': [_order('KK-LAMA')],
+        'meta': {'total': 1}
+      });
+    }));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 15)); // poll menggantung
+    await tester.enterText(find.byType(TextField), 'baru');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    oldPoll.complete(_json({
+      'data': [_order('KK-LAMA')],
+      'meta': {'total': 1}
+    }));
+    await tester.pumpAndSettle();
+    expect(find.text('KK-BARU'), findsOneWidget);
+    expect(find.text('KK-LAMA'), findsNothing);
+  });
+
+  group('pesan lagi', () {
+    Map<String, dynamic> menu(int id, {List<int> opts = const []}) => {
+          'id': id,
+          'name': 'M$id',
+          'price': 1000,
+          'badge': 'available',
+          'available': 5,
+          'merchant': {
+            'id': 1,
+            'slug': 'a',
+            'business_name': 'A',
+            'is_open': true,
+            'open_time': '08:00',
+            'close_time': '17:00',
+            'pickup_points': [],
+          },
+          'options': [
+            for (final i in opts) {'id': i, 'name': 'O$i', 'extra_price': 0}
+          ],
+        };
+
+    Future<http.Response> Function(http.Request) handler(
+            {required List<Map<String, dynamic>> items,
+            bool failSecond = false,
+            List<int> menu7Opts = const []}) =>
+        (req) async {
+          final p = req.url.path;
+          if (p.endsWith('/reorder')) {
+            return _json({
+              'data': {
+                'request': {'items': items},
+                'quote': {
+                  'subtotal': 0,
+                  'discount': 0,
+                  'service_fee': 0,
+                  'total': 0
+                }
+              }
+            });
+          }
+          if (p.endsWith('/menus/7')) {
+            return _json({'data': menu(7, opts: menu7Opts)});
+          }
+          if (p.endsWith('/menus/8')) {
+            return failSecond
+                ? _json({
+                    'error': {'code': 'X', 'message': 'Menu gagal dimuat'}
+                  }, 500)
+                : _json({'data': menu(8)});
+          }
+          return _json({
+            'data': [_order('KK-1', status: 'completed')],
+            'meta': {'total': 1}
+          });
+        };
+
+    Future<void> openCompleted(WidgetTester t) async {
+      await t.pumpAndSettle();
+      await t.pumpAndSettle();
+    }
+
+    testWidgets('menuDetail kedua gagal: keranjang tidak berubah',
+        (tester) async {
+      final cart = CartProvider();
+      await tester.pumpWidget(_wrap(
+        handler(items: [
+          {'menu_id': 7, 'qty': 1, 'option_ids': []},
+          {'menu_id': 8, 'qty': 1, 'option_ids': []},
+        ], failSecond: true),
+        cart: cart,
+        routes: {AppRoutes.checkout: (_) => const Text('CHECKOUT')},
+      ));
+      await openCompleted(tester);
+      await tester.tap(find.text('Pesan Lagi'));
+      await tester.pumpAndSettle();
+      expect(cart.items, isEmpty);
+      expect(find.text('CHECKOUT'), findsNothing);
+      expect(find.text('Menu gagal dimuat'), findsOneWidget);
+    });
+
+    testWidgets('opsi hilang: pesan, tanpa navigasi, keranjang utuh',
+        (tester) async {
+      final cart = CartProvider();
+      await tester.pumpWidget(_wrap(
+        handler(items: [
+          {'menu_id': 7, 'qty': 1, 'option_ids': [99]},
+        ]),
+        cart: cart,
+        routes: {AppRoutes.checkout: (_) => const Text('CHECKOUT')},
+      ));
+      await openCompleted(tester);
+      await tester.tap(find.text('Pesan Lagi'));
+      await tester.pumpAndSettle();
+      expect(cart.items, isEmpty);
+      expect(find.text('CHECKOUT'), findsNothing);
+      expect(find.textContaining('sudah tidak tersedia'), findsOneWidget);
+    });
   });
 }
