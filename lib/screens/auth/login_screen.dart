@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../data/app_database.dart';
-import '../../data/auth_repository.dart';
+import '../../api/api_exception.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/app_modal_dialog.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/primary_button.dart';
@@ -22,6 +22,9 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _loading = false;
   bool _argsLoaded = false;
+  bool _returnTo = false;
+  String? _identifierError;
+  String? _passwordError;
 
   @override
   void didChangeDependencies() {
@@ -30,6 +33,11 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_argsLoaded) {
       final args = ModalRoute.of(context)?.settings.arguments;
       if (args is String) _emailController.text = args;
+      if (args is Map) {
+        _returnTo = args['returnTo'] == true;
+        final prefill = args['email'];
+        if (prefill is String) _emailController.text = prefill;
+      }
       _argsLoaded = true;
     }
   }
@@ -46,23 +54,41 @@ class _LoginScreenState extends State<LoginScreen> {
     final password = _passwordController.text;
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email dan password wajib diisi.')),
+        const SnackBar(content: Text('Email/No. WhatsApp dan password wajib diisi.')),
       );
       return;
     }
 
-    setState(() => _loading = true);
-    final repo = AuthRepository(context.read<AppDb>());
-    final error = await repo.login(email: email, password: password);
+    setState(() {
+      _loading = true;
+      _identifierError = null;
+      _passwordError = null;
+    });
+    try {
+      await context.read<AuthProvider>().login(email, password);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _identifierError = e.field('identifier');
+        _passwordError = e.field('password');
+      });
+      if (_identifierError == null && _passwordError == null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(e.message)));
+      }
+      return;
+    }
     if (!mounted) return;
     setState(() => _loading = false);
 
-    if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+    if (_returnTo) {
+      Navigator.pop(context, true);
       return;
     }
     AppModalDialog.showLoginSuccess(
       context,
+      message: 'Selamat datang kembali di KateringKita.',
       onConfirm: () {
         Navigator.pushNamedAndRemoveUntil(context, AppRoutes.mainNav, (r) => false);
       },
@@ -97,9 +123,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 32),
                       // Email Field
                       CustomTextField(
-                        label: 'Email Address',
-                        hint: 'Masukkan email kampus',
+                        label: 'Email atau No. WhatsApp',
+                        hint: 'Masukkan email atau nomor WhatsApp',
                         controller: _emailController,
+                        errorText: _identifierError,
                         keyboardType: TextInputType.emailAddress,
                       ),
                       const SizedBox(height: 20),
@@ -108,6 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         label: 'Password',
                         hint: 'Masukkan kata sandi',
                         controller: _passwordController,
+                        errorText: _passwordError,
                         obscureText: _obscurePassword,
                         suffixIcon: IconButton(
                           icon: Icon(

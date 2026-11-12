@@ -9,7 +9,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../data/app_database.dart';
+import '../../models/api_user.dart';
+import '../../providers/auth_provider.dart';
 import '../../data/auth_repository.dart';
 import '../../providers/theme_provider.dart';
 import '../../widgets/app_modal_dialog.dart';
@@ -25,7 +26,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   static final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
 
-  User? _user;
+  ApiUser? _user;
   UserProfileExtras _extras = const UserProfileExtras();
 
   // Pengaturan Preferensi & Notifikasi
@@ -45,8 +46,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadUserAndPreferences() async {
-    final db = context.read<AppDb>();
-    final user = await AuthRepository(db).currentUser();
+    final user = await context.read<AuthRepository>().currentUser();
     final email = user?.email ?? 'abdurrahim.workspace@gmail.com';
     final extras = await UserProfileExtras.load(email);
 
@@ -329,7 +329,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                         final email =
                             _user?.email ?? 'abdurrahim.workspace@gmail.com';
-                        final repo = AuthRepository(context.read<AppDb>());
+                        final repo = context.read<AuthRepository>();
                         final err = await repo.changePassword(
                           email: email,
                           currentPassword: cur,
@@ -1229,8 +1229,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       context,
                       onConfirm: () async {
                         final nav = Navigator.of(context);
-                        final repo = AuthRepository(context.read<AppDb>());
-                        await repo.logout();
+                        await context.read<AuthProvider>().logout();
                         nav.pushNamedAndRemoveUntil(
                           AppRoutes.login,
                           (route) => false,

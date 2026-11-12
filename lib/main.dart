@@ -6,7 +6,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'core/app_colors.dart';
 import 'core/app_router.dart';
 import 'core/app_theme.dart';
+import 'api/api_client.dart';
+import 'core/app_routes.dart';
 import 'data/app_database.dart';
+import 'data/auth_repository.dart';
+import 'data/token_store.dart';
+import 'providers/auth_provider.dart';
 import 'data/liked_store.dart';
 import 'providers/cart_provider.dart';
 import 'providers/theme_provider.dart';
@@ -40,6 +45,23 @@ void main() async {
           create: (_) => ThemeProvider(initialDark: isDarkInitial),
         ),
         ChangeNotifierProvider(create: (_) => CartProvider()),
+        Provider<ApiClient>(
+          create: (ctx) => ApiClient(
+            readToken: TokenStore.readToken,
+            onUnauthorized: () async {
+              await TokenStore.logout();
+              if (ctx.mounted) ctx.read<AuthProvider>().clear();
+              appNavigatorKey.currentState
+                  ?.pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
+            },
+          ),
+        ),
+        Provider<AuthRepository>(
+          create: (ctx) => AuthRepository(ctx.read<ApiClient>()),
+        ),
+        ChangeNotifierProvider<AuthProvider>(
+          create: (ctx) => AuthProvider(ctx.read<AuthRepository>()),
+        ),
         Provider<AppDb>(
           create: (_) => AppDb(),
           dispose: (_, db) => db.close(),
@@ -59,6 +81,7 @@ class KateringKitaApp extends StatelessWidget {
     AppColors.isDarkMode = themeProvider.isDarkMode;
 
     return MaterialApp(
+      navigatorKey: appNavigatorKey,
       title: 'KateringKita',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,

@@ -4,8 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../data/app_database.dart';
-import '../../data/auth_repository.dart';
+import '../../providers/auth_provider.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -27,15 +26,10 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     )..forward();
 
     _navigationTimer = Timer(const Duration(milliseconds: 2500), () async {
-      // Auto-login: token di secure storage + akun ada di database -> skip login.
-      final repo = AuthRepository(context.read<AppDb>());
-      final user = await repo.currentUser();
-      if (user == null) await repo.logout(); // bersihkan sesi yang tidak valid
+      // Muat sesi tersimpan (bila ada), lalu selalu ke beranda: tamu boleh jelajah.
+      await context.read<AuthProvider>().load();
       if (!mounted) return;
-      Navigator.pushReplacementNamed(
-        context,
-        user != null ? AppRoutes.mainNav : AppRoutes.login,
-      );
+      Navigator.pushReplacementNamed(context, AppRoutes.mainNav);
     });
   }
 

@@ -5,7 +5,6 @@ import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../data/app_database.dart';
 import '../../data/auth_repository.dart';
 import '../../data/token_store.dart';
 import '../../widgets/app_modal_dialog.dart';
@@ -85,10 +84,12 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
     // Simpan password baru ke Drift SQLite & Secure Storage
     if (!mounted) return;
-    final repo = AuthRepository(context.read<AppDb>());
+    final repo = context.read<AuthRepository>();
+    // TODO(Task 4): kode verifikasi dari layar verifikasi.
     await repo.resetPassword(
       email: email,
-      newPassword: _newController.text,
+      code: '',
+      password: _newController.text,
     );
 
     if (!mounted) return;

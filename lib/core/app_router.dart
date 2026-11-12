@@ -23,6 +23,9 @@ import '../screens/profile/profile_screen.dart';
 import '../screens/splash/splash_screen.dart';
 import 'app_routes.dart';
 
+/// Navigator global (dipakai mis. saat sesi kedaluwarsa).
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
 /// Central route table for the app.
 class AppRouter {
   AppRouter._();
