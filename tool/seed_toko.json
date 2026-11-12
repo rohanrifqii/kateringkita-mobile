@@ -1,0 +1,395 @@
+{
+  "stores": [
+    {
+      "business_name": "Diego Katering",
+      "full_name": "Pemilik Diego Katering",
+      "phone": "081234567890",
+      "merchant_type_id": 1,
+      "address": "Jl. MT Haryono Gg. 5 No. 12, Dinoyo (300m dari Gerbang Watugong UB)",
+      "open_time": "06:30",
+      "close_time": "17:00",
+      "pickup_point_ids": [
+        1,
+        2,
+        3
+      ],
+      "hold_minutes": 30,
+      "description": "Melayani makan siang harian mahasiswa & paket besar danusan/seminar kampus dengan sistem holding kuota 5 menit.",
+      "logo": "assets/images/lumpia_diego.png",
+      "menus": [
+        {
+          "name": "Lumpia Diego",
+          "category_slug": "danusan",
+          "price": 25000,
+          "hpp": 15000,
+          "daily_quota": 50,
+          "prep_minutes": 15,
+          "unit_label": "porsi",
+          "min_order_qty": 1,
+          "is_preorder": false,
+          "preorder_days": 0,
+          "description": "Lumpia goreng super renyah khas Diego Katering, isian rebung manis, telur orak-arik, dan daging ayam gurih dengan saus tauco bawang spesial.",
+          "options": [
+            {
+              "name": "Sambal Pisah",
+              "extra_price": 0
+            },
+            {
+              "name": "Ekstra Cabai Rawit",
+              "extra_price": 0
+            },
+            {
+              "name": "Goreng Hangat",
+              "extra_price": 0
+            }
+          ],
+          "image": "assets/images/lumpia_diego.png"
+        },
+        {
+          "name": "Paket Bento Ayam Crispy Diego",
+          "category_slug": "nasi-box",
+          "price": 18000,
+          "hpp": 10500,
+          "daily_quota": 50,
+          "prep_minutes": 15,
+          "unit_label": "porsi",
+          "min_order_qty": 1,
+          "is_preorder": false,
+          "preorder_days": 0,
+          "description": "Nasi putih pulen dengan ayam fillet crispy saus asam manis, salad sayur segar, dan kerupuk udang.",
+          "options": [
+            {
+              "name": "Saus Asam Manis",
+              "extra_price": 0
+            },
+            {
+              "name": "Sambal Bawang",
+              "extra_price": 0
+            },
+            {
+              "name": "Saus Mentai",
+              "extra_price": 0
+            }
+          ],
+          "image": "assets/images/nasi_kuning.png"
+        },
+        {
+          "name": "Dimsum Ayam Udang (Isi 6)",
+          "category_slug": "danusan",
+          "price": 16000,
+          "hpp": 9500,
+          "daily_quota": 50,
+          "prep_minutes": 15,
+          "unit_label": "isi 6",
+          "min_order_qty": 1,
+          "is_preorder": false,
+          "preorder_days": 0,
+          "description": "Dimsum kukus hangat berdaging tebal dengan topping wortel dan saus chili oil khas kampus.",
+          "options": [
+            {
+              "name": "Chili Oil Pisah",
+              "extra_price": 0
+            },
+            {
+              "name": "Saus Mentai",
+              "extra_price": 0
+            }
+          ],
+          "image": "assets/images/risoles.png"
+        }
+      ]
+    },
+    {
+      "business_name": "Martabak Pecenongan",
+      "full_name": "Pemilik Martabak Pecenongan",
+      "phone": "081298765432",
+      "merchant_type_id": 2,
+      "address": "Jl. Soekarno Hatta Indah Blok A4 (Dekat Taman Krida Budaya Malang)",
+      "open_time": "10:00",
+      "close_time": "22:00",
+      "pickup_point_ids": [
+        1,
+        2,
+        3
+      ],
+      "hold_minutes": 30,
+      "description": "Spesialis martabak manis & martabak telor porsi rapat malam, makrab, dan belajar bareng mahasiswa.",
+      "logo": "assets/images/martabak.png",
+      "menus": [
+        {
+          "name": "Martabak Manis",
+          "category_slug": "martabak",
+          "price": 35000,
+          "hpp": 21000,
+          "daily_quota": 50,
+          "prep_minutes": 15,
+          "unit_label": "porsi",
+          "min_order_qty": 1,
+          "is_preorder": false,
+          "preorder_days": 0,
+          "description": "Martabak manis tebal empuk dengan mentega Wijsman dan aneka topping keju gondrong, coklat meises, dan kacang gurih.",
+          "options": [
+            {
+              "name": "Keju Spesial",
+              "extra_price": 0
+            },
+            {
+              "name": "Coklat Leleh",
+              "extra_price": 0
+            },
+            {
+              "name": "Kacang Susu",
+              "extra_price": 0
+            }
+          ],
+          "image": "assets/images/martabak.png"
+        },
+        {
+          "name": "Martabak Telor Spesial Daging",
+          "category_slug": "martabak",
+          "price": 38000,
+          "hpp": 22500,
+          "daily_quota": 50,
+          "prep_minutes": 15,
+          "unit_label": "porsi",
+          "min_order_qty": 1,
+          "is_preorder": false,
+          "preorder_days": 0,
+          "description": "Martabak telor bebek 3 butir dengan isian daging sapi cincang berbumbu kari, lengkap dengan acar dan kuah cuko.",
+          "options": [
+            {
+              "name": "Telur Bebek",
+              "extra_price": 0
+            },
+            {
+              "name": "Telur Ayam",
+              "extra_price": 0
+            },
+            {
+              "name": "Ekstra Acar",
+              "extra_price": 0
+            }
+          ],
+          "image": "assets/images/lumpia_diego.png"
+        }
+      ]
+    },
+    {
+      "business_name": "Dapur Slamet",
+      "full_name": "Pemilik Dapur Slamet",
+      "phone": "081333444555",
+      "merchant_type_id": 1,
+      "address": "Kantin Gedung Vokasi Lt. 1, Universitas Brawijaya (Veteran, Malang)",
+      "open_time": "06:00",
+      "close_time": "16:00",
+      "pickup_point_ids": [
+        1,
+        2,
+        3
+      ],
+      "hold_minutes": 30,
+      "description": "Dapur katering legendaris kampus UB khusus nasi kuning, nasi kotak seminar, dan makan siang harian.",
+      "logo": "assets/images/nasi_kuning.png",
+      "menus": [
+        {
+          "name": "Nasi Kuning Slamet",
+          "category_slug": "nasi-box",
+          "price": 20000,
+          "hpp": 12000,
+          "daily_quota": 50,
+          "prep_minutes": 15,
+          "unit_label": "porsi",
+          "min_order_qty": 1,
+          "is_preorder": false,
+          "preorder_days": 0,
+          "description": "Nasi kuning wangi rempah dengan suwiran ayam kampung, sambal balado tempe orek, perkedel kentang, dan telur iris.",
+          "options": [
+            {
+              "name": "Sambal Tambah",
+              "extra_price": 0
+            },
+            {
+              "name": "Telur Utuh",
+              "extra_price": 0
+            },
+            {
+              "name": "Ayam Goreng",
+              "extra_price": 0
+            }
+          ],
+          "image": "assets/images/nasi_kuning.png"
+        },
+        {
+          "name": "Paket Nasi Ayam Bakar Madu",
+          "category_slug": "nasi-box",
+          "price": 22000,
+          "hpp": 13000,
+          "daily_quota": 50,
+          "prep_minutes": 15,
+          "unit_label": "porsi",
+          "min_order_qty": 1,
+          "is_preorder": false,
+          "preorder_days": 0,
+          "description": "Nasi kotak lengkap dengan ayam bakar madu bumbu meresap, tahu tempe, lalapan segar, dan sambal terasi.",
+          "options": [
+            {
+              "name": "Dada",
+              "extra_price": 0
+            },
+            {
+              "name": "Paha Atas",
+              "extra_price": 0
+            },
+            {
+              "name": "Sambal Pisah",
+              "extra_price": 0
+            }
+          ],
+          "image": "assets/images/lumpia_diego.png"
+        }
+      ]
+    },
+    {
+      "business_name": "Surgawi Bakery",
+      "full_name": "Pemilik Surgawi Bakery",
+      "phone": "081555666777",
+      "merchant_type_id": 2,
+      "address": "Jl. Bendungan Sigura-gura No. 18, Sumbersari (Dekat Gerbang BNI UB)",
+      "open_time": "07:00",
+      "close_time": "20:00",
+      "pickup_point_ids": [
+        1,
+        2,
+        3
+      ],
+      "hold_minutes": 30,
+      "description": "Pusat grosir donat kentang, kue sus, dan snack box seminar harga mahasiswa dengan margin danus tinggi.",
+      "logo": "assets/images/donat_surgawi.png",
+      "menus": [
+        {
+          "name": "Donat Surgawi",
+          "category_slug": "snack",
+          "price": 15000,
+          "hpp": 9000,
+          "daily_quota": 50,
+          "prep_minutes": 15,
+          "unit_label": "porsi",
+          "min_order_qty": 1,
+          "is_preorder": false,
+          "preorder_days": 0,
+          "description": "Donat kentang empuk bertabur gula salju dan glaze cokelat Belgia rasa premium (1 box isi 6 pcs).",
+          "options": [
+            {
+              "name": "Glaze Cokelat",
+              "extra_price": 0
+            },
+            {
+              "name": "Gula Halus",
+              "extra_price": 0
+            },
+            {
+              "name": "Mix Topping",
+              "extra_price": 0
+            }
+          ],
+          "image": "assets/images/donat_surgawi.png"
+        },
+        {
+          "name": "Paket Snack Box Seminar (Isi 4 Kue)",
+          "category_slug": "snack",
+          "price": 12000,
+          "hpp": 7000,
+          "daily_quota": 50,
+          "prep_minutes": 15,
+          "unit_label": "isi 4",
+          "min_order_qty": 1,
+          "is_preorder": false,
+          "preorder_days": 0,
+          "description": "Kotak snack acara berisi donat mini, lemper ayam, kue sus fla vanila, dan air mineral cup.",
+          "options": [
+            {
+              "name": "Kotak Kraft",
+              "extra_price": 0
+            },
+            {
+              "name": "Kotak Putih",
+              "extra_price": 0
+            }
+          ],
+          "image": "assets/images/risoles.png"
+        }
+      ]
+    },
+    {
+      "business_name": "Dapur Bu Tima",
+      "full_name": "Pemilik Dapur Bu Tima",
+      "phone": "081777888999",
+      "merchant_type_id": 2,
+      "address": "Jl. Kerto Raharjo No. 45, Ketawanggede (Belakang Taman Makam Pahlawan / Gerbang Veteran)",
+      "open_time": "05:30",
+      "close_time": "16:30",
+      "pickup_point_ids": [
+        1,
+        2,
+        3
+      ],
+      "hold_minutes": 30,
+      "description": "Mitra favorit mahasiswa UB untuk risoles mayo, pastel, dan snack basah dengan ROI keuntungan danus hingga +105%.",
+      "logo": "assets/images/risoles.png",
+      "menus": [
+        {
+          "name": "Risoles Bu Tima",
+          "category_slug": "danusan",
+          "price": 18000,
+          "hpp": 10500,
+          "daily_quota": 50,
+          "prep_minutes": 15,
+          "unit_label": "porsi",
+          "min_order_qty": 1,
+          "is_preorder": false,
+          "preorder_days": 0,
+          "description": "Risoles mayo lumer isi daging asap (smoked beef), telur rebus, keju cheddar, dan saus mayo creamy gurih (1 porsi isi 6 pcs).",
+          "options": [
+            {
+              "name": "Cabe Rawit Segar",
+              "extra_price": 0
+            },
+            {
+              "name": "Saus Keju",
+              "extra_price": 0
+            },
+            {
+              "name": "Saus Sambal",
+              "extra_price": 0
+            }
+          ],
+          "image": "assets/images/risoles.png"
+        },
+        {
+          "name": "Pastel Ragout Ayam Spesial (Isi 6)",
+          "category_slug": "danusan",
+          "price": 16000,
+          "hpp": 9500,
+          "daily_quota": 50,
+          "prep_minutes": 15,
+          "unit_label": "isi 6",
+          "min_order_qty": 1,
+          "is_preorder": false,
+          "preorder_days": 0,
+          "description": "Pastel renyah berisi ragout ayam suwir, kentang wortel creamy, soun, dan potongan telur rebus.",
+          "options": [
+            {
+              "name": "Bumbu Kacang",
+              "extra_price": 0
+            },
+            {
+              "name": "Cabai Rawit Hijau",
+              "extra_price": 0
+            }
+          ],
+          "image": "assets/images/lumpia_diego.png"
+        }
+      ]
+    }
+  ]
+}
