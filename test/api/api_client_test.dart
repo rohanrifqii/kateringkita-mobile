@@ -89,15 +89,31 @@ void main() {
     }
   });
 
-  test('401 calls onUnauthorized once then throws', () async {
+  Future<int> run401(
+      {String? token, bool handle = true}) async {
     var n = 0;
-    final c = _make((r) async => _json(401, {
-          'error': {'code': 'UNAUTHORIZED', 'message': 'Sesi habis.'}
-        }), onUnauthorized: () async => n++);
+    final c = _make(
+        (r) async => _json(401, {
+              'error': {'code': 'UNAUTHORIZED', 'message': 'Sesi habis.'}
+            }),
+        readToken: () async => token,
+        onUnauthorized: () async => n++);
     await expectLater(
-        c.get('/x'),
+        c.get('/x', handleUnauthorized: handle),
         throwsA(isA<ApiException>().having((e) => e.status, 'status', 401)));
-    expect(n, 1);
+    return n;
+  }
+
+  test('401 with token calls onUnauthorized once then throws', () async {
+    expect(await run401(token: 't'), 1);
+  });
+
+  test('401 without token does not call onUnauthorized', () async {
+    expect(await run401(), 0);
+  });
+
+  test('401 with token and handleUnauthorized false does not call', () async {
+    expect(await run401(token: 't', handle: false), 0);
   });
 
   test('204 returns null data', () async {

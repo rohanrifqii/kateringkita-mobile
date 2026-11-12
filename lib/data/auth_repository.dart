@@ -13,11 +13,13 @@ class AuthRepository {
     required String identifier,
     required String password,
   }) async {
-    final res = await _api.post('/auth/login', body: {
-      'identifier': identifier,
-      'password': password,
-      'client': 'mobile',
-    });
+    final res = await _api.post('/auth/login',
+        handleUnauthorized: false,
+        body: {
+          'identifier': identifier,
+          'password': password,
+          'client': 'mobile',
+        });
     final data = res.data as Map<String, dynamic>;
     final user = ApiUser.fromJson(data['user'] as Map<String, dynamic>);
     await TokenStore.saveSession(
@@ -32,7 +34,7 @@ class AuthRepository {
     required String phone,
     required String password,
   }) async {
-    await _api.post('/auth/customer/register', body: {
+    await _api.post('/auth/customer/register', handleUnauthorized: false, body: {
       'full_name': fullName,
       'email': email,
       'phone': phone,
@@ -45,7 +47,7 @@ class AuthRepository {
     final token = await TokenStore.readToken();
     if (token == null || token.isEmpty) return null;
     try {
-      final res = await _api.get('/me');
+      final res = await _api.get('/me', handleUnauthorized: false);
       return _userFrom(res);
     } on ApiException catch (e) {
       if (e.status == 401) {
@@ -58,7 +60,7 @@ class AuthRepository {
 
   Future<void> logout() async {
     try {
-      await _api.post('/auth/logout');
+      await _api.post('/auth/logout', handleUnauthorized: false);
     } catch (_) {
       // Abaikan galat jaringan/401: sesi lokal tetap dihapus.
     }
@@ -66,13 +68,14 @@ class AuthRepository {
   }
 
   Future<String> forgotPassword(String email) async {
-    final res = await _api.post('/auth/password/forgot', body: {'email': email});
+    final res = await _api.post('/auth/password/forgot',
+        handleUnauthorized: false, body: {'email': email});
     return (res.data as Map<String, dynamic>)['message'] as String? ?? '';
   }
 
   Future<void> verifyCode({required String email, required String code}) async {
-    await _api
-        .post('/auth/password/verify', body: {'email': email, 'code': code});
+    await _api.post('/auth/password/verify',
+        handleUnauthorized: false, body: {'email': email, 'code': code});
   }
 
   Future<void> resetPassword({
@@ -81,6 +84,7 @@ class AuthRepository {
     required String password,
   }) async {
     await _api.post('/auth/password/reset',
+        handleUnauthorized: false,
         body: {'email': email, 'code': code, 'password': password});
   }
 
