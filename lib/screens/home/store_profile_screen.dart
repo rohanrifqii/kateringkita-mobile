@@ -1,15 +1,14 @@
+import '../../data/catalog_repository.dart';
 import '../../widgets/menu_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../models/product_model.dart';
-import '../../models/vendor_model.dart';
 import '../../providers/theme_provider.dart';
 
 class StoreProfileScreen extends StatefulWidget {
@@ -22,8 +21,11 @@ class StoreProfileScreen extends StatefulWidget {
 }
 
 class _StoreProfileScreenState extends State<StoreProfileScreen> {
-  late VendorProfile _vendor;
-  bool _isDeliveryMode = true; // true = Pesan Antar, false = Pickup
+  String? _slug;
+  MerchantProfile? _merchant;
+  List<ProductModel> _menus = const [];
+  bool _loading = true;
+  bool _failed = false;
   bool _isStoreLiked = false;
   bool _isSearching = false;
   String _searchQuery = '';
@@ -31,22 +33,48 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
   int _selectedTabIndex = 0; // 0: Menu, 1: Untukmu, 2: Penilaian, 3: Informasi
   String _selectedMenuCategory = 'Semua';
-  String _selectedReviewFilter = 'Semua';
-  final Set<String> _claimedPromoIds = {};
+
+  MerchantProfile get _vendor => _merchant!;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (_slug != null) return;
     final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is VendorProfile) {
-      _vendor = args;
-    } else if (args is String && args.trim().isNotEmpty) {
-      _vendor = VendorData.getByVendorName(args);
-    } else if (widget.vendorName != null &&
-        widget.vendorName!.trim().isNotEmpty) {
-      _vendor = VendorData.getByVendorName(widget.vendorName!);
-    } else {
-      _vendor = VendorData.vendors.first;
+    final slug = (args is String && args.trim().isNotEmpty)
+        ? args
+        : widget.vendorName;
+    if (slug == null || slug.trim().isEmpty) {
+      _loading = false;
+      _failed = true;
+      return;
+    }
+    _slug = slug;
+    _load();
+  }
+
+  Future<void> _load() async {
+    final repo = context.read<CatalogRepository>();
+    final slug = _slug!;
+    setState(() {
+      _loading = true;
+      _failed = false;
+    });
+    try {
+      final merchant = await repo.merchant(slug);
+      final page = await repo.menus(merchant: slug, limit: 50);
+      if (!mounted) return;
+      setState(() {
+        _merchant = merchant;
+        _menus = page.items;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _failed = true;
+      });
     }
   }
 
@@ -87,22 +115,8 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     );
   }
 
-  Future<void> _contactVendorWhatsApp() async {
-    final text = Uri.encodeComponent(
-      'Halo ${_vendor.name}, saya pengguna aplikasi KateringKita ingin bertanya mengenai pemesanan menu katering/danusan.',
-    );
-    final url = Uri.parse('https://wa.me/${_vendor.whatsapp}?text=$text');
-    final launched = await launchUrl(
-      url,
-      mode: LaunchMode.externalApplication,
-    );
-    if (!launched && mounted) {
-      _showToast('Nomor WhatsApp Dapur: +${_vendor.whatsapp}');
-    }
-  }
-
   List<ProductModel> get _filteredMenus {
-    var list = _vendor.menus;
+    var list = _menus;
     if (_searchQuery.trim().isNotEmpty) {
       final q = _searchQuery.trim().toLowerCase();
       list = list
@@ -132,6 +146,29 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     final isDark = context.watch<ThemeProvider>().isDarkMode;
     AppColors.isDarkMode = isDark;
 
+    if (_loading || _failed || _merchant == null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(backgroundColor: AppColors.surface, elevation: 0),
+        body: Center(
+          child: _loading
+              ? const CircularProgressIndicator()
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Gagal memuat profil toko.'),
+                    const SizedBox(height: 12),
+                    if (_slug != null)
+                      OutlinedButton(
+                        onPressed: _load,
+                        child: const Text('Coba lagi'),
+                      ),
+                  ],
+                ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
@@ -160,7 +197,6 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
           ),
         ],
       ),
-      bottomNavigationBar: _buildBottomStoreBar(isDark),
     );
   }
 
@@ -179,13 +215,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Image.asset(
-                    _vendor.bannerImage,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => Container(
-                      color: AppColors.primary,
-                    ),
-                  ),
+                  Container(color: AppColors.primary),
                   // Dark Gradient Overlay agar tombol atas terlihat jelas
                   Container(
                     decoration: BoxDecoration(
@@ -196,44 +226,6 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                           Colors.black.withValues(alpha: 0.65),
                           Colors.black.withValues(alpha: 0.25),
                           Colors.black.withValues(alpha: 0.55),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Banner pengumuman kecil ala GrabFood
-                  Positioned(
-                    left: 16,
-                    right: 16,
-                    bottom: 48,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.55),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.campaign_rounded,
-                            color: Color(0xFFFBBF24),
-                            size: 16,
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'Mitra Resmi Kampus UB • ${_vendor.serviceMode}',
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -258,51 +250,6 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                   onTap: () => Navigator.pop(context),
                 ),
                 const Spacer(),
-                // Pill status pengantaran seperti GrabFood
-                GestureDetector(
-                  onTap: () =>
-                      setState(() => _isDeliveryMode = !_isDeliveryMode),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 7,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.52),
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(
-                        color: Colors.white.withValues(alpha: 0.25),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          _isDeliveryMode
-                              ? Icons.delivery_dining_rounded
-                              : Icons.storefront_rounded,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          _isDeliveryMode ? 'Pesan Antar' : 'Ambil di Dapur',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.keyboard_arrow_down_rounded,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
                 const SizedBox(width: 8),
                 _buildCircleTopButton(
                   icon: _isSearching
@@ -331,8 +278,8 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                     setState(() => _isStoreLiked = !_isStoreLiked);
                     _showToast(
                       _isStoreLiked
-                          ? '${_vendor.name} disimpan ke Dapur Favorit'
-                          : '${_vendor.name} dihapus dari Dapur Favorit',
+                          ? '${_vendor.businessName} disimpan ke Dapur Favorit'
+                          : '${_vendor.businessName} dihapus dari Dapur Favorit',
                     );
                   },
                 ),
@@ -343,7 +290,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                     Clipboard.setData(
                       ClipboardData(
                         text:
-                            'Cek menu katering ${_vendor.name} (${_vendor.area}) di KateringKita! Rating ⭐ ${_vendor.rating}',
+                            'Cek menu ${_vendor.businessName} di KateringKita! Rating ⭐ ${_vendor.ratingAvg}',
                       ),
                     );
                     _showToast('Tautan profil dapur berhasil disalin!');
@@ -385,21 +332,11 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                     // Foto/Logo Toko
                     ClipRRect(
                       borderRadius: BorderRadius.circular(16),
-                      child: Image.asset(
-                        _vendor.logoImage,
+                      child: MenuImage(
+                        _vendor.logoUrl,
                         width: 72,
                         height: 72,
                         fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          width: 72,
-                          height: 72,
-                          color: AppColors.primarySoft,
-                          child: const Icon(
-                            Icons.storefront_rounded,
-                            color: AppColors.primary,
-                            size: 34,
-                          ),
-                        ),
                       ),
                     ),
                     const SizedBox(width: 14),
@@ -418,7 +355,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                               const SizedBox(width: 5),
                               Expanded(
                                 child: Text(
-                                  _vendor.name,
+                                  _vendor.businessName,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: AppTextStyles.h3.copyWith(
@@ -432,7 +369,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '- ${_vendor.area}',
+                            _vendor.merchantTypeName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: AppTextStyles.bodySmall.copyWith(
@@ -445,7 +382,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                           // Baris Rating + Halal + Pelayanan Prima (Klik -> Tab Penilaian)
                           GestureDetector(
                             onTap: () {
-                              setState(() => _selectedTabIndex = 2);
+                              // Penilaian toko belum tersedia.
                             },
                             child: Row(
                               children: [
@@ -456,7 +393,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                 ),
                                 const SizedBox(width: 3),
                                 Text(
-                                  '${_vendor.rating}',
+                                  '${_vendor.ratingAvg}',
                                   style: AppTextStyles.bodySmall.copyWith(
                                     fontWeight: FontWeight.w800,
                                     color: AppColors.textPrimary,
@@ -466,7 +403,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                 const SizedBox(width: 3),
                                 Flexible(
                                   child: Text(
-                                    '(${_vendor.reviewCountLabel}) • Halal • Pelayanan Prima',
+                                    '(${_vendor.ratingCount})',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: AppTextStyles.bodySmall.copyWith(
@@ -485,123 +422,20 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                             ),
                           ),
                           const SizedBox(height: 4),
-                          // Info Ongkir & Estimasi Waktu
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 1.5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primarySoft,
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: const Text(
-                                  'Gratis Ongkir',
-                                  style: TextStyle(
-                                    color: AppColors.primary,
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Rp7.000',
-                                style: TextStyle(
-                                  color: AppColors.textMuted,
-                                  fontSize: 11,
-                                  decoration: TextDecoration.lineThrough,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  '• ${_vendor.etaMinutes} (${_vendor.distanceKm})',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.bodySmall.copyWith(
-                                    color: AppColors.textSecondary,
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ],
+                          Text(
+                            '${_vendor.isOpen ? 'Buka' : 'Tutup'} • ${_vendor.openTime}–${_vendor.closeTime} WIB',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.textSecondary,
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ],
                       ),
                     ),
                   ],
-                ),
-                const SizedBox(height: 14),
-
-                // Toggle Pill: Pesan Antar (Delivery) | Pickup (Seperti ShopeeFood & GoFood)
-                Container(
-                  height: 38,
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    color: AppColors.secondaryBg,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: AppColors.cardBorder.withValues(alpha: 0.7),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => _isDeliveryMode = true),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            decoration: BoxDecoration(
-                              color: _isDeliveryMode
-                                  ? AppColors.primary
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(17),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              'Pesan Antar (Delivery)',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: _isDeliveryMode
-                                    ? Colors.white
-                                    : AppColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () => setState(() => _isDeliveryMode = false),
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 180),
-                            decoration: BoxDecoration(
-                              color: !_isDeliveryMode
-                                  ? AppColors.primary
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(17),
-                            ),
-                            alignment: Alignment.center,
-                            child: Text(
-                              'Pickup • ${_vendor.distanceKm}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: !_isDeliveryMode
-                                    ? Colors.white
-                                    : AppColors.textSecondary,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
               ],
             ),
@@ -675,7 +509,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                         fontSize: 13,
                       ),
                       decoration: InputDecoration(
-                        hintText: 'Cari menu di ${_vendor.name}...',
+                        hintText: 'Cari menu di ${_vendor.businessName}...',
                         hintStyle: AppTextStyles.bodySmall.copyWith(
                           color: AppColors.textMuted,
                         ),
@@ -692,111 +526,6 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               ),
             ),
           ),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: Row(
-            children: _vendor.promos.map((promo) {
-              final isClaimed = _claimedPromoIds.contains(promo.id);
-              final accentColor = promo.isFreeShipping
-                  ? const Color(0xFF0D9488)
-                  : AppColors.primary;
-              final bgSoft = promo.isFreeShipping
-                  ? (isDark
-                      ? const Color(0xFF112E2B)
-                      : const Color(0xFFF0FDFA))
-                  : AppColors.primarySoft;
-
-              return Padding(
-                padding: const EdgeInsets.only(right: 10),
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() => _claimedPromoIds.add(promo.id));
-                    _showToast(
-                      'Voucher "${promo.title}" (${promo.code}) berhasil diklaim!',
-                    );
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: bgSoft,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: accentColor.withValues(alpha: 0.35),
-                      ),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: accentColor.withValues(alpha: 0.15),
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            promo.isFreeShipping
-                                ? Icons.local_shipping_rounded
-                                : Icons.confirmation_number_rounded,
-                            color: accentColor,
-                            size: 16,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              promo.title,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: accentColor,
-                              ),
-                            ),
-                            const SizedBox(height: 1),
-                            Text(
-                              promo.subtitle,
-                              style: AppTextStyles.bodySmall.copyWith(
-                                fontSize: 10.5,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(width: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isClaimed
-                                ? AppColors.surface
-                                : accentColor,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            isClaimed ? '✓ Diklaim' : 'Klaim',
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w800,
-                              color: isClaimed ? accentColor : Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
       ],
     );
   }
@@ -805,9 +534,8 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
   Widget _buildNavigationTabs(bool isDark) {
     final tabs = [
-      'Menu (${_vendor.menus.length})',
+      'Menu (${_menus.length})',
       'Untukmu',
-      'Penilaian (${_vendor.reviewCountLabel})',
       'Informasi',
     ];
 
@@ -868,8 +596,6 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       case 1:
         return _buildForYouGridTab(isDark);
       case 2:
-        return _buildReviewsTab(isDark);
-      case 3:
         return _buildStoreInfoTab(isDark);
       default:
         return _buildMenuTab(isDark);
@@ -981,7 +707,6 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                   const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final menu = items[index];
-                final originalPrice = (menu.price * 1.15).roundToDouble();
 
                 return GestureDetector(
                   onTap: () {
@@ -1019,31 +744,6 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                 width: 92,
                                 height: 92,
                                 fit: BoxFit.cover,
-                              ),
-                            ),
-                            Positioned(
-                              top: 0,
-                              right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFFEF08A),
-                                  borderRadius: BorderRadius.only(
-                                    topRight: Radius.circular(14),
-                                    bottomLeft: Radius.circular(8),
-                                  ),
-                                ),
-                                child: const Text(
-                                  '-15%',
-                                  style: TextStyle(
-                                    color: Color(0xFFB45309),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
                               ),
                             ),
                             Positioned(
@@ -1089,7 +789,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                               ),
                               const SizedBox(height: 3),
                               Text(
-                                '${menu.reviewCount}+ terjual  |  ⭐ ${menu.rating}',
+                                '⭐ ${menu.rating} (${menu.reviewCount})',
                                 style: AppTextStyles.bodySmall.copyWith(
                                   color: AppColors.textSecondary,
                                   fontSize: 11.5,
@@ -1116,15 +816,6 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        AppCurrency.format(originalPrice),
-                                        style: TextStyle(
-                                          fontSize: 10.5,
-                                          color: AppColors.textMuted,
-                                          decoration:
-                                              TextDecoration.lineThrough,
-                                        ),
-                                      ),
-                                      Text(
                                         AppCurrency.format(menu.price),
                                         style: AppTextStyles.price.copyWith(
                                           fontSize: 15,
@@ -1135,18 +826,22 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                   ),
                                   // Tombol + Oranye (Gaya ShopeeFood / GoFood)
                                   GestureDetector(
-                                    onTap: () {
-                                      Navigator.pushNamed(
-                                        context,
-                                        AppRoutes.checkout,
-                                        arguments: menu,
-                                      );
-                                    },
+                                    onTap: !menu.canOrder
+                                        ? null
+                                        : () {
+                                            Navigator.pushNamed(
+                                              context,
+                                              AppRoutes.checkout,
+                                              arguments: menu,
+                                            );
+                                          },
                                     child: Container(
                                       width: 32,
                                       height: 32,
                                       decoration: BoxDecoration(
-                                        color: AppColors.primary,
+                                        color: menu.canOrder
+                                            ? AppColors.primary
+                                            : AppColors.textMuted,
                                         borderRadius: BorderRadius.circular(9),
                                       ),
                                       child: const Icon(
@@ -1174,7 +869,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
   /// TAB 1: Grid 2 Kolom "Untukmu" (Persis Referensi GrabFood Screenshot 2)
   Widget _buildForYouGridTab(bool isDark) {
-    final items = _vendor.menus;
+    final items = _menus;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -1182,7 +877,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Untukmu di ${_vendor.name}',
+            'Untukmu di ${_vendor.businessName}',
             style: AppTextStyles.h3.copyWith(
               fontSize: 17,
               fontWeight: FontWeight.w800,
@@ -1190,7 +885,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Rekomendasi menu paling sering dipesan mahasiswa minggu ini',
+            'Rekomendasi menu dari dapur ini',
             style: AppTextStyles.bodySmall.copyWith(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -1246,13 +941,15 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                               top: 8,
                               right: 8,
                               child: GestureDetector(
-                                onTap: () {
-                                  Navigator.pushNamed(
-                                    context,
-                                    AppRoutes.checkout,
-                                    arguments: menu,
-                                  );
-                                },
+                                onTap: !menu.canOrder
+                                    ? null
+                                    : () {
+                                        Navigator.pushNamed(
+                                          context,
+                                          AppRoutes.checkout,
+                                          arguments: menu,
+                                        );
+                                      },
                                 child: Container(
                                   width: 32,
                                   height: 32,
@@ -1287,7 +984,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                     : const Color(0xFFDCFCE7),
                                 alignment: Alignment.center,
                                 child: Text(
-                                  'Terlaris',
+                                  menu.badgeText ?? 'Tersedia',
                                   style: TextStyle(
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w800,
@@ -1359,316 +1056,6 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     );
   }
 
-  /// TAB 2: Penilaian & Ulasan Pembeli (Menjawab kebutuhan user untuk melihat rating & reputasi dapur)
-  Widget _buildReviewsTab(bool isDark) {
-    final filters = [
-      'Semua',
-      '5 Bintang',
-      'Cocok Danusan',
-      'Tepat Waktu',
-    ];
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Kartu Ringkasan Skor Rating Dapur
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.cardBorder),
-            ),
-            child: Row(
-              children: [
-                Column(
-                  children: [
-                    Text(
-                      '${_vendor.rating}',
-                      style: AppTextStyles.h1.copyWith(
-                        fontSize: 36,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    Row(
-                      children: List.generate(
-                        5,
-                        (index) => const Icon(
-                          Icons.star_rounded,
-                          color: Color(0xFFF59E0B),
-                          size: 16,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${_vendor.reviewCountLabel} Penilaian',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 20),
-                Container(
-                  width: 1,
-                  height: 74,
-                  color: AppColors.cardBorder,
-                ),
-                const SizedBox(width: 18),
-                Expanded(
-                  child: Column(
-                    children: [
-                      _buildStarBar(5, 0.88),
-                      const SizedBox(height: 5),
-                      _buildStarBar(4, 0.10),
-                      const SizedBox(height: 5),
-                      _buildStarBar(3, 0.02),
-                      const SizedBox(height: 5),
-                      _buildStarBar(2, 0.0),
-                      const SizedBox(height: 5),
-                      _buildStarBar(1, 0.0),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Filter Chips Ulasan
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: filters.map((f) {
-                final selected = _selectedReviewFilter == f;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: GestureDetector(
-                    onTap: () => setState(() => _selectedReviewFilter = f),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? AppColors.primarySoft
-                            : AppColors.surface,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: selected
-                              ? AppColors.primary
-                              : AppColors.cardBorder,
-                        ),
-                      ),
-                      child: Text(
-                        f,
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          fontWeight:
-                              selected ? FontWeight.w800 : FontWeight.w600,
-                          color: selected
-                              ? AppColors.primary
-                              : AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-          const SizedBox(height: 14),
-
-          // Daftar Kartu Ulasan Mahasiswa
-          ..._vendor.reviews.map((rev) {
-            return Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.cardBorder),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 18,
-                        backgroundColor: AppColors.primarySoft,
-                        child: Text(
-                          rev.userName[0].toUpperCase(),
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              rev.userName,
-                              style: AppTextStyles.bodyMedium.copyWith(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                            Text(
-                              rev.userRole,
-                              style: AppTextStyles.bodySmall.copyWith(
-                                color: AppColors.textMuted,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(
-                                Icons.star_rounded,
-                                color: Color(0xFFF59E0B),
-                                size: 15,
-                              ),
-                              const SizedBox(width: 2),
-                              Text(
-                                '${rev.rating}',
-                                style: AppTextStyles.bodySmall.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          Text(
-                            rev.date,
-                            style: AppTextStyles.bodySmall.copyWith(
-                              color: AppColors.textMuted,
-                              fontSize: 10.5,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    rev.comment,
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      fontSize: 12.5,
-                      height: 1.45,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.secondaryBg,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.restaurant_rounded,
-                          size: 13,
-                          color: AppColors.primary,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          'Memesan: ${rev.orderedMenu}',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (rev.tags.isNotEmpty) ...[
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 6,
-                      children: rev.tags.map((tag) {
-                        return Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primarySoft,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            '👍 $tag',
-                            style: const TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ],
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStarBar(int star, double ratio) {
-    return Row(
-      children: [
-        Text(
-          '$star',
-          style: AppTextStyles.bodySmall.copyWith(
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(width: 2),
-        const Icon(Icons.star_rounded, size: 12, color: Color(0xFFF59E0B)),
-        const SizedBox(width: 8),
-        Expanded(
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: ratio,
-              minHeight: 6,
-              backgroundColor: AppColors.secondaryBg,
-              valueColor:
-                  const AlwaysStoppedAnimation<Color>(Color(0xFFF59E0B)),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   /// TAB 3: Informasi Operasional Dapur (Sinkron 100% dengan Web `Pengaturan Toko & Operasional Dapur`)
   Widget _buildStoreInfoTab(bool isDark) {
     return Padding(
@@ -1676,92 +1063,26 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Kartu Karakteristik Layanan Dapur (Sesuai Web Dashboard)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.cardBorder),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.primarySoft,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.layers_rounded,
-                        color: AppColors.primary,
-                        size: 18,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'KARAKTERISTIK LAYANAN DAPUR',
-                            style: AppTextStyles.bodySmall.copyWith(
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.4,
-                              color: AppColors.textMuted,
-                              fontSize: 10.5,
-                            ),
-                          ),
-                          Text(
-                            _vendor.serviceMode,
-                            style: AppTextStyles.h4.copyWith(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 9,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? const Color(0xFF143823)
-                            : const Color(0xFFDCFCE7),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '● Aktif ✓',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w800,
-                          color: isDark
-                              ? const Color(0xFF4ADE80)
-                              : const Color(0xFF15803D),
-                        ),
-                      ),
-                    ),
-                  ],
+          if ((_vendor.description ?? '').isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.cardBorder),
+              ),
+              child: Text(
+                _vendor.description!,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.45,
+                  fontSize: 12,
                 ),
-                const SizedBox(height: 10),
-                Text(
-                  _vendor.serviceModeDesc,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
-                    height: 1.45,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
+            const SizedBox(height: 12),
+          ],
 
           // Kartu Detail Lokasi, Jam Buka & Kebijakan Holding 5 Menit
           Container(
@@ -1775,28 +1096,16 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               children: [
                 _buildInfoRow(
                   icon: Icons.location_on_outlined,
-                  title: 'Alamat / Lokasi Dapur di Kampus',
-                  value: _vendor.fullAddress,
+                  title: 'Titik Temu / Pickup',
+                  value: _vendor.pickupPoints.isEmpty
+                      ? '-'
+                      : _vendor.pickupPoints.map((e) => e.name).join(', '),
                 ),
                 Divider(height: 22, color: AppColors.cardBorder),
                 _buildInfoRow(
                   icon: Icons.access_time_rounded,
                   title: 'Jam Operasional Dapur',
-                  value: '${_vendor.openHours} (Buka Setiap Hari Kuliah)',
-                ),
-                Divider(height: 22, color: AppColors.cardBorder),
-                _buildInfoRow(
-                  icon: Icons.timer_outlined,
-                  title: 'Kebijakan Penguncian Kuota (Lock)',
-                  value:
-                      'Holding Timer 5 Menit otomatis saat Checkout untuk mencegah pesanan dobel.',
-                ),
-                Divider(height: 22, color: AppColors.cardBorder),
-                _buildInfoRow(
-                  icon: Icons.verified_user_outlined,
-                  title: 'Sertifikasi & Jaminan Higienis',
-                  value:
-                      '100% Halal • Bahan Segar Harian • Terverifikasi BEM/Kantin Kampus UB',
+                  value: '${_vendor.openTime}–${_vendor.closeTime} WIB',
                 ),
               ],
             ),
@@ -1845,82 +1154,5 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     );
   }
 
-  // ==================== BOTTOM BAR ====================
 
-  Widget _buildBottomStoreBar(bool isDark) {
-    final firstMenu = _vendor.menus.first;
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(
-          top: BorderSide(color: AppColors.cardBorder),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Row(
-          children: [
-            // Tombol Chat Dapur via WhatsApp
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF16A34A),
-                side: const BorderSide(color: Color(0xFF16A34A), width: 1.3),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              onPressed: _contactVendorWhatsApp,
-              icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
-              label: const Text(
-                'Chat Dapur',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-              ),
-            ),
-            const SizedBox(width: 12),
-            // Tombol Langsung Pesan Menu Utama Dapur
-            Expanded(
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 13),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  elevation: 0,
-                ),
-                onPressed: () {
-                  Navigator.pushNamed(
-                    context,
-                    AppRoutes.checkout,
-                    arguments: firstMenu,
-                  );
-                },
-                icon: const Icon(Icons.shopping_bag_outlined, size: 18),
-                label: Text(
-                  'Pesan di ${_vendor.name}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    fontSize: 13.5,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
