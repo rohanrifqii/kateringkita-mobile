@@ -1,4 +1,7 @@
+import '../../api/api_exception.dart';
+import '../../core/relative_time.dart';
 import '../../data/catalog_repository.dart';
+import '../../data/store_reviews.dart';
 import '../../widgets/menu_image.dart';
 import '../../widgets/add_to_cart.dart';
 import '../../widgets/primary_button.dart';
@@ -38,7 +41,43 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   int _selectedTabIndex = 0; // 0: Menu, 1: Untukmu, 2: Penilaian, 3: Informasi
   String _selectedMenuCategory = 'Semua';
 
+  // Tab Penilaian: dimuat saat tab pertama kali dibuka.
+  StoreReviews? _reviews;
+  bool _reviewsLoading = false;
+  String? _reviewsError;
+  int _reviewsSeq = 0;
+
   MerchantProfile get _vendor => _merchant!;
+
+  void _selectTab(int index) {
+    setState(() => _selectedTabIndex = index);
+    if (index == 2 && _reviews == null && !_reviewsLoading) _loadReviews();
+  }
+
+  Future<void> _loadReviews() async {
+    final repo = context.read<CatalogRepository>();
+    final seq = ++_reviewsSeq;
+    setState(() {
+      _reviewsLoading = true;
+      _reviewsError = null;
+    });
+    try {
+      final r = await loadStoreReviews(repo, _menus);
+      if (!mounted || seq != _reviewsSeq) return;
+      setState(() {
+        _reviews = r;
+        _reviewsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted || seq != _reviewsSeq) return;
+      setState(() {
+        _reviewsLoading = false;
+        _reviewsError = e is ApiException
+            ? e.message
+            : 'Ulasan gagal dimuat. Coba lagi.';
+      });
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -72,7 +111,11 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
         _merchant = merchant;
         _menus = page.items;
         _loading = false;
+        // Menu bisa berubah: ulasan dimuat ulang saat tab Penilaian dibuka.
+        _reviews = null;
+        _reviewsError = null;
       });
+      if (_selectedTabIndex == 2) _loadReviews();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -402,9 +445,9 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                           const SizedBox(height: 6),
                           // Baris Rating + Halal + Pelayanan Prima (Klik -> Tab Penilaian)
                           GestureDetector(
-                            onTap: () {
-                              // Penilaian toko belum tersedia.
-                            },
+                            key: const ValueKey('store-rating'),
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _selectTab(2),
                             child: Row(
                               children: [
                                 const Icon(
@@ -557,6 +600,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     final tabs = [
       'Menu (${_menus.length})',
       'Untukmu',
+      'Penilaian',
       'Informasi',
     ];
 
@@ -573,7 +617,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
           final isSelected = _selectedTabIndex == index;
           return Expanded(
             child: InkWell(
-              onTap: () => setState(() => _selectedTabIndex = index),
+              onTap: () => _selectTab(index),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 decoration: BoxDecoration(
@@ -617,11 +661,201 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       case 1:
         return _buildForYouGridTab(isDark);
       case 2:
+        return _buildReviewsTab();
+      case 3:
         return _buildStoreInfoTab(isDark);
       default:
         return _buildMenuTab(isDark);
     }
   }
+
+  /// TAB 2: Penilaian. Ringkasan dari rating toko (server) + ulasan terbaru
+  /// dari menu-menu toko (lihat [loadStoreReviews]).
+  Widget _buildReviewsTab() {
+    final reviews = _reviews;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _reviewSummary(),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Ulasan terbaru dari menu toko ini',
+                  style: AppTextStyles.h4.copyWith(fontSize: 14),
+                ),
+              ),
+              if (!_reviewsLoading)
+                TextButton.icon(
+                  onPressed: _loadReviews,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Muat ulang'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (_reviewsLoading && reviews == null)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_reviewsError != null && reviews == null)
+            _reviewsMessage(
+              _reviewsError!,
+              action: OutlinedButton(
+                  onPressed: _loadReviews, child: const Text('Coba Lagi')),
+            )
+          else if (reviews == null || reviews.reviews.isEmpty)
+            _reviewsMessage('Belum ada ulasan untuk menu toko ini.')
+          else ...[
+            if (reviews.failed > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Sebagian ulasan gagal dimuat.',
+                  style: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.textMuted, fontSize: 11.5),
+                ),
+              ),
+            for (final r in reviews.reviews) _reviewTile(r),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _stars(double value, {double size = 16}) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(
+          5,
+          (i) => Icon(
+            Icons.star_rounded,
+            size: size,
+            color: i < value.round()
+                ? const Color(0xFFF59E0B)
+                : AppColors.cardBorder,
+          ),
+        ),
+      );
+
+  Widget _reviewSummary() => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: Row(
+          children: [
+            Text(
+              _vendor.ratingCount == 0
+                  ? '–'
+                  : _vendor.ratingAvg.toStringAsFixed(1),
+              key: const ValueKey('store-rating-avg'),
+              style: AppTextStyles.h1.copyWith(fontSize: 34),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _stars(_vendor.ratingAvg, size: 18),
+                  const SizedBox(height: 4),
+                  Text(
+                    _vendor.ratingCount == 0
+                        ? 'Belum ada penilaian'
+                        : 'Dari ${_vendor.ratingCount} penilaian',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _reviewsMessage(String text, {Widget? action}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 28),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.rate_review_outlined,
+                  size: 40, color: AppColors.textMuted),
+              const SizedBox(height: 10),
+              Text(
+                text,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodyMedium
+                    .copyWith(color: AppColors.textSecondary),
+              ),
+              if (action != null) ...[
+                const SizedBox(height: 10),
+                action,
+              ],
+            ],
+          ),
+        ),
+      );
+
+  Widget _reviewTile(StoreReview r) => Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    r.review.customerName,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                Text(
+                  relativeTimeWib(r.review.createdAt),
+                  style: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.textMuted, fontSize: 11),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            _stars(r.review.rating.toDouble(), size: 14),
+            if ((r.review.comment ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                r.review.comment!,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                  fontSize: 12.5,
+                ),
+              ),
+            ],
+            const SizedBox(height: 6),
+            Text(
+              'Menu: ${r.menuName}',
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.textMuted, fontSize: 11),
+            ),
+          ],
+        ),
+      );
 
   /// TAB 0: Daftar Menu Lengkap (Gaya ShopeeFood & GoFood dengan tombol + dan harga coret)
   Widget _buildMenuTab(bool isDark) {

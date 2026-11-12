@@ -126,6 +126,16 @@ void main() {
     expect(l.first.createdAt.year, 2026);
   });
 
+  test('reviews dengan limit (halamanSchema backend, maks 100)', () async {
+    late Uri url;
+    final r = _repo((req) async {
+      url = req.url;
+      return _json(200, {'data': []});
+    });
+    await r.reviews(3, limit: 5);
+    expect(url.queryParameters, {'page': '1', 'limit': '5'});
+  });
+
   test('merchant parses with int rating_avg', () async {
     final r = _repo((req) async {
       expect(req.url.path, '/api/v1/merchants/toko');

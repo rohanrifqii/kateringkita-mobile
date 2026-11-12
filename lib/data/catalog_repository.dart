@@ -137,9 +137,13 @@ class CatalogRepository {
     return ProductModel.fromJson(res.data as Map<String, dynamic>);
   }
 
-  Future<List<MenuReview>> reviews(int menuId, {int page = 1}) async {
-    final res =
-        await _api.get('/menus/$menuId/reviews', query: {'page': '$page'});
+  /// Ulasan terbaru dulu. [limit] bawaan server 20, maks 100.
+  Future<List<MenuReview>> reviews(int menuId,
+      {int page = 1, int? limit}) async {
+    final res = await _api.get('/menus/$menuId/reviews', query: {
+      'page': '$page',
+      if (limit != null) 'limit': '$limit',
+    });
     return (res.data as List)
         .map((e) => MenuReview.fromJson(e as Map<String, dynamic>))
         .toList();
