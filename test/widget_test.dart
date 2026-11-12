@@ -12,24 +12,27 @@ import 'package:kateringkita_pbl/data/token_store.dart';
 import 'package:kateringkita_pbl/main.dart';
 import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:provider/provider.dart';
+
+import 'support/drift_quiet.dart';
+
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 http.Response _err(int status, String code, String msg) => http.Response(
-    jsonEncode({
-      'error': {'code': code, 'message': msg}
-    }),
-    status,
-    headers: {'content-type': 'application/json'});
+  jsonEncode({
+    'error': {'code': code, 'message': msg},
+  }),
+  status,
+  headers: {'content-type': 'application/json'},
+);
 
 Future<void> _pump(WidgetTester tester, MockClientHandler h) async {
   FlutterSecureStorage.setMockInitialValues({});
   SharedPreferencesAsyncPlatform.instance =
       InMemorySharedPreferencesAsync.empty();
-  await tester.pumpWidget(buildAppProviders(
-    client: MockClient(h),
-    child: const KateringKitaApp(),
-  ));
+  await tester.pumpWidget(
+    buildAppProviders(client: MockClient(h), child: const KateringKitaApp()),
+  );
 }
 
 String? _currentRoute() {
@@ -42,6 +45,7 @@ String? _currentRoute() {
 }
 
 void main() {
+  setUpAll(quietDriftMultiDbWarning);
   testWidgets('guest with no token: splash goes to main nav', (tester) async {
     await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
     expect(find.byType(MaterialApp), findsOneWidget);
@@ -50,8 +54,9 @@ void main() {
     expect(_currentRoute(), AppRoutes.mainNav);
   });
 
-  testWidgets('expired token at splash: guest continues to main nav',
-      (tester) async {
+  testWidgets('expired token at splash: guest continues to main nav', (
+    tester,
+  ) async {
     await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
     await TokenStore.saveSession('old', 'a@x.com');
     await tester.pump(const Duration(seconds: 3));
@@ -60,8 +65,9 @@ void main() {
     expect(await TokenStore.readToken(), isNull);
   });
 
-  testWidgets('authenticated 401 redirects to Login exactly once',
-      (tester) async {
+  testWidgets('authenticated 401 redirects to Login exactly once', (
+    tester,
+  ) async {
     await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
     await tester.pump(const Duration(seconds: 3));
     await tester.pump(const Duration(milliseconds: 500));
@@ -96,13 +102,15 @@ void main() {
     expect(await TokenStore.readToken(), isNull);
   });
 
-  testWidgets('wrong password shows server message on Login screen',
-      (tester) async {
+  testWidgets('wrong password shows server message on Login screen', (
+    tester,
+  ) async {
     await _pump(
-        tester,
-        (r) async => r.url.path.endsWith('/auth/login')
-            ? _err(401, 'UNAUTHORIZED', 'Email/WA atau password salah.')
-            : _err(401, 'UNAUTHORIZED', 'x'));
+      tester,
+      (r) async => r.url.path.endsWith('/auth/login')
+          ? _err(401, 'UNAUTHORIZED', 'Email/WA atau password salah.')
+          : _err(401, 'UNAUTHORIZED', 'x'),
+    );
     await tester.pump(const Duration(seconds: 3));
     await tester.pump(const Duration(milliseconds: 500));
     appNavigatorKey.currentState!.pushNamed(AppRoutes.login);

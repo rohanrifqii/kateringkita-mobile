@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
+import '../../core/password_rules.dart';
 import '../../api/api_exception.dart';
 import '../../data/auth_repository.dart';
 import '../../providers/auth_provider.dart';
@@ -58,11 +60,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showMessage('Nomor HP harus diawali 08 dan 10–13 digit.');
       return;
     }
-    if (password.length < 8 ||
-        password.length > 72 ||
-        !RegExp(r'[A-Za-z]').hasMatch(password) ||
-        !RegExp(r'\d').hasMatch(password)) {
-      _showMessage('Password 8–72 karakter, minimal 1 huruf dan 1 angka.');
+    final passwordError = validatePasswordRules(password);
+    if (passwordError != null) {
+      _showMessage(passwordError);
       return;
     }
 
@@ -169,7 +169,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 obscureText: _obscurePassword,
                 suffixIcon: IconButton(
                   icon: Icon(
-                    _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                    _obscurePassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
                     color: AppColors.textMuted,
                     size: 20,
                   ),
@@ -197,12 +199,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         color: _agreeToTerms ? AppColors.primary : Colors.white,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: _agreeToTerms ? AppColors.primary : AppColors.cardBorder,
+                          color: _agreeToTerms
+                              ? AppColors.primary
+                              : AppColors.cardBorder,
                           width: 1.5,
                         ),
                       ),
                       child: _agreeToTerms
-                          ? const Icon(Icons.check, size: 16, color: Colors.white)
+                          ? const Icon(
+                              Icons.check,
+                              size: 16,
+                              color: Colors.white,
+                            )
                           : null,
                     ),
                   ),
