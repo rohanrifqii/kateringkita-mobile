@@ -87,14 +87,10 @@ Supaya kalian paham cara kerja fitur-fitur yang udah jalan di Mobile saat ini:
 - Jadi waktu kalian *run* di laptop masing-masing, **Maps langsung jalan otomatis tanpa perlu daftar API Key apapun!**
 - **Penting saat Ngetes Lokasi:** Riwayat lokasi disimpan **per akun user**. Jadi kalau kalian bikin akun baru atau baru pertama kali pilih 1 lokasi, daftar *Riwayat Lokasi* memang sengaja **kosong** (baru terisi kalau kalian udah pernah ganti ke lokasi ke-2 dan seterusnya).
 
-### 🤖 B. Fitur AI Assistant (`lib/services/gemini_service.dart` & `ai_assistant_screen.dart`)
-- Halaman **AI Assistant** sudah dilengkapi **Hybrid AI Engine**:
-  1. **Mode Langsung Jalan (Tanpa Setup Apapun):** Di dalam kodingan sudah ada *Smart Catalog AI Engine* + *Knowledge Base KateringKita*. Jadi waktu Diego/Ammar/Rohan langsung ketik `flutter run`, fitur kalkulasi *Profit Maksimal* (1 menu paling cuan), *Variasi Menu* (5 menu beragam), dan *Chat AI* **sudah langsung berfungsi 100% tanpa kendala!**
-  2. **Mode Live Gemini API (Opsional buat Developer):** Kalau mau mengetes pakai API Key Google AI Studio milik sendiri tanpa mengubah kodingan, cukup jalankan:
-     ```bash
-     flutter run --dart-define=GEMINI_API_KEY=AIzaSy_ISI_API_KEY_KAMU_DISINI
-     ```
-- AI juga sudah dipasangi **Guardrail Konteks KateringKita**: AI tahu posisinya adalah asisten resmi KateringKita dan bakal menolak dengan sopan kalau ditanya hal-hal di luar katering/danusan.
+### 🤖 B. Fitur AI Assistant (`lib/data/assistant_repository.dart` & `ai_assistant_screen.dart`)
+- AI Assistant memanggil **backend** (`POST /assistant/recommendations`), **bukan** Gemini langsung. Aplikasi tidak menyimpan API key AI apa pun; kunci, pilihan model, dan kuota diatur di server.
+- Pembeli (harus login) menulis kebutuhan, opsional anggaran, jumlah porsi, dan kategori. Server memilih menu yang **benar-benar tersedia** hari ini, lalu aplikasi menampilkannya sebagai kartu menu yang bisa dibuka ke detail atau dimasukkan ke keranjang.
+- Batas server: **10 pertanyaan per 10 menit** per akun. Kalau terlewati, aplikasi menampilkan "Coba lagi beberapa menit lagi". Kalau AI di server belum aktif atau gagal, server tetap memberi menu cadangan (ditandai "tanpa AI").
 
 ### 💳 C. Bagian Pembayaran & Integrasi Backend (Untuk Rohan, Ammar, & Diego)
 - Aplikasi sekarang sudah **tersambung ke backend API** (bukan lagi database lokal). Base URL default-nya server produksi: `https://ketring-45f82aef1ca0.herokuapp.com/api/v1`. Mau pakai server lain (misal backend lokal)? Jalankan dengan `flutter run --dart-define=API_BASE_URL=https://alamat-server-kamu/api/v1`.
@@ -144,13 +140,13 @@ kateringkita-mobile/
 ├── lib/
 │   ├── main.dart             # Titik masuk utama aplikasi (Entry point)
 │   ├── api/                  # Klien HTTP ke backend API (ApiClient, config base URL)
-│   ├── core/                 # Warna tema, route navigasi, format Rupiah, config AI
-│   ├── data/                 # Auth Repo, Catalog/Order Repo, Settings & Token Store
-│   ├── models/               # Model data Produk, Order, Cart, & AI Recommendation
+│   ├── core/                 # Warna tema, route navigasi, format Rupiah & waktu WIB
+│   ├── data/                 # Repo Auth, Katalog, Pesanan, Favorit, Notifikasi, Asisten; Settings & Token Store
+│   ├── models/               # Model data Produk, Order, Cart, Notifikasi, & Rekomendasi AI
 │   ├── providers/            # State management (Provider)
-│   ├── services/             # GeminiService (AI Assistant) & MapService (OpenStreetMap & GPS)
+│   ├── services/             # MapService (OpenStreetMap & GPS)
 │   ├── screens/              # Semua halaman UI:
-│   │   ├── ai/               # Halaman AI Assistant & Sidebar Riwayat Chat
+│   │   ├── ai/               # Halaman AI Assistant (rekomendasi menu dari backend)
 │   │   ├── auth/             # Login, Register, Lupa Password, OTP
 │   │   ├── home/             # Home, Search, Detail Produk, Notifikasi
 │   │   ├── liked/            # Menu Favorit

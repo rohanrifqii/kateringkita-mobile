@@ -9,6 +9,7 @@ import 'core/app_router.dart';
 import 'core/app_theme.dart';
 import 'api/api_client.dart';
 import 'core/app_routes.dart';
+import 'data/assistant_repository.dart';
 import 'data/auth_repository.dart';
 import 'data/catalog_repository.dart';
 import 'data/favorite_repository.dart';
@@ -115,6 +116,7 @@ Widget buildAppProviders({
       ChangeNotifierProvider<FavoritesProvider>.value(value: favorites),
       Provider<NotificationRepository>.value(value: notificationRepo),
       ChangeNotifierProvider<NotificationProvider>.value(value: notifications),
+      Provider<AssistantRepository>.value(value: AssistantRepository(api)),
     ],
     child: child,
   );

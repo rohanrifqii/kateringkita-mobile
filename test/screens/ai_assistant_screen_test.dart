@@ -1,0 +1,345 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:kateringkita_pbl/api/api_client.dart';
+import 'package:kateringkita_pbl/core/app_routes.dart';
+import 'package:kateringkita_pbl/data/assistant_repository.dart';
+import 'package:kateringkita_pbl/data/catalog_repository.dart';
+import 'package:kateringkita_pbl/models/api_user.dart';
+import 'package:kateringkita_pbl/models/product_model.dart';
+import 'package:kateringkita_pbl/providers/cart_provider.dart';
+import 'package:kateringkita_pbl/screens/ai/ai_assistant_screen.dart';
+import 'package:provider/provider.dart';
+
+import '../support/session.dart';
+
+http.Response _json(Object body, [int status = 200]) =>
+    http.Response(jsonEncode(body), status,
+        headers: {'content-type': 'application/json; charset=utf-8'});
+
+http.Response _err(int status, String code, String message,
+        [Map<String, List<String>>? fields]) =>
+    _json({
+      'error': {'code': code, 'message': message, 'fields': ?fields}
+    }, status);
+
+const _merchant = {
+  'id': 3,
+  'slug': 'dapur-a',
+  'business_name': 'Dapur A',
+  'is_open': true,
+};
+
+Map<String, dynamic> _card(int id, String name, int price) => {
+      'id': id,
+      'name': name,
+      'price': price,
+      'unit_label': 'porsi',
+      'merchant': _merchant,
+      'available': 50,
+      'badge': 'available',
+      'is_favorite': false,
+    };
+
+Map<String, dynamic> _recommendation({String source = 'ai'}) => {
+      'data': {
+        'source': source,
+        'summary': 'Nasi box dan es teh pas untuk rapat 30 orang.',
+        'groups': [
+          {
+            'merchant': _merchant,
+            'items': [
+              {
+                'menu': _card(7, 'Nasi Box', 15000),
+                'qty': 30,
+                'subtotal': 450000,
+                'reason': 'Mengenyangkan dan tidak pedas',
+              },
+              {
+                'menu': _card(8, 'Es Teh', 3000),
+                'qty': 30,
+                'subtotal': 90000,
+              },
+            ],
+            'total': 540000,
+          }
+        ],
+        'total': 540000,
+      }
+    };
+
+const _cats = {
+  'data': [
+    {'id': 1, 'name': 'Nasi', 'slug': 'nasi', 'icon': ''},
+    {'id': 2, 'name': 'Snack', 'slug': 'snack', 'icon': ''},
+  ]
+};
+
+class _Harness {
+  _Harness(this.respond, {FakeAuth? auth})
+      : auth = auth ??
+            FakeAuth(
+              loggedIn: true,
+              user: const ApiUser(
+                  id: 1,
+                  role: 'customer',
+                  fullName: 'Budi Santoso',
+                  phone: '081234567890'),
+            );
+
+  final Future<http.Response> Function(http.Request) respond;
+  final FakeAuth auth;
+  final cart = CartProvider();
+  final requests = <http.Request>[];
+  Object? detailArgs;
+
+  Iterable<http.Request> get posts =>
+      requests.where((r) => r.url.path.endsWith('/assistant/recommendations'));
+
+  Widget app() {
+    final api = ApiClient(
+      baseUrl: 'https://x.test/api/v1',
+      client: MockClient((req) async {
+        requests.add(req);
+        if (req.url.path.endsWith('/meta/categories')) return _json(_cats);
+        return respond(req);
+      }),
+    );
+    return MultiProvider(
+      providers: [
+        Provider<AssistantRepository>.value(value: AssistantRepository(api)),
+        Provider<CatalogRepository>.value(value: CatalogRepository(api)),
+        ChangeNotifierProvider<CartProvider>.value(value: cart),
+        ...sessionProviders(api, auth: auth),
+      ],
+      child: MaterialApp(
+        home: const AIAssistantScreen(),
+        routes: {
+          AppRoutes.productDetail: (c) {
+            detailArgs = ModalRoute.of(c)?.settings.arguments;
+            return const Scaffold(body: Text('layar-detail'));
+          },
+          AppRoutes.login: (_) => const Scaffold(body: Text('layar-login')),
+        },
+      ),
+    );
+  }
+}
+
+Future<void> _ask(WidgetTester tester, String question,
+    {String? budget, String? portions}) async {
+  await tester.enterText(find.byKey(const ValueKey('ai-question')), question);
+  if (budget != null) {
+    await tester.enterText(find.byKey(const ValueKey('ai-budget')), budget);
+  }
+  if (portions != null) {
+    await tester.enterText(
+        find.byKey(const ValueKey('ai-portions')), portions);
+  }
+  await tester.ensureVisible(find.text('Cari Rekomendasi'));
+  await tester.tap(find.text('Cari Rekomendasi'));
+  await tester.pumpAndSettle();
+}
+
+void main() {
+  testWidgets('tamu: ajakan masuk tanpa permintaan apa pun', (tester) async {
+    final h = _Harness((req) async => _json(_recommendation()),
+        auth: FakeAuth());
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    expect(find.text('Masuk untuk memakai Asisten AI'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ai-question')), findsNothing);
+    expect(h.requests, isEmpty);
+    await tester.tap(find.text('Masuk'));
+    await tester.pumpAndSettle();
+    expect(find.text('layar-login'), findsOneWidget);
+  });
+
+  testWidgets('pembeli: sapaan nama depan + kategori dari server',
+      (tester) async {
+    final h = _Harness((req) async => _json(_recommendation()));
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    expect(find.text('Halo Budi!'), findsOneWidget);
+    expect(find.widgetWithText(ChoiceChip, 'Snack'), findsOneWidget);
+  });
+
+  testWidgets('validasi lokal: kebutuhan & anggaran, tanpa memanggil server',
+      (tester) async {
+    final h = _Harness((req) async => _json(_recommendation()));
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    await _ask(tester, 'ab', budget: '500', portions: '2000');
+    expect(find.text('Ceritakan kebutuhanmu 3–500 karakter.'), findsOneWidget);
+    expect(find.text('Anggaran Rp 1.000–100.000.000.'), findsOneWidget);
+    expect(find.text('Jumlah porsi 1–1.000.'), findsOneWidget);
+    expect(h.posts, isEmpty);
+  });
+
+  testWidgets('kirim: body sesuai kontrak, hasil tampil sebagai kartu menu',
+      (tester) async {
+    final h = _Harness((req) async => _json(_recommendation()));
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Nasi'));
+    await tester.pump();
+    await _ask(tester, '  makan siang rapat, tidak pedas ',
+        budget: '600000', portions: '30');
+
+    expect(jsonDecode(h.posts.single.body), {
+      'question': 'makan siang rapat, tidak pedas',
+      'budget': 600000,
+      'portions': 30,
+      'category': 'nasi',
+    });
+    expect(find.text('Nasi box dan es teh pas untuk rapat 30 orang.'),
+        findsOneWidget);
+    expect(find.text('Dapur A'), findsOneWidget);
+    expect(find.text('Nasi Box'), findsOneWidget);
+    expect(find.text('30 porsi × Rp 15.000'), findsOneWidget);
+    expect(find.text('Rp 450.000'), findsOneWidget);
+    expect(find.text('Mengenyangkan dan tidak pedas'), findsOneWidget);
+    expect(find.text('Rp 540.000'), findsOneWidget);
+    expect(find.textContaining('tanpa AI'), findsNothing);
+  });
+
+  testWidgets('kartu: buka detail menu dan tambah ke keranjang dengan qty',
+      (tester) async {
+    final h = _Harness((req) async => _json(_recommendation()));
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    await _ask(tester, 'makan siang rapat');
+
+    final add = find.byTooltip('Tambah ke keranjang').first;
+    await tester.ensureVisible(add);
+    await tester.tap(add);
+    await tester.pump();
+    expect(h.cart.items.single.menu.id, 7);
+    expect(h.cart.items.single.qty, 30);
+    expect(find.text('Ditambahkan ke keranjang'), findsOneWidget);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Nasi Box'));
+    await tester.pumpAndSettle();
+    expect(find.text('layar-detail'), findsOneWidget);
+    expect((h.detailArgs as ProductModel).id, 7);
+  });
+
+  testWidgets('Tambah semua: seluruh menu satu toko masuk keranjang',
+      (tester) async {
+    final h = _Harness((req) async => _json(_recommendation()));
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    await _ask(tester, 'makan siang rapat');
+    await tester.ensureVisible(find.text('Tambah semua'));
+    await tester.tap(find.text('Tambah semua'));
+    await tester.pumpAndSettle();
+    expect(h.cart.items.map((i) => (i.menu.id, i.qty)), [(7, 30), (8, 30)]);
+  });
+
+  testWidgets('Tambah semua saat keranjang berisi toko lain: Batal = tetap',
+      (tester) async {
+    final h = _Harness((req) async => _json(_recommendation()));
+    final other = ProductModel.fromJson({
+      ..._card(99, 'Lain', 1000),
+      'merchant': {..._merchant, 'id': 9, 'slug': 'lain'},
+    });
+    h.cart.add(other);
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    await _ask(tester, 'makan siang rapat');
+    await tester.ensureVisible(find.text('Tambah semua'));
+    await tester.tap(find.text('Tambah semua'));
+    await tester.pumpAndSettle();
+    expect(find.text('Keranjang berisi menu dari toko lain. Kosongkan dan ganti?'),
+        findsOneWidget);
+    await tester.tap(find.text('Batal'));
+    await tester.pumpAndSettle();
+    expect(h.cart.items.single.menu.id, 99);
+  });
+
+  testWidgets('cadangan tanpa AI diberi keterangan', (tester) async {
+    final h =
+        _Harness((req) async => _json(_recommendation(source: 'fallback')));
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    await _ask(tester, 'makan siang rapat');
+    expect(find.textContaining('tanpa AI'), findsOneWidget);
+    expect(find.text('Nasi Box'), findsOneWidget);
+  });
+
+  testWidgets('tidak ada menu cocok: ringkasan server + saran ubah kebutuhan',
+      (tester) async {
+    final h = _Harness((req) async => _json({
+          'data': {
+            'source': 'fallback',
+            'summary': 'Belum ada menu tersedia yang cocok.',
+            'groups': [],
+            'total': 0,
+          }
+        }));
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    await _ask(tester, 'sushi premium');
+    expect(find.text('Belum ada menu tersedia yang cocok.'), findsOneWidget);
+    expect(find.textContaining('Coba ubah'), findsOneWidget);
+    expect(find.text('Perkiraan total'), findsNothing);
+  });
+
+  testWidgets('429: minta coba lagi beberapa menit lagi', (tester) async {
+    final h = _Harness((req) async => _err(429, 'RATE_LIMITED',
+        'Terlalu banyak pertanyaan. Coba lagi beberapa menit lagi.'));
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    await _ask(tester, 'makan siang rapat');
+    expect(
+        find.text('Terlalu banyak pertanyaan. Coba lagi beberapa menit lagi.'),
+        findsOneWidget);
+  });
+
+  testWidgets('503: asisten belum aktif', (tester) async {
+    final h = _Harness((req) async => _err(
+        503, 'SERVICE_UNAVAILABLE', 'Asisten AI belum diaktifkan.'));
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    await _ask(tester, 'makan siang rapat');
+    expect(find.text('Asisten AI belum aktif. Coba lagi nanti.'),
+        findsOneWidget);
+  });
+
+  testWidgets('galat validasi server tampil di kolomnya', (tester) async {
+    final h = _Harness((req) async => _err(400, 'VALIDATION_ERROR',
+        'Data tidak valid.', {
+          'budget': ['Anggaran Rp 1.000–100.000.000.']
+        }));
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    await _ask(tester, 'makan siang rapat');
+    expect(find.text('Anggaran Rp 1.000–100.000.000.'), findsOneWidget);
+    expect(find.text('Data tidak valid.'), findsNothing);
+  });
+
+  testWidgets('keluar: hasil dan isian dibuang, kembali ajakan masuk',
+      (tester) async {
+    final h = _Harness((req) async => _json(_recommendation()));
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    await _ask(tester, 'makan siang rapat');
+    expect(find.text('Nasi Box'), findsOneWidget);
+
+    h.auth.set(false);
+    await tester.pumpAndSettle();
+    expect(find.text('Nasi Box'), findsNothing);
+    expect(find.text('Masuk untuk memakai Asisten AI'), findsOneWidget);
+
+    h.auth.set(true);
+    await tester.pumpAndSettle();
+    expect(find.text('Nasi Box'), findsNothing);
+    final field = tester.widget<TextField>(
+        find.byKey(const ValueKey('ai-question')));
+    expect(field.controller!.text, isEmpty);
+  });
+}

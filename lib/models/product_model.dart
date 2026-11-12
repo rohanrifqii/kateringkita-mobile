@@ -166,11 +166,3 @@ class ProductModel {
         preorderDays: preorderDays,
       );
 }
-
-/// Shim sementara agar layar yang belum dipindah ke API tetap kompil.
-/// Dihapus setelah pemakai terakhirnya hilang.
-class ProductData {
-  static final List<ProductModel> mockProducts = [];
-
-  static ProductModel? getProductByName(String name) => null;
-}
