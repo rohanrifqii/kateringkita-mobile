@@ -34,6 +34,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
   final Map<int, int> _rating = {};
   final Map<int, TextEditingController> _comments = {};
   final Map<int, String> _errors = {};
+  final Set<int> _done = {};
   bool _sending = false;
   String? _error;
 
@@ -59,11 +60,13 @@ class _ReviewSheetState extends State<_ReviewSheet> {
   }
 
   Future<void> _send() async {
-    final rated = _menus.where((m) => _rating.containsKey(m.menuId)).toList();
+    final rated = _menus
+        .where((m) => _rating.containsKey(m.menuId) && !_done.contains(m.menuId))
+        .toList();
     setState(() {
       _sending = true;
       _error = null;
-      _errors.clear();
+      _errors.removeWhere((k, _) => !_done.contains(k));
     });
     try {
       await widget.repo.review(widget.order.code, [
@@ -82,7 +85,12 @@ class _ReviewSheetState extends State<_ReviewSheet> {
         if (e is ApiException) {
           for (var i = 0; i < rated.length; i++) {
             final f = e.field('items.$i.menu_id');
-            if (f != null) _errors[rated[i].menuId] = f;
+            if (f != null) {
+              final id = rated[i].menuId;
+              _errors[id] = f;
+              _rating.remove(id);
+              _done.add(id);
+            }
           }
           if (_errors.isEmpty) _error = e.message;
         } else {
@@ -95,6 +103,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
   Widget _row(OrderItem m) {
     final r = _rating[m.menuId] ?? 0;
     final err = _errors[m.menuId];
+    final done = _done.contains(m.menuId);
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: Column(
@@ -109,9 +118,13 @@ class _ReviewSheetState extends State<_ReviewSheet> {
                 visualDensity: VisualDensity.compact,
                 icon: Icon(n <= r ? Icons.star_rounded : Icons.star_border_rounded,
                     color: AppColors.primary),
-                onPressed: _sending
+                onPressed: _sending || done
                     ? null
                     : () => setState(() {
+                          if (_rating[m.menuId] == n) {
+                            _rating.remove(m.menuId);
+                            return;
+                          }
                           _rating[m.menuId] = n;
                           _errors.remove(m.menuId);
                         }),
@@ -121,8 +134,10 @@ class _ReviewSheetState extends State<_ReviewSheet> {
             controller: _comments[m.menuId],
             maxLength: 500,
             maxLines: 2,
+            enabled: !done,
             minLines: 1,
             decoration: InputDecoration(
+              counterText: '',
               hintText: 'Tulis komentar (opsional)',
               errorText: err,
               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
@@ -135,7 +150,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final canSend = _rating.isNotEmpty && !_sending;
+    final canSend = _rating.keys.any((k) => !_done.contains(k)) && !_sending;
     return Padding(
       padding: EdgeInsets.fromLTRB(
           20, 20, 20, 20 + MediaQuery.viewInsetsOf(context).bottom),

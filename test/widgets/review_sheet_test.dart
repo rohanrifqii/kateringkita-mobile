@@ -61,8 +61,7 @@ Future<Future<bool?> Function()> _open(
     ),
   ));
   return () {
-    final f = showReviewSheet(ctx, _order());
-    return f;
+    return showReviewSheet(ctx, _order());
   };
 }
 
@@ -126,5 +125,54 @@ void main() {
     expect((sent!['items'] as List).length, 1);
     expect((sent!['items'] as List).first['menu_id'], 8);
     expect(find.text('Kirim Ulasan'), findsNothing);
+  });
+
+  testWidgets('subset + 409: baris ke-2 terkunci, baris lain bisa kirim ulang',
+      (t) async {
+    var calls = 0;
+    Map? last;
+    final open = await _open(t, (r) async {
+      calls++;
+      last = jsonDecode(r.body) as Map;
+      if (calls == 1) {
+        return _json({
+          'error': {
+            'code': 'CONFLICT',
+            'message': 'Konflik',
+            'fields': {
+              'items.0.menu_id': ['Menu ini sudah diulas.']
+            }
+          }
+        }, 409);
+      }
+      return _json({
+        'data': {'order_code': 'KK-1', 'reviewed_menu_ids': [7]}
+      }, 201);
+    });
+    final res = open();
+    await t.pumpAndSettle();
+    await t.tap(find.byKey(const Key('star-8-3')));
+    await t.pump();
+    await t.tap(find.text('Kirim Ulasan'));
+    await t.pumpAndSettle();
+    expect(find.text('Menu ini sudah diulas.'), findsOneWidget);
+    final btn = find.widgetWithText(ElevatedButton, 'Kirim Ulasan');
+    expect(t.widget<ElevatedButton>(btn).onPressed, isNull);
+    expect(
+        t.widget<IconButton>(find.byKey(const Key('star-8-3'))).onPressed,
+        isNull);
+
+    await t.tap(find.byKey(const Key('star-7-2')));
+    await t.pump();
+    // ketuk bintang terpilih lagi menghapus, lalu pilih ulang
+    await t.tap(find.byKey(const Key('star-7-2')));
+    await t.pump();
+    expect(t.widget<ElevatedButton>(btn).onPressed, isNull);
+    await t.tap(find.byKey(const Key('star-7-2')));
+    await t.pump();
+    await t.tap(find.text('Kirim Ulasan'));
+    await t.pumpAndSettle();
+    expect(await res, true);
+    expect((last!['items'] as List).map((e) => e['menu_id']), [7]);
   });
 }
