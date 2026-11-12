@@ -29,9 +29,17 @@ class NotificationScreen extends StatefulWidget {
 
 class _NotificationScreenState extends State<NotificationScreen> {
   static const _pageSize = 20;
-  static const _categories = ['Semua', 'Pesanan', 'Promo', 'Info'];
+
+  /// Chip → `type` di server (null = semua tipe).
+  static const _categories = <String, String?>{
+    'Semua': null,
+    'Pesanan': 'order_status',
+    'Promo': 'promo',
+    'Info': 'info',
+  };
 
   String _selectedCategory = 'Semua';
+  String? get _type => _categories[_selectedCategory];
   List<AppNotification> _items = const [];
   int _total = 0;
   int _page = 0;
@@ -76,11 +84,19 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
-  static String _categoryOf(AppNotification n) => switch (n.type) {
-        'order_status' => 'Pesanan',
-        'promo' => 'Promo',
-        _ => 'Info',
-      };
+  /// Ganti chip: muat ulang dari server dengan `type` chip itu (paginasi
+  /// mulai lagi dari halaman 1).
+  void _selectCategory(String category) {
+    if (category == _selectedCategory) return;
+    setState(() {
+      _selectedCategory = category;
+      _items = const [];
+      _total = 0;
+      _page = 0;
+      _error = null;
+    });
+    _load();
+  }
 
   String _msg(Object e) =>
       e is ApiException ? e.message : 'Terjadi kesalahan. Coba lagi.';
@@ -108,7 +124,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
       });
     }
     try {
-      final page = await repo.list(limit: _pageSize);
+      final page = await repo.list(limit: _pageSize, type: _type);
       if (!mounted || seq != _seq) return;
       badge.setUnread(page.unreadCount);
       setState(() {
@@ -134,7 +150,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     final seq = _seq;
     setState(() => _loadingMore = true);
     try {
-      final page = await repo.list(page: _page + 1, limit: _pageSize);
+      final page =
+          await repo.list(page: _page + 1, limit: _pageSize, type: _type);
       if (!mounted || seq != _seq) return;
       badge.setUnread(page.unreadCount);
       final ids = _items.map((e) => e.id).toSet();
@@ -253,12 +270,12 @@ class _NotificationScreenState extends State<NotificationScreen> {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         child: Row(
-          children: _categories.map((cat) {
+          children: _categories.keys.map((cat) {
             final isSelected = _selectedCategory == cat;
             return Padding(
               padding: const EdgeInsets.only(right: 8),
               child: InkWell(
-                onTap: () => setState(() => _selectedCategory = cat),
+                onTap: () => _selectCategory(cat),
                 borderRadius: BorderRadius.circular(20),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
@@ -292,9 +309,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     if (_loading && _items.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
-    final list = _selectedCategory == 'Semua'
-        ? _items
-        : _items.where((n) => _categoryOf(n) == _selectedCategory).toList();
+    // Sudah difilter server sesuai chip (type).
+    final list = _items;
     final hasMore = _items.length < _total;
 
     return RefreshIndicator(

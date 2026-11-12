@@ -142,21 +142,130 @@ void main() {
     expect(find.text('Tandai Dibaca'), findsOneWidget);
   });
 
-  testWidgets('kategori Promo/Info dari type server', (tester) async {
-    final h = _Harness((req) async => _json(_page(_sample)));
-    await tester.pumpWidget(h.app(const NotificationScreen()));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Promo'));
-    await tester.pumpAndSettle();
-    expect(find.text('Promo baru dari Dapur A'), findsOneWidget);
-    expect(find.text('Pesanan siap diambil'), findsNothing);
-    await tester.tap(find.text('Info'));
-    await tester.pumpAndSettle();
-    expect(find.text('Jadwal libur'), findsOneWidget);
-    await tester.tap(find.text('Pesanan'));
-    await tester.pumpAndSettle();
-    expect(find.text('Pesanan siap diambil'), findsOneWidget);
-    expect(find.text('Jadwal libur'), findsNothing);
+  group('filter tipe di server', () {
+    /// Server palsu yang menyaring `type` seperti backend.
+    Future<http.Response> server(http.Request req) async {
+      final type = req.url.queryParameters['type'];
+      final items = [
+        for (final n in _sample)
+          if (type == null || n['type'] == type) n
+      ];
+      return _json(_page(items, unread: 9));
+    }
+
+    List<Map<String, String>> queries(_Harness h) => [
+          for (final r in h.requests.where((r) => r.method == 'GET'))
+            r.url.queryParameters
+        ];
+
+    testWidgets('chip memuat ulang dengan type; Semua tanpa type',
+        (tester) async {
+      final h = _Harness(server);
+      await tester.pumpWidget(h.app(const NotificationScreen()));
+      await tester.pumpAndSettle();
+      expect(queries(h).single.containsKey('type'), isFalse);
+
+      await tester.tap(find.text('Promo'));
+      await tester.pumpAndSettle();
+      expect(queries(h).last, {'page': '1', 'limit': '20', 'type': 'promo'});
+      expect(find.text('Promo baru dari Dapur A'), findsOneWidget);
+      expect(find.text('Pesanan siap diambil'), findsNothing);
+
+      await tester.tap(find.text('Info'));
+      await tester.pumpAndSettle();
+      expect(queries(h).last['type'], 'info');
+      expect(find.text('Jadwal libur'), findsOneWidget);
+
+      await tester.tap(find.text('Pesanan'));
+      await tester.pumpAndSettle();
+      expect(queries(h).last['type'], 'order_status');
+      expect(find.text('Pesanan siap diambil'), findsOneWidget);
+      expect(find.text('Jadwal libur'), findsNothing);
+
+      await tester.tap(find.text('Semua'));
+      await tester.pumpAndSettle();
+      expect(queries(h).last.containsKey('type'), isFalse);
+      expect(find.text('Jadwal libur'), findsOneWidget);
+      // unread_count tetap global dari meta.
+      expect(h.notifications.unreadCount, 9);
+    });
+
+    testWidgets('chip yang sama tidak memuat ulang', (tester) async {
+      final h = _Harness(server);
+      await tester.pumpWidget(h.app(const NotificationScreen()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Semua'));
+      await tester.pumpAndSettle();
+      expect(queries(h), hasLength(1));
+    });
+
+    testWidgets('kosong per tipe: pesan kategori', (tester) async {
+      final h = _Harness((req) async {
+        if (req.url.queryParameters['type'] == 'promo') {
+          return _json(_page([], unread: 2));
+        }
+        return server(req);
+      });
+      await tester.pumpWidget(h.app(const NotificationScreen()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Promo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Kategori "Promo" saat ini kosong.'), findsOneWidget);
+      expect(find.text('Pesanan siap diambil'), findsNothing);
+    });
+
+    testWidgets('muat lebih banyak menghormati filter', (tester) async {
+      final h = _Harness((req) async {
+        final q = req.url.queryParameters;
+        if (q['type'] != 'promo') return _json(_page(_sample));
+        if (q['page'] == '2') {
+          return _json(_page([
+            _notif(20,
+                type: 'promo',
+                title: 'Promo lama',
+                data: {'promo_code': 'LAMA'})
+          ], total: 2));
+        }
+        return _json(_page([
+          _notif(21,
+              type: 'promo', title: 'Promo baru', data: {'promo_code': 'B'})
+        ], total: 2));
+      });
+      await tester.pumpWidget(h.app(const NotificationScreen()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Promo'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Muat lebih banyak'));
+      await tester.pumpAndSettle();
+      expect(queries(h).last, {'page': '2', 'limit': '20', 'type': 'promo'});
+      expect(find.text('Promo baru'), findsOneWidget);
+      expect(find.text('Promo lama'), findsOneWidget);
+      expect(find.text('Muat lebih banyak'), findsNothing);
+    });
+
+    testWidgets('jawaban chip lama yang terlambat diabaikan', (tester) async {
+      final slow = Completer<void>();
+      final h = _Harness((req) async {
+        final type = req.url.queryParameters['type'];
+        if (type == 'promo') {
+          await slow.future;
+          return _json(_page([
+            _notif(30, type: 'promo', title: 'Promo telat', data: {})
+          ]));
+        }
+        return server(req);
+      });
+      await tester.pumpWidget(h.app(const NotificationScreen()));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Promo'));
+      await tester.pump();
+      await tester.tap(find.text('Info'));
+      await tester.pumpAndSettle();
+      slow.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Jadwal libur'), findsOneWidget);
+      expect(find.text('Promo telat'), findsNothing);
+    });
   });
 
   testWidgets(

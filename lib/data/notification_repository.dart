@@ -23,15 +23,19 @@ class NotificationRepository {
 
   final ApiClient _api;
 
+  /// [type]: `order_status` | `promo` | `info` (filter di server; tipe lain
+  /// ditolak 400). `total` mengikuti filter, `unreadCount` tidak.
   Future<NotificationPage> list({
     int page = 1,
     int limit = 20,
     bool unreadOnly = false,
+    String? type,
   }) async {
     final res = await _api.get('/me/notifications', query: {
       'page': '$page',
       'limit': '$limit',
       if (unreadOnly) 'unread': 'true',
+      'type': ?type,
     });
     final items = (res.data as List)
         .map((e) => AppNotification.fromJson(e as Map<String, dynamic>))

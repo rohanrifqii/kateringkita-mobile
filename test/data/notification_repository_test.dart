@@ -76,6 +76,34 @@ void main() {
         {'page': '2', 'limit': '1', 'unread': 'true'});
   });
 
+  test('list type: filter server, bisa digabung unread; total ikut filter',
+      () async {
+    late Uri url;
+    final r = _repo((req) async {
+      url = req.url;
+      return _json(200, {
+        'data': [_notif(1, type: 'promo', data: {'promo_code': 'X'})],
+        'meta': {'page': 1, 'limit': 20, 'total': 1, 'unread_count': 6},
+      });
+    });
+    final page = await r.list(type: 'promo', unreadOnly: true);
+    expect(url.queryParameters,
+        {'page': '1', 'limit': '20', 'unread': 'true', 'type': 'promo'});
+    expect(page.total, 1);
+    // unread_count tetap seluruh yang belum dibaca.
+    expect(page.unreadCount, 6);
+  });
+
+  test('tanpa type: parameter tidak dikirim', () async {
+    late Uri url;
+    final r = _repo((req) async {
+      url = req.url;
+      return _json(200, {'data': [], 'meta': {'total': 0, 'unread_count': 0}});
+    });
+    await r.list();
+    expect(url.queryParameters.containsKey('type'), isFalse);
+  });
+
   test('data sebagai string JSON atau null tetap terbaca', () async {
     final r = _repo((req) async => _json(200, {
           'data': [
