@@ -12,11 +12,13 @@ import 'core/app_routes.dart';
 import 'data/auth_repository.dart';
 import 'data/catalog_repository.dart';
 import 'data/favorite_repository.dart';
+import 'data/notification_repository.dart';
 import 'data/order_repository.dart';
 import 'data/token_store.dart';
 import 'providers/auth_provider.dart';
 import 'providers/cart_provider.dart';
 import 'providers/favorites_provider.dart';
+import 'providers/notification_provider.dart';
 import 'providers/theme_provider.dart';
 
 void main() async {
@@ -83,15 +85,19 @@ Widget buildAppProviders({
   final repo = AuthRepository(api, onSessionInvalid: () => auth.clear());
   auth = AuthProvider(repo);
 
-  // Keranjang & favorit milik sesi: dikosongkan saat logout / sesi tidak valid.
+  // Keranjang, favorit & lencana notifikasi milik sesi: dikosongkan saat
+  // logout / sesi tidak valid.
   final cart = CartProvider();
   final favoriteRepo = FavoriteRepository(api);
   final favorites = FavoritesProvider(favoriteRepo);
+  final notificationRepo = NotificationRepository(api);
+  final notifications = NotificationProvider(notificationRepo);
   var wasLoggedIn = false;
   auth.addListener(() {
     if (wasLoggedIn && !auth.isLoggedIn) {
       cart.clear();
       favorites.clear();
+      notifications.clear();
     }
     wasLoggedIn = auth.isLoggedIn;
   });
@@ -107,6 +113,8 @@ Widget buildAppProviders({
       Provider<OrderRepository>.value(value: OrderRepository(api)),
       Provider<FavoriteRepository>.value(value: favoriteRepo),
       ChangeNotifierProvider<FavoritesProvider>.value(value: favorites),
+      Provider<NotificationRepository>.value(value: notificationRepo),
+      ChangeNotifierProvider<NotificationProvider>.value(value: notifications),
     ],
     child: child,
   );

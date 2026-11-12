@@ -15,6 +15,7 @@ import 'package:kateringkita_pbl/models/product_model.dart';
 import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:kateringkita_pbl/providers/cart_provider.dart';
 import 'package:kateringkita_pbl/providers/favorites_provider.dart';
+import 'package:kateringkita_pbl/providers/notification_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -253,6 +254,15 @@ void main() {
       await ctx.read<AuthProvider>().logout();
       await tester.pumpAndSettle();
       expect(favorites.isFavorite(menu), isFalse);
+    });
+
+    testWidgets('logout mengosongkan lencana notifikasi', (tester) async {
+      final ctx = await loggedIn(tester);
+      final notifications = ctx.read<NotificationProvider>();
+      notifications.setUnread(3);
+      await ctx.read<AuthProvider>().logout();
+      await tester.pumpAndSettle();
+      expect(notifications.unreadCount, 0);
     });
   });
 }

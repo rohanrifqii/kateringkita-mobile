@@ -7,7 +7,12 @@ import '../../core/app_text_styles.dart';
 import 'order_list_view.dart';
 
 class OrdersScreen extends StatefulWidget {
-  const OrdersScreen({super.key});
+  /// [initialTab]: `active` | `completed` | `cancelled`; [initialQuery] mis.
+  /// kode pesanan (dipakai saat dibuka dari notifikasi).
+  const OrdersScreen({super.key, this.initialTab, this.initialQuery = ''});
+
+  final String? initialTab;
+  final String initialQuery;
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -21,6 +26,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    final i = _tabKeys.indexOf(widget.initialTab ?? '');
+    if (i >= 0) _selectedTabIndex = i;
+    final q = widget.initialQuery.trim();
+    if (q.isNotEmpty) {
+      _searchController.text = q;
+      _searchQuery = q;
+    }
+  }
 
   void _onSearch(String val) {
     _debounce?.cancel();

@@ -51,7 +51,14 @@ class AppRouter {
     AppRoutes.payment: (context) => const PaymentScreen(),
     AppRoutes.whatsappGenerator: (context) => const WhatsAppGeneratorScreen(),
     AppRoutes.aiAssistant: (context) => const AIAssistantScreen(),
-    AppRoutes.orders: (context) => const OrdersScreen(),
+    AppRoutes.orders: (context) {
+      // Opsional {'tab': 'active'|'completed'|'cancelled', 'q': kode pesanan}.
+      final a = ModalRoute.of(context)?.settings.arguments;
+      return OrdersScreen(
+        initialTab: a is Map ? a['tab'] as String? : null,
+        initialQuery: a is Map ? (a['q'] as String?) ?? '' : '',
+      );
+    },
     AppRoutes.activeOrders: (context) => const ActiveOrdersScreen(),
     AppRoutes.completedOrders: (context) => const CompletedOrdersScreen(),
     AppRoutes.liked: (context) => const LikedScreen(),

@@ -12,6 +12,7 @@ import '../../models/product_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/cart_button.dart';
 import '../../widgets/food_card.dart';
+import '../../widgets/notification_bell.dart';
 import '../orders/location_picker_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -289,50 +290,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const CartButton(),
                   const SizedBox(width: 8),
-                  // Notification icon with badge dot
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      Navigator.pushNamed(context, AppRoutes.notifications);
-                    },
-                    child: Stack(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.cardBorder.withValues(alpha: 0.8)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.04),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.notifications_outlined,
-                            color: AppColors.textPrimary,
-                            size: 22,
-                          ),
-                        ),
-                        Positioned(
-                          top: 10,
-                          right: 12,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: AppColors.danger,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  // Lonceng dengan lencana jumlah belum dibaca
+                  const NotificationBell(),
                 ],
               ),
               const SizedBox(height: 20),
