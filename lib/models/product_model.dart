@@ -117,7 +117,9 @@ class ProductModel {
             .toList(),
         minOrderQty: (json['min_order_qty'] as num?)?.toInt() ?? 1,
         prepMinutes: (json['prep_minutes'] as num?)?.toInt() ?? 0,
-        isPreorder: (json['is_preorder'] as bool?) ?? false,
+        // Kartu katalog tidak memuat is_preorder; badge 'preorder' jadi penanda (detail menu memuatnya eksplisit)
+        isPreorder:
+            (json['is_preorder'] as bool?) ?? json['badge'] == 'preorder',
         preorderDays: (json['preorder_days'] as num?)?.toInt() ?? 0,
       );
 
