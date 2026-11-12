@@ -4,9 +4,9 @@ import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../data/liked_store.dart';
 import '../../models/product_model.dart';
 import '../../data/catalog_repository.dart';
+import '../../widgets/favorite_button.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/menu_image.dart';
 import '../../widgets/add_to_cart.dart';
@@ -559,36 +559,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                       ],
                     ),
-                    child: ValueListenableBuilder<Set<String>>(
-                      valueListenable: LikedStore.likedNotifier,
-                      builder: (context, likedIds, child) {
-                        final isLiked = likedIds.contains(_product.id.toString());
-                        return IconButton(
-                          icon: Icon(
-                            isLiked
-                                ? Icons.favorite_rounded
-                                : Icons.favorite_border_rounded,
-                            size: 20,
-                            color: isLiked
-                                ? AppColors.danger
-                                : AppColors.textPrimary,
-                          ),
-                          onPressed: () async {
-                            final nowLiked =
-                                await LikedStore.toggleLike(_product.id.toString());
-                            if (!context.mounted) return;
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(nowLiked
-                                    ? 'Ditambahkan ke favorit: ${_product.name}'
-                                    : 'Dihapus dari favorit: ${_product.name}'),
-                                duration: const Duration(seconds: 1),
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
+                    child: FavoriteButton(menu: _product),
                   ),
                 ],
               ),

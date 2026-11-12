@@ -13,6 +13,8 @@ import 'package:kateringkita_pbl/widgets/food_card.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/session.dart';
+
 http.Response _json(Object body, [int status = 200]) =>
     http.Response(jsonEncode(body), status,
         headers: {'content-type': 'application/json; charset=utf-8'});
@@ -43,7 +45,8 @@ const _cats = {
 
 Widget _wrap(List<http.Request> log, Widget child,
     {Map<String, dynamic> menus = const {'data': [], 'meta': {'total': 0}},
-    bool fail = false}) {
+    bool fail = false,
+    FakeAuth? auth}) {
   final api = ApiClient(
     baseUrl: 'https://x.test/api/v1',
     client: MockClient((req) async {
@@ -57,6 +60,7 @@ Widget _wrap(List<http.Request> log, Widget child,
     providers: [
       Provider<CatalogRepository>.value(value: CatalogRepository(api)),
       ChangeNotifierProvider(create: (_) => CartProvider()),
+      ...sessionProviders(api, auth: auth),
     ],
     child: MaterialApp(home: child),
   );
@@ -98,6 +102,55 @@ void main() {
             r.url.path.endsWith('/menus') &&
             r.url.queryParameters['category'] == 'katering'),
         isTrue);
+  });
+
+  testWidgets('kartu: hati dari is_favorite hanya untuk pembeli',
+      (tester) async {
+    final menus = Map<String, dynamic>.from(_menus([
+      {..._card(1, 'A'), 'is_favorite': true},
+      _card(2, 'B'),
+    ]) as Map);
+    final auth = FakeAuth(loggedIn: true);
+    await tester.pumpWidget(
+        _wrap(<http.Request>[], const HomeScreen(), menus: menus, auth: auth));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
+
+    // Keluar: kartu lama tidak boleh memperlihatkan favorit akun tadi.
+    auth.set(false);
+    await tester.pump();
+    expect(find.byIcon(Icons.favorite_rounded), findsNothing);
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('kartu: ketuk hati -> PUT /me/favorites/:id', (tester) async {
+    final log = <http.Request>[];
+    await tester.pumpWidget(_wrap(log, const HomeScreen(),
+        menus: Map<String, dynamic>.from(_menus([_card(5, 'A')]) as Map),
+        auth: FakeAuth(loggedIn: true)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.favorite_border_rounded));
+    await tester.pumpAndSettle();
+    final put = log.where((r) => r.method == 'PUT').single;
+    expect(put.url.path, '/api/v1/me/favorites/5');
+    expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+  });
+
+  testWidgets('masuk/keluar memuat ulang menu (is_favorite per sesi)',
+      (tester) async {
+    final log = <http.Request>[];
+    final auth = FakeAuth();
+    await tester.pumpWidget(_wrap(log, const HomeScreen(), auth: auth));
+    await tester.pumpAndSettle();
+    int menuCalls() => log.where((r) => r.url.path.endsWith('/menus')).length;
+    expect(menuCalls(), 1);
+    auth.set(true);
+    await tester.pumpAndSettle();
+    expect(menuCalls(), 2);
+    auth.set(false);
+    await tester.pumpAndSettle();
+    expect(menuCalls(), 3);
   });
 
   testWidgets('error shows retry button', (tester) async {
@@ -149,6 +202,7 @@ void _raceTest() {
       providers: [
         Provider<CatalogRepository>.value(value: CatalogRepository(api)),
         ChangeNotifierProvider(create: (_) => CartProvider()),
+        ...sessionProviders(api),
       ],
       child: const MaterialApp(home: HomeScreen()),
     ));

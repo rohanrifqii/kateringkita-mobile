@@ -11,16 +11,16 @@ import 'api/api_client.dart';
 import 'core/app_routes.dart';
 import 'data/auth_repository.dart';
 import 'data/catalog_repository.dart';
+import 'data/favorite_repository.dart';
 import 'data/order_repository.dart';
 import 'data/token_store.dart';
 import 'providers/auth_provider.dart';
-import 'data/liked_store.dart';
 import 'providers/cart_provider.dart';
+import 'providers/favorites_provider.dart';
 import 'providers/theme_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await LikedStore.init();
 
   final prefs = SharedPreferencesAsync();
   final isDarkInitial = await prefs.getBool(ThemeProvider.prefKey) ?? false;
@@ -83,11 +83,16 @@ Widget buildAppProviders({
   final repo = AuthRepository(api, onSessionInvalid: () => auth.clear());
   auth = AuthProvider(repo);
 
-  // Keranjang milik sesi: dikosongkan saat logout / sesi tidak valid.
+  // Keranjang & favorit milik sesi: dikosongkan saat logout / sesi tidak valid.
   final cart = CartProvider();
+  final favoriteRepo = FavoriteRepository(api);
+  final favorites = FavoritesProvider(favoriteRepo);
   var wasLoggedIn = false;
   auth.addListener(() {
-    if (wasLoggedIn && !auth.isLoggedIn) cart.clear();
+    if (wasLoggedIn && !auth.isLoggedIn) {
+      cart.clear();
+      favorites.clear();
+    }
     wasLoggedIn = auth.isLoggedIn;
   });
 
@@ -100,6 +105,8 @@ Widget buildAppProviders({
       ChangeNotifierProvider<AuthProvider>.value(value: auth),
       Provider<CatalogRepository>.value(value: CatalogRepository(api)),
       Provider<OrderRepository>.value(value: OrderRepository(api)),
+      Provider<FavoriteRepository>.value(value: favoriteRepo),
+      ChangeNotifierProvider<FavoritesProvider>.value(value: favorites),
     ],
     child: child,
   );

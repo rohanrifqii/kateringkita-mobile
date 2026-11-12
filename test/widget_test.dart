@@ -14,6 +14,7 @@ import 'package:kateringkita_pbl/main.dart';
 import 'package:kateringkita_pbl/models/product_model.dart';
 import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:kateringkita_pbl/providers/cart_provider.dart';
+import 'package:kateringkita_pbl/providers/favorites_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -241,6 +242,17 @@ void main() {
       await tester.pumpAndSettle();
       expect(ctx.read<CartProvider>().items, isEmpty);
       expect(ctx.read<AuthProvider>().isLoggedIn, isFalse);
+    });
+
+    testWidgets('logout mengosongkan status favorit sesi', (tester) async {
+      final ctx = await loggedIn(tester);
+      final favorites = ctx.read<FavoritesProvider>();
+      await favorites.setFavorite(menu, true);
+      expect(favorites.isFavorite(menu), isTrue);
+
+      await ctx.read<AuthProvider>().logout();
+      await tester.pumpAndSettle();
+      expect(favorites.isFavorite(menu), isFalse);
     });
   });
 }

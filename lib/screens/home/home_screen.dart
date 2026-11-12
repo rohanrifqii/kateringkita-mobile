@@ -9,6 +9,7 @@ import '../../data/catalog_repository.dart';
 import '../../data/settings_store.dart';
 import '../../models/category_model.dart';
 import '../../models/product_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/cart_button.dart';
 import '../../widgets/food_card.dart';
 import '../orders/location_picker_screen.dart';
@@ -60,17 +61,32 @@ class _HomeScreenState extends State<HomeScreen> {
     },
   ];
 
+  late final AuthProvider _auth;
+  late bool _wasLoggedIn;
+
   @override
   void initState() {
     super.initState();
+    _auth = context.read<AuthProvider>();
+    _wasLoggedIn = _auth.isLoggedIn;
+    _auth.addListener(_onAuthChanged);
     _loadMeetingPoint();
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
   @override
   void dispose() {
+    _auth.removeListener(_onAuthChanged);
     _bannerController.dispose();
     super.dispose();
+  }
+
+  /// Masuk/keluar: muat ulang menu supaya `is_favorite` milik sesi yang benar.
+  void _onAuthChanged() {
+    final now = _auth.isLoggedIn;
+    if (now == _wasLoggedIn || !mounted) return;
+    _wasLoggedIn = now;
+    _load();
   }
 
   Future<void> _loadMeetingPoint() async {
