@@ -148,6 +148,8 @@ Future<_Harness> _open(
   required List<(ProductModel, int)> lines,
   ApiUser? user = _budi,
   Future<http.Response> Function(int n)? onOrder,
+  Future<http.Response> Function(int n)? onQuote,
+  Future<http.Response> Function(int n)? onMenu,
 }) async {
   final h = _Harness();
   h.cart = CartProvider();
@@ -155,6 +157,8 @@ Future<_Harness> _open(
     h.cart.add(p, qty: q);
   }
   var orderCalls = 0;
+  var quoteCalls = 0;
+  var menuCalls = 0;
   final api = ApiClient(
     baseUrl: 'https://x.test/api/v1',
     timeout: const Duration(seconds: 2),
@@ -162,6 +166,8 @@ Future<_Harness> _open(
       h.requests.add(req);
       final p = req.url.path;
       if (p.endsWith('/orders/quote')) {
+        quoteCalls++;
+        if (onQuote != null) return onQuote(quoteCalls);
         final n = (jsonDecode(req.body)['items'] as List).length;
         return _json({'data': _quote(n)});
       }
@@ -172,6 +178,8 @@ Future<_Harness> _open(
       }
       final m = RegExp(r'/menus/(\d+)$').firstMatch(p);
       if (m != null) {
+        menuCalls++;
+        if (onMenu != null) return onMenu(menuCalls);
         final id = int.parse(m.group(1)!);
         final line = lines.firstWhere((l) => l.$1.id == id).$1;
         return _json({
@@ -310,7 +318,10 @@ void main() {
     await _pay(tester);
     await tester.pump(const Duration(seconds: 3));
     await tester.pumpAndSettle();
-    expect(find.text('Koneksi lambat. Coba lagi.'), findsOneWidget);
+    expect(
+        find.text(
+            'Koneksi lambat. Coba lagi. Cek tab Pesanan sebelum mencoba lagi.'),
+        findsOneWidget);
     expect(h.cart.items, isNotEmpty);
 
     await _pay(tester);
@@ -351,9 +362,14 @@ void main() {
     await tester.ensureVisible(find.text('Virtual Account'));
     await tester.tap(find.text('Virtual Account'));
     await tester.pump();
+    final quotesBefore = h.quotes.length;
     await _pay(tester);
     await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
 
+    // Total/status bayar disegarkan dari server setelah gagal.
+    expect(h.quotes.length, quotesBefore + 1);
     expect(jsonDecode(h.orders.single.body)['payment_method'], 'va');
     expect(
         find.descendant(
@@ -400,5 +416,136 @@ void main() {
     await _open(tester, lines: []);
     expect(find.text('Keranjang masih kosong'), findsOneWidget);
     expect(find.text('Cari Menu'), findsOneWidget);
+  });
+
+  _testWidgets('timeout, keluar lalu masuk checkout lagi: kunci yang sama',
+      (tester) async {
+    final h = await _open(
+      tester,
+      lines: [(_p(7, 'Nasi Box', 20000), 1)],
+      onOrder: (n) => n == 1
+          ? Completer<http.Response>().future
+          : Future.value(_json({'data': _order()}, 201)),
+    );
+    await _pay(tester);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Cek tab Pesanan sebelum mencoba lagi.'),
+        findsOneWidget);
+
+    // Keluar dari checkout, lalu masuk lagi.
+    await tester.tap(find.byIcon(Icons.arrow_back_ios_new_rounded));
+    await tester.pumpAndSettle();
+    expect(find.byType(CheckoutScreen), findsNothing);
+    await tester.tap(find.text('go'));
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+
+    await _pay(tester);
+    await tester.pumpAndSettle();
+    expect(h.orders.length, 2);
+    final k1 = h.orders[0].headers['Idempotency-Key'];
+    expect(k1, isNotEmpty);
+    expect(h.orders[1].headers['Idempotency-Key'], k1);
+    expect(find.text('PAY KK-1 99000'), findsOneWidget);
+  });
+
+  _testWidgets('galat parse setelah 201: tombol pulih, kunci dipakai ulang',
+      (tester) async {
+    final h = await _open(
+      tester,
+      lines: [(_p(7, 'Nasi Box', 20000), 1)],
+      onOrder: (n) async => n == 1
+          ? http.Response('<html>rusak</html>', 201)
+          : _json({'data': _order()}, 201),
+    );
+    await _pay(tester);
+    await tester.pumpAndSettle();
+    expect(find.text('Terjadi kesalahan. Coba lagi.'), findsOneWidget);
+    expect(tester.widget<PrimaryButton>(find.byType(PrimaryButton)).onPressed,
+        isNotNull);
+    expect(h.cart.items, isNotEmpty);
+
+    await _pay(tester);
+    await tester.pumpAndSettle();
+    expect(h.orders.length, 2);
+    expect(h.orders[1].headers['Idempotency-Key'],
+        h.orders[0].headers['Idempotency-Key']);
+    expect(find.text('PAY KK-1 99000'), findsOneWidget);
+  });
+
+  _testWidgets('galat tak terduga saat quote: pesan, tanpa spinner',
+      (tester) async {
+    await _open(
+      tester,
+      lines: [(_p(7, 'Nasi Box', 20000), 1)],
+      onQuote: (_) async => _json({'data': 'rusak'}),
+    );
+    expect(find.text('Terjadi kesalahan. Coba lagi.'), findsOneWidget);
+    expect(find.text('Menghitung total…'), findsNothing);
+    expect(tester.widget<PrimaryButton>(find.byType(PrimaryButton)).onPressed,
+        isNull);
+  });
+
+  _testWidgets('galat tak terduga saat memuat titik temu: bisa coba lagi',
+      (tester) async {
+    await _open(
+      tester,
+      lines: [(_p(7, 'Nasi Box', 20000), 1)],
+      onMenu: (_) async => _json({'data': 'rusak'}),
+    );
+    expect(find.text('Gagal memuat titik temu'), findsOneWidget);
+    expect(find.textContaining('Terjadi kesalahan. Coba lagi.'), findsWidgets);
+    expect(find.text('Memuat titik temu…'), findsNothing);
+  });
+
+  _testWidgets('galat kolom pemesan tampil di bawah kolomnya', (tester) async {
+    await _open(
+      tester,
+      lines: [(_p(7, 'Nasi Box', 20000), 1)],
+      onOrder: (_) async => _json({
+        'error': {
+          'code': 'VALIDATION_ERROR',
+          'message': 'Data tidak valid.',
+          'fields': {
+            'customer_name': ['Nama wajib diisi.'],
+            'customer_phone': ['Nomor WhatsApp tidak valid.'],
+            'note': ['Catatan terlalu panjang.'],
+          }
+        }
+      }, 422),
+    );
+    await _pay(tester);
+    await tester.pumpAndSettle();
+
+    Finder under(String label, String msg) => find.descendant(
+        of: find.ancestor(
+            of: find.text(label),
+            matching: find.byWidgetPredicate(
+                (w) => w.runtimeType.toString() == '_OrderField')),
+        matching: find.text(msg));
+    expect(under('Nama Lengkap', 'Nama wajib diisi.'), findsOneWidget);
+    expect(under('Kontak Penerima', 'Nomor WhatsApp tidak valid.'),
+        findsOneWidget);
+    expect(under('Catatan Khusus', 'Catatan terlalu panjang.'), findsOneWidget);
+    expect(under('Nama Lengkap', 'Nomor WhatsApp tidak valid.'), findsNothing);
+  });
+
+  _testWidgets('409 MERCHANT_CLOSED memicu quote ulang', (tester) async {
+    final h = await _open(
+      tester,
+      lines: [(_p(7, 'Nasi Box', 20000), 1)],
+      onOrder: (_) async => _json({
+        'error': {'code': 'MERCHANT_CLOSED', 'message': 'Toko sedang tutup.'}
+      }, 409),
+    );
+    final before = h.quotes.length;
+    await _pay(tester);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(h.quotes.length, before + 1);
+    expect(find.text('Toko sedang tutup.'), findsOneWidget);
   });
 }

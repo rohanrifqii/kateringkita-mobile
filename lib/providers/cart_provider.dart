@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import '../api/idempotency.dart';
 import '../models/cart_item.dart';
 import '../models/product_model.dart';
 
@@ -7,8 +8,20 @@ enum AddResult { added, differentMerchant }
 /// Keranjang multi-menu untuk satu toko.
 class CartProvider extends ChangeNotifier {
   final List<CartItem> _items = [];
+  String? _idemKey;
 
   List<CartItem> get items => List.unmodifiable(_items);
+
+  /// Idempotency-Key untuk membuat pesanan dari isi keranjang saat ini.
+  /// Dibuat saat pertama dibutuhkan dan tetap sama (juga bila layar checkout
+  /// ditutup lalu dibuka lagi) sampai isi keranjang berubah atau dikosongkan.
+  String get idempotencyKey => _idemKey ??= newIdempotencyKey();
+
+  /// Isi keranjang berubah: niat checkout baru, kunci lama tidak berlaku.
+  void _changed() {
+    _idemKey = null;
+    notifyListeners();
+  }
 
   int? get merchantId => _items.isEmpty ? null : _items.first.menu.merchant.id;
 
@@ -25,14 +38,14 @@ class CartProvider extends ChangeNotifier {
       return AddResult.differentMerchant;
     }
     _addLine(menu, option, qty);
-    notifyListeners();
+    _changed();
     return AddResult.added;
   }
 
   void replaceWith(ProductModel menu, {MenuOption? option, int qty = 1}) {
     _items.clear();
     _addLine(menu, option, qty);
-    notifyListeners();
+    _changed();
   }
 
   void _addLine(ProductModel menu, MenuOption? option, int qty) {
@@ -48,19 +61,19 @@ class CartProvider extends ChangeNotifier {
   void setQty(String key, int qty) {
     if (qty <= 0) return remove(key);
     final i = _items.indexWhere((e) => e.key == key);
-    if (i < 0) return;
+    if (i < 0 || _items[i].qty == qty) return;
     _items[i].qty = qty;
-    notifyListeners();
+    _changed();
   }
 
   void remove(String key) {
     _items.removeWhere((e) => e.key == key);
-    notifyListeners();
+    _changed();
   }
 
   void clear() {
     _items.clear();
-    notifyListeners();
+    _changed();
   }
 
   List<Map<String, dynamic>> toQuoteItems() => [

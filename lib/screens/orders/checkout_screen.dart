@@ -1,12 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:provider/provider.dart';
 
 import '../../api/api_exception.dart';
-import '../../api/idempotency.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
@@ -90,11 +88,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String? _quoteError;
   String? _promoError;
 
+  // Galat kolom data pemesan dari server.
+  String? _nameError;
+  String? _phoneError;
+  String? _noteError;
+
   // Buat pesanan.
   bool _submitting = false;
-  String? _idemKey;
-  String? _idemCart;
   Map<String, String> _lineErrors = const {};
+
+  static const String _genericError = 'Terjadi kesalahan. Coba lagi.';
 
   @override
   void initState() {
@@ -166,6 +169,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         _pointsLoading = false;
         _pointsError = e.message;
       });
+    } catch (_) {
+      // Galat tak terduga (mis. respons rusak): jangan biarkan spinner macet.
+      if (!mounted) return;
+      setState(() {
+        _pointsLoading = false;
+        _pointsError = _genericError;
+      });
     }
   }
 
@@ -202,6 +212,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         _promoError = null;
         _pointError = null;
         _pickupError = null;
+        _nameError = null;
+        _phoneError = null;
+        _noteError = null;
       });
     } on ApiException catch (e) {
       if (!mounted || seq != _quoteSeq) return;
@@ -210,6 +223,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         _quoting = false;
         final matched = _applyFieldErrors(e);
         _quoteError = matched ? null : e.message;
+      });
+    } catch (_) {
+      if (!mounted || seq != _quoteSeq) return;
+      setState(() {
+        _quote = null;
+        _quoting = false;
+        _quoteError = _genericError;
       });
     }
   }
@@ -254,6 +274,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         matched = true;
       } else if (k == 'promo_code') {
         _promoError = v.first;
+        matched = true;
+      } else if (k == 'customer_name') {
+        _nameError = v.first;
+        matched = true;
+      } else if (k == 'customer_phone') {
+        _phoneError = v.first;
+        matched = true;
+      } else if (k == 'note') {
+        _noteError = v.first;
         matched = true;
       }
     });
@@ -398,14 +427,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<void> _submit() async {
     final cart = _cart;
     final repo = context.read<OrderRepository>();
-    // Satu kunci per niat checkout: dipakai ulang saat mengulang (mis. setelah
-    // timeout), dibuat ulang hanya setelah sukses atau isi keranjang berubah.
-    final signature = jsonEncode(cart.toQuoteItems());
-    if (_idemKey == null || _idemCart != signature) {
-      _idemKey = newIdempotencyKey();
-      _idemCart = signature;
-    }
-    final key = _idemKey!;
+    // Satu kunci per niat checkout, disimpan di CartProvider: dipakai ulang
+    // saat mengulang (mis. setelah timeout, juga setelah keluar-masuk
+    // checkout), baru diganti saat isi keranjang berubah atau dikosongkan.
+    final key = cart.idempotencyKey;
     final body = {..._body(), 'payment_method': _payment.apiValue};
     setState(() {
       _submitting = true;
@@ -414,8 +439,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     try {
       final order = await repo.create(body, idempotencyKey: key);
       if (!mounted) return;
-      _idemKey = null;
-      _idemCart = null;
       cart.clear();
       Navigator.pushReplacementNamed(context, AppRoutes.payment,
           arguments: order);
@@ -425,11 +448,27 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         _submitting = false;
         _applyFieldErrors(e);
       });
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.message)));
+      // Pesanan mungkin sudah terbuat walau respons tidak sampai.
+      final uncertain = e.code == 'TIMEOUT' || e.code == 'NETWORK';
+      _showSnack(uncertain
+          ? '${e.message} Cek tab Pesanan sebelum mencoba lagi.'
+          : e.message);
+      // Stok/toko berubah: segarkan total & status bayar dari server.
+      if (e.code == 'OUT_OF_STOCK' || e.code == 'MERCHANT_CLOSED') {
+        _scheduleQuote();
+      }
+    } catch (_) {
+      // Galat tak terduga (mis. respons 201 rusak): tombol pulih, kunci tetap
+      // sama sehingga mengulang tidak membuat pesanan ganda.
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _showSnack(_genericError);
     }
   }
+
+  void _showSnack(String text) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(text)));
 
   BoxDecoration get _cardDecoration => BoxDecoration(
         color: AppColors.surface,
@@ -747,6 +786,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           label: 'Nama Lengkap',
           controller: _nameController,
           hintText: 'Nama pemesan',
+          errorText: _nameError,
+          onChanged: (_) {
+            if (_nameError == null) return;
+            setState(() => _nameError = null);
+            _scheduleQuote();
+          },
         ),
         const SizedBox(height: 12),
         _OrderField(
@@ -754,6 +799,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           controller: _phoneController,
           keyboardType: TextInputType.phone,
           hintText: '08xxxxxxxxxx',
+          errorText: _phoneError,
+          onChanged: (_) {
+            if (_phoneError == null) return;
+            setState(() => _phoneError = null);
+            _scheduleQuote();
+          },
           trailing: Text(
             '(WhatsApp Aktif)',
             style: AppTextStyles.bodySmall.copyWith(
@@ -775,6 +826,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           fillColor: AppColors.secondaryBg,
           lines: 2,
           hintText: 'Contoh: sambal dipisah, diambil jam istirahat',
+          errorText: _noteError,
+          onChanged: (_) {
+            if (_noteError == null) return;
+            setState(() => _noteError = null);
+            _scheduleQuote();
+          },
         ),
         const SizedBox(height: 12),
         _OrderField(

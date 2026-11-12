@@ -102,4 +102,33 @@ void main() {
       {'menu_id': 2, 'qty': 1, 'option_ids': <int>[]},
     ]);
   });
+
+  test('idempotencyKey stabil sampai isi keranjang berubah', () {
+    final c = CartProvider();
+    final m = _menu(1);
+    c.add(m);
+    final k1 = c.idempotencyKey;
+    expect(k1, isNotEmpty);
+    expect(c.idempotencyKey, k1);
+
+    String renewedBy(void Function() change) {
+      final before = c.idempotencyKey;
+      change();
+      final after = c.idempotencyKey;
+      expect(after, isNot(before));
+      return after;
+    }
+
+    renewedBy(() => c.add(_menu(2)));
+    renewedBy(() => c.setQty('2:0', 3));
+    renewedBy(() => c.remove('2:0'));
+    renewedBy(() => c.replaceWith(_menu(3, merchant: 3)));
+    renewedBy(c.clear);
+
+    // setQty dengan jumlah yang sama tidak mengubah isi.
+    c.add(m);
+    final same = c.idempotencyKey;
+    c.setQty('1:0', 1);
+    expect(c.idempotencyKey, same);
+  });
 }
