@@ -1,8 +1,5 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -12,14 +9,13 @@ import '../../api/api_exception.dart';
 import '../../models/api_user.dart';
 import '../../data/auth_repository.dart';
 import '../../providers/theme_provider.dart';
+import '../../widgets/profile_avatar.dart';
 
 /// Data tambahan profil pengguna yang disimpan di SharedPreferences
 class UserProfileExtras {
   final String bio;
   final String gender;
   final String birthDate;
-  final int avatarIndex; // 0 = foto default, 3 = inisial
-  final String avatarPath; // Path file foto profil hasil upload dari Galeri / Kamera
   final bool isPhoneVerified;
   final bool isEmailVerified;
 
@@ -27,8 +23,6 @@ class UserProfileExtras {
     this.bio = 'Mahasiswa\nUniversitas Brawijaya',
     this.gender = 'Pria',
     this.birthDate = '',
-    this.avatarIndex = 0,
-    this.avatarPath = '',
     this.isPhoneVerified = true,
     this.isEmailVerified = false,
   });
@@ -37,8 +31,6 @@ class UserProfileExtras {
     String? bio,
     String? gender,
     String? birthDate,
-    int? avatarIndex,
-    String? avatarPath,
     bool? isPhoneVerified,
     bool? isEmailVerified,
   }) {
@@ -46,8 +38,6 @@ class UserProfileExtras {
       bio: bio ?? this.bio,
       gender: gender ?? this.gender,
       birthDate: birthDate ?? this.birthDate,
-      avatarIndex: avatarIndex ?? this.avatarIndex,
-      avatarPath: avatarPath ?? this.avatarPath,
       isPhoneVerified: isPhoneVerified ?? this.isPhoneVerified,
       isEmailVerified: isEmailVerified ?? this.isEmailVerified,
     );
@@ -66,8 +56,6 @@ class UserProfileExtras {
         'Mahasiswa\nUniversitas Brawijaya';
     final gender = await _prefs.getString('prof_gender_$s') ?? 'Pria';
     final birthDate = await _prefs.getString('prof_birth_$s') ?? '';
-    final avatarIndex = await _prefs.getInt('prof_avatar_$s') ?? 0;
-    final avatarPath = await _prefs.getString('prof_avatar_path_$s') ?? '';
     final phoneVer = await _prefs.getBool('prof_phone_ver_$s') ?? true;
     final emailVer = await _prefs.getBool('prof_email_ver_$s') ?? false;
 
@@ -75,8 +63,6 @@ class UserProfileExtras {
       bio: bio,
       gender: gender,
       birthDate: birthDate,
-      avatarIndex: avatarIndex,
-      avatarPath: avatarPath,
       isPhoneVerified: phoneVer,
       isEmailVerified: emailVer,
     );
@@ -87,8 +73,6 @@ class UserProfileExtras {
     await _prefs.setString('prof_bio_$s', data.bio);
     await _prefs.setString('prof_gender_$s', data.gender);
     await _prefs.setString('prof_birth_$s', data.birthDate);
-    await _prefs.setInt('prof_avatar_$s', data.avatarIndex);
-    await _prefs.setString('prof_avatar_path_$s', data.avatarPath);
     await _prefs.setBool('prof_phone_ver_$s', data.isPhoneVerified);
     await _prefs.setBool('prof_email_ver_$s', data.isEmailVerified);
   }
@@ -115,11 +99,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late String _phone;
   late int? _userId;
   late UserProfileExtras _extras;
+  String? _avatarUrl;
+  bool _avatarBusy = false;
 
   @override
   void initState() {
     super.initState();
     _userId = widget.initialUser?.id;
+    _avatarUrl = widget.initialUser?.avatarUrl;
     _name = widget.initialUser?.fullName ?? 'Abdurrahim';
     _email = widget.initialUser?.email ?? 'abdurrahim.workspace@gmail.com';
     _phone = widget.initialUser?.phone ?? '085852157352';
@@ -200,45 +187,70 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   // ---------------- MODAL EDIT TIAP FIELD ----------------
 
-  Future<void> _pickAndSaveImage(ImageSource source) async {
+  void _showErrorToast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Ambil foto lalu unggah ke server (presign → PUT → PATCH /me).
+  Future<void> _pickAndUploadAvatar(ImageSource source) async {
+    final repo = context.read<AuthRepository>();
+    final XFile? picked;
     try {
-      final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(
+      picked = await ImagePicker().pickImage(
         source: source,
         imageQuality: 85,
-        maxWidth: 800,
-        maxHeight: 800,
+        maxWidth: 1024,
+        maxHeight: 1024,
       );
-      if (pickedFile == null) return;
+    } catch (_) {
+      _showErrorToast('Gagal membuka galeri/kamera. Coba lagi.');
+      return;
+    }
+    if (picked == null || !mounted) return;
 
-      final appDir = await getApplicationDocumentsDirectory();
-      final ext = pickedFile.path.contains('.')
-          ? pickedFile.path.substring(pickedFile.path.lastIndexOf('.'))
-          : '.jpg';
-      final savedPath =
-          '${appDir.path}/avatar_${DateTime.now().millisecondsSinceEpoch}$ext';
-      await File(pickedFile.path).copy(savedPath);
-
-      if (!mounted) return;
-      setState(() {
-        _extras = _extras.copyWith(
-          avatarPath: savedPath,
-          avatarIndex: 0,
-        );
-      });
-      await _persistChanges();
-      _showSuccessToast('Foto profil berhasil diunggah & diperbarui!');
-    } catch (e) {
-      if (!mounted) return;
-      _showSuccessToast(
-        'Gagal membuka galeri/kamera. Pastikan aplikasi sudah di-restart penuh.',
+    setState(() => _avatarBusy = true);
+    try {
+      final bytes = await picked.readAsBytes();
+      final user = await repo.uploadAvatar(
+        fileName: picked.name.isNotEmpty ? picked.name : picked.path,
+        bytes: bytes,
       );
+      if (!mounted) return;
+      setState(() => _avatarUrl = user.avatarUrl);
+      _showSuccessToast('Foto profil berhasil diperbarui');
+    } on ApiException catch (e) {
+      _showErrorToast(e.message);
+    } catch (_) {
+      _showErrorToast('Gagal mengunggah foto. Coba lagi.');
+    } finally {
+      if (mounted) setState(() => _avatarBusy = false);
+    }
+  }
+
+  Future<void> _removeAvatar() async {
+    final repo = context.read<AuthRepository>();
+    setState(() => _avatarBusy = true);
+    try {
+      final user = await repo.removeAvatar();
+      if (!mounted) return;
+      setState(() => _avatarUrl = user.avatarUrl);
+      _showSuccessToast('Foto profil dihapus');
+    } on ApiException catch (e) {
+      _showErrorToast(e.message);
+    } finally {
+      if (mounted) setState(() => _avatarBusy = false);
     }
   }
 
   void _showAvatarPickerSheet() {
-    final hasCustomPhoto =
-        _extras.avatarPath.isNotEmpty && File(_extras.avatarPath).existsSync();
+    if (_avatarBusy) return;
+    if (_userId == null) {
+      _showErrorToast('Masuk dulu untuk mengubah foto profil.');
+      return;
+    }
+    final hasPhoto = _avatarUrl != null && _avatarUrl!.isNotEmpty;
 
     showModalBottomSheet(
       context: context,
@@ -306,7 +318,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
-                    _pickAndSaveImage(ImageSource.gallery);
+                    _pickAndUploadAvatar(ImageSource.gallery);
                   },
                 ),
                 Divider(height: 1, color: AppColors.divider),
@@ -341,75 +353,39 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
-                    _pickAndSaveImage(ImageSource.camera);
+                    _pickAndUploadAvatar(ImageSource.camera);
                   },
                 ),
-                Divider(height: 1, color: AppColors.divider),
-                // Opsi 3: Gunakan Inisial Nama
-                ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                  leading: CircleAvatar(
-                    backgroundColor: AppColors.secondaryBg,
-                    child: Icon(
-                      Icons.text_fields_rounded,
-                      color: AppColors.textSecondary,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    'Gunakan Avatar Inisial Nama',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  trailing: (!hasCustomPhoto && _extras.avatarIndex == 3)
-                      ? const Icon(
-                          Icons.check_circle_rounded,
-                          color: AppColors.primary,
-                        )
-                      : null,
-                  onTap: () async {
-                    setState(() {
-                      _extras = _extras.copyWith(
-                        avatarPath: '',
-                        avatarIndex: 3,
-                      );
-                    });
-                    Navigator.pop(ctx);
-                    await _persistChanges();
-                    _showSuccessToast('Avatar diubah ke inisial nama');
-                  },
-                ),
-                if (hasCustomPhoto || _extras.avatarIndex != 0) ...[
+                if (hasPhoto) ...[
                   Divider(height: 1, color: AppColors.divider),
+                  // Opsi 3: Hapus foto, kembali ke inisial nama
                   ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                     leading: CircleAvatar(
                       backgroundColor: AppColors.dangerLight,
                       child: const Icon(
-                        Icons.restore_rounded,
+                        Icons.delete_outline_rounded,
                         color: AppColors.danger,
                         size: 20,
                       ),
                     ),
                     title: Text(
-                      'Reset ke Foto Profil Default',
+                      'Hapus Foto Profil',
                       style: AppTextStyles.bodyMedium.copyWith(
                         fontWeight: FontWeight.w600,
                         color: AppColors.danger,
                       ),
                     ),
-                    onTap: () async {
-                      setState(() {
-                        _extras = _extras.copyWith(
-                          avatarPath: '',
-                          avatarIndex: 0,
-                        );
-                      });
+                    subtitle: Text(
+                      'Kembali memakai inisial nama',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                    onTap: () {
                       Navigator.pop(ctx);
-                      await _persistChanges();
-                      _showSuccessToast('Foto profil dikembalikan ke default');
+                      _removeAvatar();
                     },
                   ),
                 ],
@@ -903,7 +879,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'Ubah',
+                            _avatarBusy ? 'Menyimpan foto...' : 'Ubah',
                             style: AppTextStyles.bodyMedium.copyWith(
                               color: isDark
                                   ? AppColors.darkTextSecondary
@@ -1010,75 +986,40 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Widget _buildAvatarCircle() {
-    if (_extras.avatarPath.isNotEmpty) {
-      final file = File(_extras.avatarPath);
-      if (file.existsSync()) {
-        return Container(
-          width: 82,
-          height: 82,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: AppColors.primary, width: 2),
-          ),
-          child: ClipOval(
-            child: Image.file(
-              file,
-              width: 82,
-              height: 82,
-              fit: BoxFit.cover,
-            ),
-          ),
-        );
-      }
-    }
-
-    if (_extras.avatarIndex == 0) {
-      return Container(
-        width: 82,
-        height: 82,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.cardBorder, width: 1.5),
-        ),
-        child: ClipOval(
-          child: Image.asset(
-            'assets/images/avatar_abdurrahim.png',
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => Container(
-              color: AppColors.primarySoft,
-              child: const Icon(
-                Icons.person_rounded,
-                size: 46,
-                color: AppColors.primary,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    final initial =
-        _name.trim().isNotEmpty ? _name.trim()[0].toUpperCase() : 'U';
+    final hasPhoto = _avatarUrl != null && _avatarUrl!.isNotEmpty;
     return Container(
       width: 82,
       height: 82,
       decoration: BoxDecoration(
-        color: AppColors.primarySoft,
         shape: BoxShape.circle,
         border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.3),
-          width: 1.5,
+          color: hasPhoto
+              ? AppColors.primary
+              : AppColors.primary.withValues(alpha: 0.3),
+          width: hasPhoto ? 2 : 1.5,
         ),
       ),
-      child: Center(
-        child: Text(
-          initial,
-          style: const TextStyle(
-            fontSize: 30,
-            fontWeight: FontWeight.w800,
-            color: AppColors.primary,
-          ),
-        ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ProfileAvatar(name: _name, url: _avatarUrl, size: 82),
+          if (_avatarBusy)
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black.withValues(alpha: 0.35),
+              ),
+              alignment: Alignment.center,
+              child: const SizedBox(
+                width: 26,
+                height: 26,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

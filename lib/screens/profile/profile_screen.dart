@@ -1,5 +1,3 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -14,6 +12,7 @@ import '../../providers/auth_provider.dart';
 import '../../data/auth_repository.dart';
 import '../../providers/theme_provider.dart';
 import '../../widgets/app_modal_dialog.dart';
+import '../../widgets/profile_avatar.dart';
 import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -1317,7 +1316,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeaderAvatar(name),
+            ProfileAvatar(
+              name: name,
+              url: _user?.avatarUrl,
+              size: 68,
+              borderRadius: BorderRadius.circular(16),
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
@@ -1416,65 +1420,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildHeaderAvatar(String name) {
-    if (_extras.avatarPath.isNotEmpty) {
-      final file = File(_extras.avatarPath);
-      if (file.existsSync()) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Image.file(
-            file,
-            width: 68,
-            height: 68,
-            fit: BoxFit.cover,
-          ),
-        );
-      }
-    }
-
-    if (_extras.avatarIndex == 0) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Image.asset(
-          'assets/images/avatar_abdurrahim.png',
-          width: 68,
-          height: 68,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Container(
-            width: 68,
-            height: 68,
-            color: AppColors.primarySoft,
-            child: const Icon(
-              Icons.person_rounded,
-              color: AppColors.primary,
-              size: 34,
-            ),
-          ),
-        ),
-      );
-    }
-
-    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : 'U';
-    return Container(
-      width: 68,
-      height: 68,
-      decoration: BoxDecoration(
-        color: AppColors.primarySoft,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Center(
-        child: Text(
-          initial,
-          style: const TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            color: AppColors.primary,
-          ),
         ),
       ),
     );
