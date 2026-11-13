@@ -15,8 +15,6 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
-import '../support/session.dart';
-
 const _photo = 'https://cdn.x.test/users/1/avatar/a.png';
 
 Map<String, dynamic> _user({String? avatarUrl}) => {
@@ -28,31 +26,49 @@ Map<String, dynamic> _user({String? avatarUrl}) => {
       'avatar_url': avatarUrl,
     };
 
-Future<void> _pump(WidgetTester tester, Map<String, dynamic> user) async {
+http.Response _json(int status, Object body) => http.Response(
+    jsonEncode(body), status,
+    headers: {'content-type': 'application/json; charset=utf-8'});
+
+/// [user] null = tamu (tanpa sesi). Selain GET /me, permintaan dicatat di
+/// [seen] dan dijawab [handler] (bawaan 200 kosong).
+Future<AuthProvider> _pump(
+  WidgetTester tester,
+  Map<String, dynamic>? user, {
+  List<http.Request>? seen,
+  MockClientHandler? handler,
+  Map<String, WidgetBuilder> routes = const {},
+}) async {
   FlutterSecureStorage.setMockInitialValues({});
   SharedPreferencesAsyncPlatform.instance =
       InMemorySharedPreferencesAsync.empty();
-  await TokenStore.saveSession('tok', 'budi@x.com');
+  if (user != null) await TokenStore.saveSession('tok', 'budi@x.com');
   final api = ApiClient(
     baseUrl: 'https://x.test/api/v1',
     readToken: TokenStore.readToken,
-    client: MockClient((r) async => http.Response(
-        jsonEncode({
+    client: MockClient((r) async {
+      if (r.method == 'GET' && r.url.path.endsWith('/me')) {
+        return _json(200, {
           'data': {'user': user, 'merchant': null}
-        }),
-        200,
-        headers: {'content-type': 'application/json; charset=utf-8'})),
+        });
+      }
+      seen?.add(r);
+      return handler == null ? _json(200, {'data': {}}) : handler(r);
+    }),
   );
+  final repo = AuthRepository(api);
+  final auth = AuthProvider(repo);
+  await auth.load();
   await tester.pumpWidget(MultiProvider(
     providers: [
       ChangeNotifierProvider(create: (_) => ThemeProvider()),
-      Provider<AuthRepository>.value(value: AuthRepository(api)),
-      ChangeNotifierProvider<AuthProvider>.value(
-          value: FakeAuth(loggedIn: true)),
+      Provider<AuthRepository>.value(value: repo),
+      ChangeNotifierProvider<AuthProvider>.value(value: auth),
     ],
-    child: const MaterialApp(home: ProfileScreen()),
+    child: MaterialApp(home: const ProfileScreen(), routes: routes),
   ));
   await tester.pumpAndSettle();
+  return auth;
 }
 
 Finder _networkAvatar(String url) => find.byWidgetPredicate(
@@ -97,5 +113,22 @@ void main() {
     expect(find.byKey(const ValueKey('profile-avatar-initials')),
         findsOneWidget);
     expect(find.text('B'), findsOneWidget);
+  });
+
+  testWidgets('header ikut berubah saat AuthProvider.user berubah',
+      (tester) async {
+    final auth = await _pump(tester, _user(),
+        handler: (r) async => _json(200, {
+              'data': {
+                'user': {..._user(), 'full_name': 'Siti Aminah'},
+                'merchant': null
+              }
+            }));
+    expect(find.text('Budi Santoso'), findsOneWidget);
+    await auth.updateProfile(
+        fullName: 'Siti Aminah', phone: '0812345678901', email: 'budi@x.com');
+    await tester.pumpAndSettle();
+    expect(find.text('Siti Aminah'), findsOneWidget);
+    expect(find.text('S'), findsOneWidget);
   });
 }

@@ -8,7 +8,7 @@ import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/data/auth_repository.dart';
 import 'package:kateringkita_pbl/data/token_store.dart';
-import 'package:kateringkita_pbl/models/api_user.dart';
+import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:kateringkita_pbl/providers/theme_provider.dart';
 import 'package:kateringkita_pbl/screens/profile/edit_profile_screen.dart';
 import 'package:provider/provider.dart';
@@ -30,7 +30,9 @@ http.Response _json(int status, Object body) => http.Response(
     jsonEncode(body), status,
     headers: {'content-type': 'application/json; charset=utf-8'});
 
-Future<void> _pump(WidgetTester tester, MockClientHandler handler,
+/// Sesi tersimpan + AuthProvider dimuat dari GET /me; permintaan lain
+/// dijawab [handler]. Mengembalikan AuthProvider yang dipakai layar.
+Future<AuthProvider> _pump(WidgetTester tester, MockClientHandler handler,
     {String? avatarUrl}) async {
   FlutterSecureStorage.setMockInitialValues({});
   SharedPreferencesAsyncPlatform.instance =
@@ -39,19 +41,25 @@ Future<void> _pump(WidgetTester tester, MockClientHandler handler,
   final api = ApiClient(
     baseUrl: 'https://x.test/api/v1',
     readToken: TokenStore.readToken,
-    client: MockClient(handler),
+    client: MockClient((r) async => r.method == 'GET' && r.url.path.endsWith('/me')
+        ? _json(200, {
+            'data': {'user': _userJson(avatarUrl: avatarUrl), 'merchant': null}
+          })
+        : handler(r)),
   );
+  final repo = AuthRepository(api);
+  final auth = AuthProvider(repo);
+  await auth.load();
   await tester.pumpWidget(MultiProvider(
     providers: [
       ChangeNotifierProvider(create: (_) => ThemeProvider()),
-      Provider<AuthRepository>.value(value: AuthRepository(api)),
+      Provider<AuthRepository>.value(value: repo),
+      ChangeNotifierProvider<AuthProvider>.value(value: auth),
     ],
-    child: MaterialApp(
-      home: EditProfileScreen(
-          initialUser: ApiUser.fromJson(_userJson(avatarUrl: avatarUrl))),
-    ),
+    child: const MaterialApp(home: EditProfileScreen()),
   ));
   await tester.pumpAndSettle();
+  return auth;
 }
 
 Finder _networkImage() =>
@@ -78,7 +86,7 @@ void main() {
   testWidgets('ubah email meminta kata sandi saat ini lalu PATCH /me',
       (tester) async {
     final seen = <http.Request>[];
-    await _pump(tester, (r) async {
+    final auth = await _pump(tester, (r) async {
       seen.add(r);
       return _json(200, {
         'data': {'user': _userJson(email: 'baru@x.com'), 'merchant': null}
@@ -113,6 +121,8 @@ void main() {
     expect(find.text('Email berhasil diperbarui'), findsOneWidget);
     expect(find.text('b************u@x.com'), findsOneWidget);
     expect(await TokenStore.readSessionEmail(), 'baru@x.com');
+    // User global (dipakai checkout dll.) ikut baru.
+    expect(auth.user!.email, 'baru@x.com');
   });
 
   testWidgets('kata sandi salah: pesan server tampil, isian tidak berubah',

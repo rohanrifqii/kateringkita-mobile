@@ -6,7 +6,6 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../models/api_user.dart';
 import '../../providers/auth_provider.dart';
 import '../../data/auth_repository.dart';
 import '../../providers/theme_provider.dart';
@@ -22,28 +21,13 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  ApiUser? _user;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUser();
-  }
-
-  Future<void> _loadUser() async {
-    final user = await context.read<AuthRepository>().currentUser();
-    if (!mounted) return;
-    setState(() => _user = user);
-  }
-
-  Future<void> _openEditProfile() async {
-    await Navigator.push<bool>(
+  /// Data profil dari [AuthProvider.user]: dimuat saat splash/login dan
+  /// diperbarui oleh layar Ubah Profil, jadi tidak perlu GET /me sendiri.
+  void _openEditProfile() {
+    Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => EditProfileScreen(initialUser: _user),
-      ),
+      MaterialPageRoute(builder: (_) => const EditProfileScreen()),
     );
-    await _loadUser();
   }
 
   void _showToast(String message) {
@@ -234,11 +218,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           return;
                         }
 
-                        final email =
-                            _user?.email ?? 'abdurrahim.workspace@gmail.com';
                         final repo = context.read<AuthRepository>();
                         final err = await repo.changePassword(
-                          email: email,
                           currentPassword: cur,
                           newPassword: nw,
                         );
@@ -657,8 +638,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final name = (_user?.fullName != null && _user!.fullName.trim().isNotEmpty)
-        ? _user!.fullName
+    final user = context.watch<AuthProvider>().user;
+    final name = (user?.fullName != null && user!.fullName.trim().isNotEmpty)
+        ? user.fullName
         : 'Abdurrahim';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -687,7 +669,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 16),
 
               // 1. Kartu Profil Pengguna (Sesuai Redesign)
-              _buildProfileHeaderCard(name: name),
+              _buildProfileHeaderCard(name: name, avatarUrl: user?.avatarUrl),
               const SizedBox(height: 22),
 
               // 2. Section: AKUN & KEAMANAN (Tanpa Akun WhatsApp terpisah karena sudah ada di Kelola Profil)
@@ -899,7 +881,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ==================== WIDGET HELPERS ====================
 
-  Widget _buildProfileHeaderCard({required String name}) {
+  Widget _buildProfileHeaderCard({required String name, String? avatarUrl}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: _openEditProfile,
@@ -925,7 +907,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             ProfileAvatar(
               name: name,
-              url: _user?.avatarUrl,
+              url: avatarUrl,
               size: 68,
               borderRadius: BorderRadius.circular(16),
             ),

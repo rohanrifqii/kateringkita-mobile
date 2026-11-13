@@ -5,39 +5,22 @@ import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_text_styles.dart';
 import '../../api/api_exception.dart';
-import '../../models/api_user.dart';
-import '../../data/auth_repository.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../widgets/profile_avatar.dart';
 
 /// Halaman "Ubah Profil" (Kelola Profil) bergaya Shopee dengan tema
-/// KateringKita. Semua isian (foto, nama, WhatsApp, email) disimpan ke server.
+/// KateringKita. Data dari [AuthProvider.user]; semua isian (foto, nama,
+/// WhatsApp, email) disimpan ke server lewat [AuthProvider].
 class EditProfileScreen extends StatefulWidget {
-  final ApiUser? initialUser;
-
-  const EditProfileScreen({super.key, required this.initialUser});
+  const EditProfileScreen({super.key});
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  late String _name;
-  late String _email;
-  late String _phone;
-  late int? _userId;
-  String? _avatarUrl;
   bool _avatarBusy = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _userId = widget.initialUser?.id;
-    _avatarUrl = widget.initialUser?.avatarUrl;
-    _name = widget.initialUser?.fullName ?? 'Abdurrahim';
-    _email = widget.initialUser?.email ?? 'abdurrahim.workspace@gmail.com';
-    _phone = widget.initialUser?.phone ?? '085852157352';
-  }
 
   /// Sensor nomor HP ala Shopee: **********52
   String _maskPhone(String raw) {
@@ -62,35 +45,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return '$first************$last@$domain';
   }
 
-  /// PATCH /me lewat [AuthRepository.updateProfile]; isian layar diperbarui
-  /// dari jawaban server. Return null bila sukses, atau pesan galat. Server
-  /// meminta [currentPassword] bila email/nomor berubah.
+  /// PATCH /me lewat [AuthProvider.updateProfile], jadi user di seluruh
+  /// aplikasi (mis. checkout) ikut baru. Return null bila sukses, atau pesan
+  /// galat. Server meminta [currentPassword] bila email/nomor berubah.
   Future<String?> _saveProfile({
     String? name,
     String? phone,
     String? email,
     String? currentPassword,
   }) async {
-    final userId = _userId;
-    if (userId == null) return 'Masuk dulu untuk mengubah profil.';
-    final repo = context.read<AuthRepository>();
+    final auth = context.read<AuthProvider>();
+    final u = auth.user;
+    if (u == null) return 'Masuk dulu untuk mengubah profil.';
     try {
-      final user = await repo.updateProfile(
-        userId: userId,
-        oldEmail: _email,
-        fullName: name ?? _name,
-        phone: phone ?? _phone,
-        newEmail: email ?? _email,
+      await auth.updateProfile(
+        fullName: name ?? u.fullName,
+        phone: phone ?? u.phone,
+        email: email ?? u.email ?? '',
         currentPassword: currentPassword,
       );
-      if (mounted) {
-        setState(() {
-          _name = user.fullName;
-          _phone = user.phone;
-          _email = user.email ?? '';
-          _avatarUrl = user.avatarUrl;
-        });
-      }
       return null;
     } on ApiException catch (e) {
       return e.field('current_password') ??
@@ -137,7 +110,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   /// Ambil foto lalu unggah ke server (presign → PUT → PATCH /me).
   Future<void> _pickAndUploadAvatar(ImageSource source) async {
-    final repo = context.read<AuthRepository>();
+    final auth = context.read<AuthProvider>();
     final XFile? picked;
     try {
       picked = await ImagePicker().pickImage(
@@ -155,12 +128,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() => _avatarBusy = true);
     try {
       final bytes = await picked.readAsBytes();
-      final user = await repo.uploadAvatar(
+      await auth.uploadAvatar(
         fileName: picked.name.isNotEmpty ? picked.name : picked.path,
         bytes: bytes,
       );
-      if (!mounted) return;
-      setState(() => _avatarUrl = user.avatarUrl);
       _showSuccessToast('Foto profil berhasil diperbarui');
     } on ApiException catch (e) {
       _showErrorToast(e.message);
@@ -172,12 +143,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _removeAvatar() async {
-    final repo = context.read<AuthRepository>();
+    final auth = context.read<AuthProvider>();
     setState(() => _avatarBusy = true);
     try {
-      final user = await repo.removeAvatar();
-      if (!mounted) return;
-      setState(() => _avatarUrl = user.avatarUrl);
+      await auth.removeAvatar();
       _showSuccessToast('Foto profil dihapus');
     } on ApiException catch (e) {
       _showErrorToast(e.message);
@@ -188,11 +157,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   void _showAvatarPickerSheet() {
     if (_avatarBusy) return;
-    if (_userId == null) {
+    final user = context.read<AuthProvider>().user;
+    if (user == null) {
       _showErrorToast('Masuk dulu untuk mengubah foto profil.');
       return;
     }
-    final hasPhoto = _avatarUrl != null && _avatarUrl!.isNotEmpty;
+    final hasPhoto = user.avatarUrl?.isNotEmpty ?? false;
 
     showModalBottomSheet(
       context: context,
@@ -422,8 +392,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   /// Ubah No. WhatsApp / Email. Keduanya dipakai untuk masuk, jadi server
   /// meminta kata sandi saat ini.
-  void _showContactEditSheet({required bool isPhone}) {
-    final currentVal = isPhone ? _phone : _email;
+  void _showContactEditSheet({
+    required bool isPhone,
+    required String currentVal,
+  }) {
     final valueCtrl = TextEditingController(text: currentVal);
     final passwordCtrl = TextEditingController();
     var obscure = true;
@@ -592,6 +564,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget build(BuildContext context) {
     final isDark = context.watch<ThemeProvider>().isDarkMode;
     AppColors.isDarkMode = isDark;
+    final user = context.watch<AuthProvider>().user;
+    if (user == null) {
+      // Sesi berakhir saat layar terbuka: jangan tampilkan data siapa pun.
+      return Scaffold(
+        appBar: AppBar(title: const Text('Ubah Profil')),
+        body: const Center(child: Text('Masuk dulu untuk mengubah profil.')),
+      );
+    }
+    final name = user.fullName;
+    final phone = user.phone;
+    final email = user.email ?? '';
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBackground : AppColors.background,
@@ -647,7 +630,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   child: Column(
                     children: [
-                      _buildAvatarCircle(),
+                      _buildAvatarCircle(name, user.avatarUrl),
                       const SizedBox(height: 12),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -682,11 +665,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               _buildGroupCard([
                 _buildShopeeRow(
                   label: 'Nama',
-                  value: _name,
+                  value: name,
                   onTap: () => _showEditTextSheet(
                     title: 'Ubah Nama',
                     label: 'Nama Lengkap',
-                    initialValue: _name,
+                    initialValue: name,
                     hint: 'Masukkan nama lengkapmu',
                     onSave: (val) async {
                       final err = await _saveProfile(name: val);
@@ -705,14 +688,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               _buildGroupCard([
                 _buildShopeeRow(
                   label: 'No. Handphone',
-                  value: _maskPhone(_phone),
-                  onTap: () => _showContactEditSheet(isPhone: true),
+                  value: _maskPhone(phone),
+                  onTap: () => _showContactEditSheet(
+                      isPhone: true, currentVal: phone),
                 ),
                 _buildDivider(),
                 _buildShopeeRow(
                   label: 'Email',
-                  value: _maskEmail(_email),
-                  onTap: () => _showContactEditSheet(isPhone: false),
+                  value: _maskEmail(email),
+                  onTap: () => _showContactEditSheet(
+                      isPhone: false, currentVal: email),
                 ),
               ]),
             ],
@@ -722,8 +707,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  Widget _buildAvatarCircle() {
-    final hasPhoto = _avatarUrl != null && _avatarUrl!.isNotEmpty;
+  Widget _buildAvatarCircle(String name, String? avatarUrl) {
+    final hasPhoto = avatarUrl != null && avatarUrl.isNotEmpty;
     return Container(
       width: 82,
       height: 82,
@@ -739,7 +724,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          ProfileAvatar(name: _name, url: _avatarUrl, size: 82),
+          ProfileAvatar(name: name, url: avatarUrl, size: 82),
           if (_avatarBusy)
             Container(
               decoration: BoxDecoration(

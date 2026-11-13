@@ -148,7 +148,6 @@ class AuthRepository {
 
   /// PUT /me/password. Return null bila sukses, atau pesan galat dari server.
   Future<String?> changePassword({
-    required String email,
     required String currentPassword,
     required String newPassword,
   }) async {
