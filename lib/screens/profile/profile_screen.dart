@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
+import '../../core/require_login.dart';
 import '../../providers/auth_provider.dart';
 import '../../data/auth_repository.dart';
 import '../../providers/theme_provider.dart';
@@ -638,10 +639,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = context.watch<AuthProvider>().user;
-    final name = (user?.fullName != null && user!.fullName.trim().isNotEmpty)
-        ? user.fullName
-        : 'Abdurrahim';
+    final auth = context.watch<AuthProvider>();
+    // Tamu: tanpa data akun siapa pun, hanya ajakan Masuk/Daftar.
+    final user = auth.isLoggedIn ? auth.user : null;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -668,33 +668,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 1. Kartu Profil Pengguna (Sesuai Redesign)
-              _buildProfileHeaderCard(name: name, avatarUrl: user?.avatarUrl),
+              // 1. Kartu Profil Pengguna (Sesuai Redesign) / ajakan masuk
+              if (user == null)
+                _buildGuestCard()
+              else
+                _buildProfileHeaderCard(
+                    name: user.fullName, avatarUrl: user.avatarUrl),
               const SizedBox(height: 22),
 
-              // 2. Section: AKUN & KEAMANAN (Tanpa Akun WhatsApp terpisah karena sudah ada di Kelola Profil)
-              _buildSectionHeader('AKUN & KEAMANAN'),
-              const SizedBox(height: 8),
-              _buildSectionCard([
-                _buildSettingTile(
-                  icon: Icons.person_outline_rounded,
-                  iconBg: const Color(0xFFFFF1E8),
-                  iconColor: const Color(0xFFD9774A),
-                  title: 'Kelola Profil',
-                  subtitle: 'Nama, Email, & No. WhatsApp',
-                  onTap: _openEditProfile,
-                ),
-                _buildCardDivider(),
-                _buildSettingTile(
-                  icon: Icons.lock_outline_rounded,
-                  iconBg: const Color(0xFFFEF3C7),
-                  iconColor: const Color(0xFFD97706),
-                  title: 'Password & Keamanan',
-                  subtitle: 'Kelola password keamanan akun',
-                  onTap: _showPasswordSecuritySheet,
-                ),
-              ]),
-              const SizedBox(height: 20),
+              // 2. Section: AKUN & KEAMANAN (hanya untuk akun yang masuk)
+              if (user != null) ...[
+                _buildSectionHeader('AKUN & KEAMANAN'),
+                const SizedBox(height: 8),
+                _buildSectionCard([
+                  _buildSettingTile(
+                    icon: Icons.person_outline_rounded,
+                    iconBg: const Color(0xFFFFF1E8),
+                    iconColor: const Color(0xFFD9774A),
+                    title: 'Kelola Profil',
+                    subtitle: 'Nama, Email, & No. WhatsApp',
+                    onTap: _openEditProfile,
+                  ),
+                  _buildCardDivider(),
+                  _buildSettingTile(
+                    icon: Icons.lock_outline_rounded,
+                    iconBg: const Color(0xFFFEF3C7),
+                    iconColor: const Color(0xFFD97706),
+                    title: 'Password & Keamanan',
+                    subtitle: 'Kelola password keamanan akun',
+                    onTap: _showPasswordSecuritySheet,
+                  ),
+                ]),
+                const SizedBox(height: 20),
+              ],
 
               // 3. Section: PREFERENSI & LAYANAN (Dibersihkan sesuai arahan user: Hanya Tema Tampilan)
               _buildSectionHeader('PREFERENSI & LAYANAN'),
@@ -805,61 +811,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ]),
               const SizedBox(height: 24),
 
-              // 6. Tombol Keluar dari Akun (Sesuai Redesign)
-              Material(
-                color: AppColors.isDarkMode
-                    ? const Color(0xFF2C161A)
-                    : const Color(0xFFFFF1F2),
-                borderRadius: BorderRadius.circular(16),
-                child: InkWell(
+              // 6. Tombol Keluar dari Akun (Sesuai Redesign), hanya bila masuk
+              if (user != null) ...[
+                Material(
+                  color: AppColors.isDarkMode
+                      ? const Color(0xFF2C161A)
+                      : const Color(0xFFFFF1F2),
                   borderRadius: BorderRadius.circular(16),
-                  onTap: () {
-                    AppModalDialog.showLogout(
-                      context,
-                      onConfirm: () async {
-                        final nav = Navigator.of(context);
-                        await context.read<AuthProvider>().logout();
-                        nav.pushNamedAndRemoveUntil(
-                          AppRoutes.login,
-                          (route) => false,
-                        );
-                      },
-                    );
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: AppColors.isDarkMode
-                            ? const Color(0xFF4C1D24)
-                            : const Color(0xFFFECDD3),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () {
+                      AppModalDialog.showLogout(
+                        context,
+                        onConfirm: () async {
+                          final nav = Navigator.of(context);
+                          await context.read<AuthProvider>().logout();
+                          nav.pushNamedAndRemoveUntil(
+                            AppRoutes.login,
+                            (route) => false,
+                          );
+                        },
+                      );
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppColors.isDarkMode
+                              ? const Color(0xFF4C1D24)
+                              : const Color(0xFFFECDD3),
+                        ),
                       ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.logout_rounded,
-                          color: Color(0xFFE11D48),
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Keluar dari Akun',
-                          style: AppTextStyles.h4.copyWith(
-                            color: const Color(0xFFE11D48),
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w700,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.logout_rounded,
+                            color: Color(0xFFE11D48),
+                            size: 18,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Text(
+                            'Keluar dari Akun',
+                            style: AppTextStyles.h4.copyWith(
+                              color: const Color(0xFFE11D48),
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 14),
+                const SizedBox(height: 14),
+              ],
 
               // 7. Footer Teks
               Center(
@@ -880,6 +888,122 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // ==================== WIDGET HELPERS ====================
+
+  /// Kartu tamu: tanpa data akun, hanya ajakan Masuk / Daftar.
+  Widget _buildGuestCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: (isDark ? AppColors.darkCardBorder : AppColors.cardBorder)
+              .withValues(alpha: 0.7),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.025),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 68,
+                height: 68,
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.person_outline_rounded,
+                  color: AppColors.primary,
+                  size: 34,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tamu',
+                      style: AppTextStyles.h3.copyWith(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: isDark
+                            ? AppColors.darkTextPrimary
+                            : AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Masuk atau daftar untuk mengelola profil, pesanan, '
+                      'dan favoritmu.',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => requireLogin(context),
+                  child: const Text(
+                    'Masuk',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () =>
+                      Navigator.pushNamed(context, AppRoutes.signUp),
+                  child: const Text(
+                    'Daftar',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildProfileHeaderCard({required String name, String? avatarUrl}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;

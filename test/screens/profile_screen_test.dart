@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
+import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/data/auth_repository.dart';
 import 'package:kateringkita_pbl/data/token_store.dart';
 import 'package:kateringkita_pbl/providers/auth_provider.dart';
@@ -113,6 +114,46 @@ void main() {
     expect(find.byKey(const ValueKey('profile-avatar-initials')),
         findsOneWidget);
     expect(find.text('B'), findsOneWidget);
+  });
+
+  testWidgets('tamu: "Tamu" + Masuk/Daftar, tanpa data orang mana pun',
+      (tester) async {
+    Object? loginArgs;
+    var signUpOpened = false;
+    await _pump(tester, null, routes: {
+      AppRoutes.login: (c) {
+        loginArgs = ModalRoute.of(c)!.settings.arguments;
+        return Scaffold(appBar: AppBar(), body: const Text('HALAMAN LOGIN'));
+      },
+      AppRoutes.signUp: (c) {
+        signUpOpened = true;
+        return const Scaffold(body: Text('HALAMAN DAFTAR'));
+      },
+    });
+
+    expect(find.text('Tamu'), findsOneWidget);
+    for (final gone in [
+      'Abdurrahim',
+      'A',
+      'Kelola Profil',
+      'Password & Keamanan',
+      'Keluar dari Akun',
+    ]) {
+      expect(find.text(gone), findsNothing);
+    }
+    expect(find.textContaining('abdurrahim'), findsNothing);
+    expect(find.textContaining('0858'), findsNothing);
+
+    await tester.tap(find.text('Masuk'));
+    await tester.pumpAndSettle();
+    expect(find.text('HALAMAN LOGIN'), findsOneWidget);
+    expect(loginArgs, {'returnTo': true});
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Daftar'));
+    await tester.pumpAndSettle();
+    expect(signUpOpened, isTrue);
   });
 
   testWidgets('header ikut berubah saat AuthProvider.user berubah',
