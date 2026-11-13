@@ -4,8 +4,10 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/app_info.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
+import '../../core/password_rules.dart';
 import '../../core/require_login.dart';
 import '../../providers/auth_provider.dart';
 import '../../data/auth_repository.dart';
@@ -201,15 +203,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       onPressed: () async {
-                        final cur = currentPwdCtrl.text.trim();
-                        final nw = newPwdCtrl.text.trim();
-                        final cf = confirmPwdCtrl.text.trim();
+                        final cur = currentPwdCtrl.text;
+                        final nw = newPwdCtrl.text;
+                        final cf = confirmPwdCtrl.text;
 
-                        if (nw.length < 6) {
-                          setSheetState(() {
-                            errorMsg =
-                                'Password baru minimal harus 6 karakter.';
-                          });
+                        // Aturan & pesan sama dengan layar daftar (server).
+                        final rule = validatePasswordRules(nw);
+                        if (rule != null) {
+                          setSheetState(() => errorMsg = rule);
                           return;
                         }
                         if (nw != cf) {
@@ -254,22 +255,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// 2. Sheet Pusat Bantuan & FAQ
   void _showHelpFaqSheet() {
+    // Hanya perilaku aplikasi yang nyata (lihat checkout, pembayaran, tab
+    // Pesanan, Asisten AI). Jangan tambahkan janji yang tidak ada di server.
     final faqs = [
       (
-        'Bagaimana cara memesan paket katering atau danusan?',
-        'Kamu bisa memilih menu langsung di halaman Home atau menggunakan fitur AI Assistant untuk menghitung kombinasi paket terbaik sesuai modalmu, lalu klik tombol Pesan dan lanjutkan ke Checkout.'
+        'Bagaimana cara memesan?',
+        'Pilih menu di Beranda atau dari rekomendasi Asisten AI, tambahkan ke keranjang, lalu checkout: pilih titik temu, waktu ambil, dan metode pembayaran. Pesanan tidak diantar; kamu mengambilnya sendiri di titik temu yang dipilih.'
       ),
       (
-        'Apa fungsi fitur Holding Timer 5 Menit saat Checkout?',
-        'Holding Timer mengunci kuota porsi pesananmu selama 5 menit saat kamu berada di halaman Checkout agar stok tidak habis diserobot pembeli lain ketika kamu sedang menyelesaikan pembayaran.'
-      ),
-      (
-        'Apa bedanya Profit Maksimal dan Variasi Menu di AI Assistant?',
-        'Profit Maksimal memfokuskan modalmu pada 1 menu dengan margin keuntungan paling tinggi. Sedangkan Variasi Menu membagi modalmu ke banyak pilihan menu berbeda (seperti Martabak, Nasi Goreng, Mochi, Lumpia, & Cheese Roll) agar variasi jualanmu lengkap.'
+        'Apa itu batas waktu pembayaran?',
+        'Setiap pesanan punya batas waktu yang ditentukan toko, tampil sebagai hitung mundur di halaman pembayaran. Selesaikan pembayaran sebelum waktunya habis; bila lewat, pesanan otomatis kedaluwarsa.'
       ),
       (
         'Metode pembayaran apa saja yang tersedia?',
-        'KateringKita menerima pembayaran via QRIS / E-Wallet Instan (GoPay, OVO, ShopeePay, DANA), Transfer Virtual Account (BCA, Mandiri, BNI, BRI), serta Tunai saat Pengambilan (COD).'
+        'Pembayaran lewat Midtrans: QRIS / e-wallet (GoPay, ShopeePay & QRIS) atau Virtual Account bank (BCA, BNI, BRI). Tidak ada pembayaran tunai.'
+      ),
+      (
+        'Bagaimana memantau status pesanan?',
+        'Status pesanan diperbarui dari server dan tampil di tab Pesanan: Menunggu pembayaran, Dikonfirmasi, Sedang dimasak, Siap diambil, lalu Selesai. Perubahan status juga muncul di Notifikasi.'
+      ),
+      (
+        'Apa yang bisa dilakukan Asisten AI?',
+        'Ceritakan kebutuhanmu (boleh disertai anggaran, jumlah porsi, dan kategori), lalu asisten merekomendasikan menu dari katalog KateringKita yang bisa langsung dimasukkan ke keranjang. Kalkulator danusan menghitung modal dari total harga menu, serta perkiraan laba dan ROI dari harga jual yang kamu isi.'
       ),
     ];
 
@@ -483,7 +490,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    'Versi 1.0.2 • Build 2025',
+                    'Versi $kAppVersion',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -526,110 +533,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             ),
           ),
-        );
-      },
-    );
-  }
-
-  /// 5. Sheet Beri Rating di App Store
-  void _showRateAppSheet() {
-    int selectedStars = 5;
-    final reviewCtrl = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 20,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Beri Rating KateringKita',
-                    style: AppTextStyles.h3.copyWith(fontSize: 18),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Bagaimana pengalamanmu memesan katering & danusan di aplikasi ini?',
-                    textAlign: TextAlign.center,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (idx) {
-                      final starNum = idx + 1;
-                      final active = starNum <= selectedStars;
-                      return IconButton(
-                        onPressed: () =>
-                            setSheetState(() => selectedStars = starNum),
-                        icon: Icon(
-                          active
-                              ? Icons.star_rounded
-                              : Icons.star_outline_rounded,
-                          size: 38,
-                          color: active
-                              ? const Color(0xFFF59E0B)
-                              : AppColors.cardBorder,
-                        ),
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: reviewCtrl,
-                    maxLines: 2,
-                    decoration: InputDecoration(
-                      labelText: 'Masukan / Ulasan (Opsional)',
-                      hintText: 'Tulis kesan atau saranmu untuk KateringKita...',
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _showToast(
-                          'Terima kasih atas rating $selectedStars ⭐ untuk KateringKita!',
-                        );
-                      },
-                      child: Text(
-                        'Kirim Rating Sekarang',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
         );
       },
     );
@@ -728,8 +631,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   iconBg: const Color(0xFFDCFCE7),
                   iconColor: const Color(0xFF16A34A),
                   title: 'Hubungi CS WhatsApp',
-                  subtitle: 'Respon cepat < 2 menit',
-                  subtitleColor: const Color(0xFF16A34A),
+                  subtitle: 'Bantuan pesanan lewat WhatsApp',
                   onTap: () {
                     AppModalDialog.showCustomerSupport(
                       context,
@@ -751,8 +653,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         'Setiap pesanan katering dan paket danusan di KateringKita diproses sesuai kuota harian mitra vendor. Pesanan tidak diantar: pembeli mengambil sendiri di titik temu yang dipilih saat checkout. Pastikan titik temu, waktu ambil, dan nomor WhatsApp aktif sudah sesuai sebelum melakukan pembayaran.'
                       ),
                       (
-                        '2. Sistem Holding Timer 5 Menit',
-                        'Saat pengguna masuk ke halaman Checkout, sistem mengunci kuota porsi selama 5 menit agar stok tidak diambil pengguna lain. Apabila waktu habis sebelum pembayaran dikonfirmasi, kuota akan otomatis dilepas kembali.'
+                        '2. Batas Waktu Pembayaran',
+                        'Setiap pesanan punya batas waktu pembayaran yang ditentukan toko dan tampil di halaman pembayaran. Pesanan yang belum dibayar sampai batas waktu habis otomatis kedaluwarsa.'
                       ),
                       (
                         '3. Pembayaran & Konfirmasi Pesanan',
@@ -779,8 +681,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         'Aplikasi tidak meminta akses lokasi GPS. Peta OpenStreetMap hanya ditampilkan sebagai latar area kampus, dan titik temu dipilih dari daftar resmi KateringKita.'
                       ),
                       (
-                        '3. Keamanan Konsultasi AI Assistant',
-                        'Riwayat percakapan dan simulasi anggaran pada fitur AI Assistant disimpan secara lokal di perangkatmu dan hanya digunakan untuk memberikan rekomendasi paket menu terbaik.'
+                        '3. Asisten AI',
+                        'Pertanyaan yang kamu kirim ke Asisten AI diproses di server KateringKita untuk membuat rekomendasi menu. Riwayat sesi asisten disimpan di perangkatmu, terpisah per akun.'
                       ),
                     ],
                   ),
@@ -799,14 +701,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   title: 'Tentang KateringKita',
                   subtitle: 'Solusi Makan Siang Mahasiswa Malang',
                   onTap: _showAboutAppSheet,
-                ),
-                _buildCardDivider(),
-                _buildSettingTile(
-                  icon: Icons.star_rounded,
-                  iconBg: const Color(0xFFFEF3C7),
-                  iconColor: const Color(0xFFF59E0B),
-                  title: 'Beri Rating di App Store',
-                  onTap: _showRateAppSheet,
                 ),
               ]),
               const SizedBox(height: 24),
@@ -872,7 +766,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               // 7. Footer Teks
               Center(
                 child: Text(
-                  'KateringKita untuk Mahasiswa Kampus Malang • 2025',
+                  'KateringKita untuk Mahasiswa Kampus Malang',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.bodySmall.copyWith(
                     color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
@@ -1040,47 +934,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.h3.copyWith(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                            color: isDark
-                                ? AppColors.darkTextPrimary
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.isDarkMode
-                              ? const Color(0xFF143823)
-                              : const Color(0xFFDCFCE7),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Aktif',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.isDarkMode
-                                ? const Color(0xFF4ADE80)
-                                : const Color(0xFF16A34A),
-                          ),
-                        ),
-                      ),
-                    ],
+                  Text(
+                    name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.h3.copyWith(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: isDark
+                          ? AppColors.darkTextPrimary
+                          : AppColors.textPrimary,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   Container(
@@ -1184,7 +1048,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required Color iconColor,
     required String title,
     String? subtitle,
-    Color? subtitleColor,
     required VoidCallback onTap,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1226,13 +1089,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.bodySmall.copyWith(
-                        color: subtitleColor ??
-                            (isDark
-                                ? AppColors.darkTextSecondary
-                                : AppColors.textSecondary),
-                        fontWeight: subtitleColor != null
-                            ? FontWeight.w600
-                            : FontWeight.w400,
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.textSecondary,
+                        fontWeight: FontWeight.w400,
                         fontSize: 11.5,
                       ),
                     ),

@@ -6,7 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
+import 'package:kateringkita_pbl/core/app_info.dart';
 import 'package:kateringkita_pbl/core/app_routes.dart';
+import 'package:kateringkita_pbl/core/password_rules.dart';
 import 'package:kateringkita_pbl/data/auth_repository.dart';
 import 'package:kateringkita_pbl/data/token_store.dart';
 import 'package:kateringkita_pbl/providers/auth_provider.dart';
@@ -57,6 +59,10 @@ Future<AuthProvider> _pump(
       return handler == null ? _json(200, {'data': {}}) : handler(r);
     }),
   );
+  // Layar tinggi: semua menu & isi lembar terlihat tanpa menggulir.
+  tester.view.physicalSize = const Size(800, 3000);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
   final repo = AuthRepository(api);
   final auth = AuthProvider(repo);
   await auth.load();
@@ -171,5 +177,94 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Siti Aminah'), findsOneWidget);
     expect(find.text('S'), findsOneWidget);
+  });
+
+  testWidgets('tanpa klaim karangan: rating toko aplikasi, respon CS, Aktif',
+      (tester) async {
+    await _pump(tester, _user());
+    for (final gone in [
+      'Beri Rating di App Store',
+      'Respon cepat < 2 menit',
+      'Aktif',
+    ]) {
+      expect(find.text(gone), findsNothing);
+    }
+    expect(find.textContaining('2025'), findsNothing);
+    expect(find.text('Hubungi CS WhatsApp'), findsOneWidget);
+  });
+
+  testWidgets('FAQ sesuai aplikasi: Midtrans, tanpa tunai/antar/fitur lama',
+      (tester) async {
+    await _pump(tester, _user());
+    await tester.tap(find.text('Pusat Bantuan & FAQ'));
+    await tester.pumpAndSettle();
+    final sheet = find.byType(BottomSheet);
+    String allText() => tester
+        .widgetList<Text>(find.descendant(of: sheet, matching: find.byType(Text)))
+        .map((t) => t.data ?? '')
+        .join('\n');
+
+    // Buka semua pertanyaan supaya jawabannya ikut diperiksa.
+    for (final tile in tester
+        .widgetList<ExpansionTile>(find.byType(ExpansionTile))
+        .toList()) {
+      await tester.tap(find.byWidget(tile.title));
+      await tester.pumpAndSettle();
+    }
+    final text = allText();
+    expect(text, contains('Midtrans'));
+    expect(text, contains('titik temu'));
+    for (final claim in [
+      'COD',
+      'Tunai saat',
+      'OVO',
+      'DANA',
+      'Mandiri',
+      'kurir',
+      'ongkir',
+      'refund',
+      'Holding Timer',
+      'Profit Maksimal',
+    ]) {
+      expect(text.contains(claim), isFalse, reason: 'masih ada "$claim"');
+    }
+  });
+
+  testWidgets('Tentang: versi dari pubspec, tanpa build karangan',
+      (tester) async {
+    await _pump(tester, _user());
+    await tester.tap(find.text('Tentang KateringKita'));
+    await tester.pumpAndSettle();
+    expect(find.text('Versi $kAppVersion'), findsOneWidget);
+    expect(find.textContaining('Build'), findsNothing);
+  });
+
+  testWidgets('ganti password memakai aturan server (8–72, huruf & angka)',
+      (tester) async {
+    final seen = <http.Request>[];
+    await _pump(tester, _user(), seen: seen);
+    await tester.tap(find.text('Password & Keamanan'));
+    await tester.pumpAndSettle();
+    final fields = find.byType(TextField);
+
+    Future<void> submit(String pw) async {
+      await tester.enterText(fields.at(0), 'lama1234');
+      await tester.enterText(fields.at(1), pw);
+      await tester.enterText(fields.at(2), pw);
+      await tester.tap(find.text('Simpan Password Baru'));
+      await tester.pumpAndSettle();
+    }
+
+    for (final bad in ['abc1234', 'abcdefgh', '12345678']) {
+      await submit(bad);
+      expect(find.text(kPasswordRuleMessage), findsOneWidget, reason: bad);
+    }
+    expect(seen, isEmpty);
+
+    await submit('abc12345');
+    expect(seen.single.method, 'PUT');
+    expect(seen.single.url.path, '/api/v1/me/password');
+    expect(jsonDecode(seen.single.body),
+        {'current_password': 'lama1234', 'new_password': 'abc12345'});
   });
 }
