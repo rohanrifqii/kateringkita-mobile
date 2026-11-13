@@ -88,6 +88,7 @@ class _Harness {
   late final NotificationProvider notifications;
   late final List<SingleChildWidget> providers;
   Object? ordersArgs;
+  Object? ticketArgs;
 
   Widget app(Widget home) => MultiProvider(
         providers: providers,
@@ -97,6 +98,10 @@ class _Harness {
             AppRoutes.orders: (c) {
               ordersArgs = ModalRoute.of(c)?.settings.arguments;
               return const Scaffold(body: Text('layar-pesanan'));
+            },
+            AppRoutes.ticketDetail: (c) {
+              ticketArgs = ModalRoute.of(c)?.settings.arguments;
+              return const Scaffold(body: Text('layar-tiket'));
             },
             AppRoutes.login: (_) => const Scaffold(body: Text('layar-login')),
             AppRoutes.notifications: (_) => const NotificationScreen(),
@@ -297,6 +302,49 @@ void main() {
     Navigator.of(tester.element(find.text('layar-pesanan'))).pop();
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('unread-3')), findsNothing);
+  });
+
+  testWidgets('notifikasi tiket (data.ticket_code): dibaca, buka detail tiket',
+      (tester) async {
+    final h = _Harness((req) async {
+      if (req.method == 'POST') {
+        return _json({
+          'data': {'unread_count': 0}
+        });
+      }
+      return _json(_page([
+        _notif(11,
+            type: 'info',
+            title: 'Balasan tiket TK-20261113-7QPX',
+            body: 'Tim KateringKita membalas "VA belum lunas".',
+            data: {'ticket_code': 'TK-20261113-7QPX'}),
+        _notif(10,
+            type: 'info',
+            title: 'Jadwal libur',
+            body: 'Layanan libur tanggal merah.',
+            data: {'audience': 'all'}),
+      ]));
+    });
+    await tester.pumpWidget(h.app(const NotificationScreen()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Balasan tiket TK-20261113-7QPX'));
+    await tester.pumpAndSettle();
+    expect(jsonDecode(h.posts().single.body), {
+      'ids': [11]
+    });
+    expect(find.text('layar-tiket'), findsOneWidget);
+    expect(h.ticketArgs, 'TK-20261113-7QPX');
+    expect(h.ordersArgs, isNull);
+
+    // Info biasa tanpa ticket_code tidak pindah layar.
+    Navigator.of(tester.element(find.text('layar-tiket'))).pop();
+    await tester.pumpAndSettle();
+    h.ticketArgs = null;
+    await tester.tap(find.text('Jadwal libur'));
+    await tester.pumpAndSettle();
+    expect(find.text('layar-tiket'), findsNothing);
+    expect(h.ticketArgs, isNull);
   });
 
   testWidgets('pesanan dibatalkan membuka tab Dibatalkan', (tester) async {

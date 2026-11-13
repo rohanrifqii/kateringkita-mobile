@@ -20,4 +20,7 @@ class AppRoutes {
   static const String liked = '/liked';
   static const String profile = '/profile';
   static const String notifications = '/notifications';
+  static const String tickets = '/tickets';
+  static const String ticketCreate = '/ticket-create';
+  static const String ticketDetail = '/ticket-detail';
 }

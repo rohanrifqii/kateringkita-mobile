@@ -16,12 +16,14 @@ import 'data/catalog_repository.dart';
 import 'data/favorite_repository.dart';
 import 'data/notification_repository.dart';
 import 'data/order_repository.dart';
+import 'data/ticket_repository.dart';
 import 'data/token_store.dart';
 import 'providers/auth_provider.dart';
 import 'providers/cart_provider.dart';
 import 'providers/favorites_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/theme_provider.dart';
+import 'providers/ticket_unread_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -87,19 +89,22 @@ Widget buildAppProviders({
   final repo = AuthRepository(api, onSessionInvalid: () => auth.clear());
   auth = AuthProvider(repo);
 
-  // Keranjang, favorit & lencana notifikasi milik sesi: dikosongkan saat
-  // logout / sesi tidak valid.
+  // Keranjang, favorit, lencana notifikasi & titik tiket milik sesi:
+  // dikosongkan saat logout / sesi tidak valid.
   final cart = CartProvider();
   final favoriteRepo = FavoriteRepository(api);
   final favorites = FavoritesProvider(favoriteRepo);
   final notificationRepo = NotificationRepository(api);
   final notifications = NotificationProvider(notificationRepo);
+  final ticketRepo = TicketRepository(api);
+  final ticketUnread = TicketUnreadProvider(ticketRepo);
   var wasLoggedIn = false;
   auth.addListener(() {
     if (wasLoggedIn && !auth.isLoggedIn) {
       cart.clear();
       favorites.clear();
       notifications.clear();
+      ticketUnread.clear();
     }
     wasLoggedIn = auth.isLoggedIn;
   });
@@ -117,6 +122,8 @@ Widget buildAppProviders({
       ChangeNotifierProvider<FavoritesProvider>.value(value: favorites),
       Provider<NotificationRepository>.value(value: notificationRepo),
       ChangeNotifierProvider<NotificationProvider>.value(value: notifications),
+      Provider<TicketRepository>.value(value: ticketRepo),
+      ChangeNotifierProvider<TicketUnreadProvider>.value(value: ticketUnread),
       Provider<AssistantRepository>.value(value: AssistantRepository(api)),
       Provider<AiHistoryStore>.value(value: AiHistoryStore()),
     ],
