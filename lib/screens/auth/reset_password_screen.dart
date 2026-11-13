@@ -126,7 +126,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Reset Password',
+            'Atur Ulang Password',
             style: AppTextStyles.h3.copyWith(
               fontSize: 20,
               fontWeight: FontWeight.w800,
@@ -134,13 +134,13 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'Enter your new password below. Use 8–72 characters with at least one letter and one number.',
+            'Masukkan password baru. Gunakan 8–72 karakter dengan minimal satu huruf dan satu angka.',
             style: AppTextStyles.bodyMedium.copyWith(fontSize: 12.5),
           ),
           const SizedBox(height: 20),
           CustomTextField(
-            label: 'New Password',
-            hint: 'Enter new password',
+            label: 'Password Baru',
+            hint: 'Masukkan password baru',
             controller: _newController,
             obscureText: _obscureNew,
             suffixIcon: _eyeButton(
@@ -154,8 +154,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           AuthFieldError(_newError),
           const SizedBox(height: 16),
           CustomTextField(
-            label: 'Confirm Password',
-            hint: 'Re-enter new password',
+            label: 'Konfirmasi Password',
+            hint: 'Ulangi password baru',
             controller: _confirmController,
             obscureText: _obscureConfirm,
             suffixIcon: _eyeButton(
@@ -170,7 +170,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           AuthFieldError(_serverError),
           const SizedBox(height: 10),
           Text(
-            '• 8–72 characters  • At least one letter and one number',
+            '• 8–72 karakter  • Minimal satu huruf dan satu angka',
             style: AppTextStyles.bodySmall.copyWith(
               color: AppColors.textSecondary,
               fontSize: 10.5,
@@ -178,7 +178,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
           ),
           const SizedBox(height: 20),
           PrimaryButton(
-            text: 'Save New Password',
+            text: 'Simpan Password Baru',
             isLoading: _isLoading,
             onPressed: _save,
           ),
@@ -187,7 +187,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
             child: TextButton(
               onPressed: () => _backToLogin(),
               child: Text(
-                'Cancel and Return to Login',
+                'Batal dan kembali ke halaman Masuk',
                 style: AppTextStyles.bodySmall.copyWith(
                   color: AppColors.blue,
                   fontWeight: FontWeight.w700,

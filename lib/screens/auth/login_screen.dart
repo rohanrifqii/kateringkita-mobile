@@ -114,7 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 40),
                       // Header
                       Text(
-                        'Login',
+                        'Masuk',
                         style: AppTextStyles.h1.copyWith(
                           fontSize: 28,
                           fontWeight: FontWeight.w800,
@@ -153,7 +153,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 32),
                       // Login Button
                       PrimaryButton(
-                        text: _loading ? 'Memeriksa...' : 'Login',
+                        text: _loading ? 'Memeriksa...' : 'Masuk',
                         onPressed: _loading ? null : _onLogin,
                       ),
                       const SizedBox(height: 16),
@@ -164,7 +164,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             Navigator.pushNamed(context, AppRoutes.forgotPassword);
                           },
                           child: Text(
-                            'Forgot Password?',
+                            'Lupa password?',
                             style: AppTextStyles.bodyMedium.copyWith(
                               color: AppColors.blue,
                               fontWeight: FontWeight.w600,
@@ -174,7 +174,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const Spacer(),
                       const SizedBox(height: 16),
-                      // Create New Account link
+                      // Tautan daftar akun baru
                       Center(
                         child: GestureDetector(
                           onTap: () {
@@ -189,7 +189,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               children: [
                                 TextSpan(
-                                  text: 'Create New Account',
+                                  text: 'Daftar sekarang',
                                   style: AppTextStyles.bodyMedium.copyWith(
                                     color: AppColors.primary,
                                     fontWeight: FontWeight.w700,

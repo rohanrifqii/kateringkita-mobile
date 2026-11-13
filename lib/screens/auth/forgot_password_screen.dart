@@ -72,7 +72,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Forget Password',
+            'Lupa Password',
             style: AppTextStyles.h3.copyWith(
               fontSize: 20,
               fontWeight: FontWeight.w800,
@@ -80,13 +80,13 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            "Enter your email address, and we'll send a code to reset your password.",
+            'Masukkan email akunmu. Kami akan mengirim kode untuk mengatur ulang password.',
             style: AppTextStyles.bodyMedium.copyWith(fontSize: 12.5),
           ),
           const SizedBox(height: 20),
           CustomTextField(
-            label: 'Email Address',
-            hint: 'username@student.ub.ac.id',
+            label: 'Alamat Email',
+            hint: 'nama@email.com',
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
             onChanged: (_) {
@@ -96,7 +96,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           AuthFieldError(_emailError),
           const SizedBox(height: 20),
           PrimaryButton(
-            text: 'Send Reset Code',
+            text: 'Kirim Kode',
             isLoading: _isLoading,
             onPressed: _sendResetCode,
           ),
@@ -105,7 +105,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
             child: TextButton(
               onPressed: () => Navigator.pop(context),
               child: Text(
-                'Back to Login',
+                'Kembali ke halaman Masuk',
                 style: AppTextStyles.bodySmall.copyWith(
                   color: AppColors.blue,
                   fontWeight: FontWeight.w700,

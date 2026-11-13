@@ -122,7 +122,7 @@ void main() {
     final fields = find.byType(TextFormField);
     await tester.enterText(fields.at(0), 'a@x.com');
     await tester.enterText(fields.at(1), 'salah123');
-    await tester.tap(find.text('Login').last);
+    await tester.tap(find.text('Masuk').last);
     await tester.pumpAndSettle();
     expect(find.text('Email/WA atau password salah.'), findsOneWidget);
     expect(_currentRoute(), AppRoutes.login);
