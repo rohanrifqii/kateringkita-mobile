@@ -484,7 +484,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           isPhone ? 'Nomor WhatsApp Aktif' : 'Alamat Email',
                       hintText: isPhone
                           ? 'Cth: 081234567890'
-                          : 'Cth: nama@student.ub.ac.id',
+                          : 'Cth: nama@email.com',
                     ),
                   ),
                   const SizedBox(height: 12),
