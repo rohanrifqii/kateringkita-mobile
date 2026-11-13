@@ -145,7 +145,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               // Email Field
               CustomTextField(
                 label: 'Email Address',
-                hint: 'Masukkan email student UB',
+                hint: 'Masukkan email',
                 controller: _emailController,
                 errorText: _errors['email'],
                 keyboardType: TextInputType.emailAddress,

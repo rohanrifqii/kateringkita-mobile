@@ -40,7 +40,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
-  int _selectedTabIndex = 0; // 0: Menu, 1: Untukmu, 2: Penilaian, 3: Informasi
+  int _selectedTabIndex = 0; // 0: Menu, 1: Galeri, 2: Penilaian, 3: Informasi
   static const _topRatedFilter = 'Rating 4.8+';
   String _selectedMenuCategory = 'Semua';
 
@@ -246,7 +246,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
             child: _buildPromoVouchersRow(isDark),
           ),
 
-          // 3. Tab Bar Navigasi: Menu | Untukmu | Penilaian | Informasi (Seperti ShopeeFood)
+          // 3. Tab Bar Navigasi: Menu | Galeri | Penilaian | Informasi
           SliverToBoxAdapter(
             child: _buildNavigationTabs(isDark),
           ),
@@ -609,7 +609,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   Widget _buildNavigationTabs(bool isDark) {
     final tabs = [
       'Menu (${_menus.length})',
-      'Untukmu',
+      'Galeri',
       'Penilaian',
       'Informasi',
     ];
@@ -1127,7 +1127,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     );
   }
 
-  /// TAB 1: Grid 2 Kolom "Untukmu" (Persis Referensi GrabFood Screenshot 2)
+  /// TAB 1: Galeri, grid 2 kolom semua menu toko
   Widget _buildForYouGridTab(bool isDark) {
     final items = _menus;
 
@@ -1137,7 +1137,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Untukmu di ${_vendor.businessName}',
+            'Galeri menu ${_vendor.businessName}',
             style: AppTextStyles.h3.copyWith(
               fontSize: 17,
               fontWeight: FontWeight.w800,
@@ -1145,7 +1145,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Rekomendasi menu dari dapur ini',
+            'Semua menu dapur ini dalam tampilan foto',
             style: AppTextStyles.bodySmall.copyWith(
               color: AppColors.textSecondary,
               fontSize: 12,

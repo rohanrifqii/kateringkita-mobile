@@ -160,7 +160,7 @@ class AppModalDialog extends StatelessWidget {
       type: AppModalType.question,
       title: 'Pusat Bantuan',
       message:
-          'Kamu akan diarahkan ke Costumer Service KateringKita via WhatsApp untuk bantuan kendala pesanan, katering, atau pertanyaan lainnya.',
+          'Kamu akan diarahkan ke Customer Service KateringKita via WhatsApp untuk bantuan kendala pesanan, katering, atau pertanyaan lainnya.',
       primaryButtonText: 'Hubungi via WhatsApp',
       secondaryButtonText: 'Batal',
       onPrimaryPressed: () {
