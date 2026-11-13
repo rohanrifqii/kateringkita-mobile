@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/app_info.dart';
@@ -12,6 +10,7 @@ import '../../core/require_login.dart';
 import '../../providers/auth_provider.dart';
 import '../../data/auth_repository.dart';
 import '../../providers/theme_provider.dart';
+import '../../providers/ticket_unread_provider.dart';
 import '../../widgets/app_modal_dialog.dart';
 import '../../widgets/profile_avatar.dart';
 import 'edit_profile_screen.dart';
@@ -59,28 +58,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _openCustomerSupportWhatsApp() async {
-    const phone = '6285852157352';
-    const message =
-        'Halo Admin Customer Service KateringKita! 👋\nSaya butuh bantuan terkait pesanan / layanan katering.';
-    final whatsappUrl =
-        Uri.parse('https://wa.me/$phone?text=${Uri.encodeComponent(message)}');
+  /// Profil sedang terlihat (tab aktif) dan ada sesi: titik "Bantuan &
+  /// Tiket" diperbarui setiap kali kondisi ini mulai berlaku.
+  bool _ticketBadgeActive = false;
 
-    try {
-      final launched = await launchUrl(
-        whatsappUrl,
-        mode: LaunchMode.externalApplication,
-      );
-      if (!launched) {
-        await Clipboard.setData(const ClipboardData(text: '085852157352'));
-        _showToast(
-            'Nomor WhatsApp CS (0858-5215-7352) berhasil disalin ke clipboard!');
-      }
-    } catch (_) {
-      await Clipboard.setData(const ClipboardData(text: '085852157352'));
-      _showToast(
-          'Nomor WhatsApp CS (0858-5215-7352) berhasil disalin ke clipboard!');
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final active =
+        Visibility.of(context) && context.read<AuthProvider>().isLoggedIn;
+    if (active && !_ticketBadgeActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) context.read<TicketUnreadProvider>().refresh();
+      });
     }
+    _ticketBadgeActive = active;
+  }
+
+  /// CS lewat tiket dua arah dengan Tim KateringKita (tamu masuk dulu).
+  /// Urusan pesanan tetap ke penjual lewat WhatsApp di Pesanan.
+  Future<void> _openTickets() async {
+    if (!await requireLogin(context) || !mounted) return;
+    await Navigator.pushNamed(context, AppRoutes.tickets);
   }
 
   // ==================== BOTTOM SHEETS UNTUK TIAP MENU ====================
@@ -277,6 +276,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       (
         'Apa yang bisa dilakukan Asisten AI?',
         'Ceritakan kebutuhanmu (boleh disertai anggaran, jumlah porsi, dan kategori), lalu asisten merekomendasikan menu dari katalog KateringKita yang bisa langsung dimasukkan ke keranjang. Kalkulator danusan menghitung modal dari total harga menu, serta perkiraan laba dan ROI dari harga jual yang kamu isi.'
+      ),
+      (
+        'Ke mana saya bertanya bila ada kendala?',
+        'Pertanyaan soal pesanan (menu, waktu ambil, atau pesanan yang belum siap) paling cepat ditanyakan langsung ke penjual lewat tombol WhatsApp di tab Pesanan. Untuk kendala lain, seperti akun, pembayaran, atau aplikasi, buka Profil → Bantuan & Tiket lalu buat tiket; Tim KateringKita akan membalas di sana dan kamu mendapat notifikasi.'
       ),
     ];
 
@@ -545,6 +548,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final auth = context.watch<AuthProvider>();
     // Tamu: tanpa data akun siapa pun, hanya ajakan Masuk/Daftar.
     final user = auth.isLoggedIn ? auth.user : null;
+    final ticketUnread = context.watch<TicketUnreadProvider>().unreadCount;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -627,17 +631,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 _buildCardDivider(),
                 _buildSettingTile(
-                  icon: Icons.chat_bubble_outline_rounded,
+                  key: const ValueKey('profile-tickets'),
+                  icon: Icons.support_agent_rounded,
                   iconBg: const Color(0xFFDCFCE7),
                   iconColor: const Color(0xFF16A34A),
-                  title: 'Hubungi CS WhatsApp',
-                  subtitle: 'Bantuan pesanan lewat WhatsApp',
-                  onTap: () {
-                    AppModalDialog.showCustomerSupport(
-                      context,
-                      onWhatsAppPressed: _openCustomerSupportWhatsApp,
-                    );
-                  },
+                  title: 'Bantuan & Tiket',
+                  subtitle: 'Tanya Tim KateringKita lewat tiket',
+                  showDot: user != null && ticketUnread > 0,
+                  onTap: _openTickets,
                 ),
                 _buildCardDivider(),
                 _buildSettingTile(
@@ -659,6 +660,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       (
                         '3. Pembayaran & Konfirmasi Pesanan',
                         'Pembayaran dilakukan lewat Midtrans: QRIS/e-wallet atau Virtual Account bank. Tidak ada pembayaran tunai. Bukti pesanan dapat diteruskan ke WhatsApp vendor melalui fitur konfirmasi di aplikasi.'
+                      ),
+                      (
+                        '4. Bantuan & Pengaduan',
+                        'Pertanyaan tentang pesanan disampaikan langsung ke penjual lewat tombol WhatsApp di halaman Pesanan. Kendala lain (akun, pembayaran, aplikasi, atau masalah yang tidak selesai dengan penjual) disampaikan lewat menu Profil → Bantuan & Tiket dan dibalas oleh Tim KateringKita di aplikasi.'
                       ),
                     ],
                   ),
@@ -1043,15 +1048,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildSettingTile({
+    Key? key,
     required IconData icon,
     required Color iconBg,
     required Color iconColor,
     required String title,
     String? subtitle,
+    bool showDot = false,
     required VoidCallback onTap,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return InkWell(
+      key: key,
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
       child: Padding(
@@ -1100,6 +1108,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
+            if (showDot)
+              Container(
+                key: const ValueKey('profile-tickets-unread'),
+                width: 9,
+                height: 9,
+                margin: const EdgeInsets.only(left: 6),
+                decoration: const BoxDecoration(
+                  color: AppColors.primary,
+                  shape: BoxShape.circle,
+                ),
+              ),
             const SizedBox(width: 4),
             Icon(
               Icons.chevron_right_rounded,

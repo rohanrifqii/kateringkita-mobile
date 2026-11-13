@@ -150,27 +150,6 @@ class AppModalDialog extends StatelessWidget {
     );
   }
 
-  /// 5. Modal Pusat Bantuan (Customer Service WhatsApp)
-  static Future<void> showCustomerSupport(
-    BuildContext context, {
-    required VoidCallback onWhatsAppPressed,
-  }) {
-    return show(
-      context: context,
-      type: AppModalType.question,
-      title: 'Pusat Bantuan',
-      message:
-          'Kamu akan diarahkan ke Customer Service KateringKita via WhatsApp untuk bantuan kendala pesanan, katering, atau pertanyaan lainnya.',
-      primaryButtonText: 'Hubungi via WhatsApp',
-      secondaryButtonText: 'Batal',
-      onPrimaryPressed: () {
-        Navigator.pop(context);
-        onWhatsAppPressed();
-      },
-      onSecondaryPressed: () => Navigator.pop(context),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isQuestion = type == AppModalType.question;
