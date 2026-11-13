@@ -26,15 +26,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   static final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
 
   ApiUser? _user;
-  UserProfileExtras _extras = const UserProfileExtras();
 
-  // Pengaturan Preferensi & Notifikasi
+  // Pengaturan Preferensi
   String _selectedLanguage = 'Indonesia'; // 'Indonesia' atau 'English'
-  bool _biometricEnabled = true;
-  bool _notifMealTime = true;
-  bool _notifPromo = true;
-  bool _notifCourier = true;
-  bool _notifWhatsApp = true;
 
   bool get _isEn => _selectedLanguage == 'English';
 
@@ -46,26 +40,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadUserAndPreferences() async {
     final user = await context.read<AuthRepository>().currentUser();
-    final email = user?.email ?? 'abdurrahim.workspace@gmail.com';
-    final extras = await UserProfileExtras.load(email);
-
     final lang = await _prefs.getString('app_pref_lang') ?? 'Indonesia';
-    final bioAuth = await _prefs.getBool('app_pref_biometric') ?? true;
-    final nMeal = await _prefs.getBool('app_notif_meal') ?? true;
-    final nPromo = await _prefs.getBool('app_notif_promo') ?? true;
-    final nCourier = await _prefs.getBool('app_notif_courier') ?? true;
-    final nWa = await _prefs.getBool('app_notif_wa') ?? true;
 
     if (!mounted) return;
     setState(() {
       _user = user;
-      _extras = extras;
       _selectedLanguage = (lang == 'English') ? 'English' : 'Indonesia';
-      _biometricEnabled = bioAuth;
-      _notifMealTime = nMeal;
-      _notifPromo = nPromo;
-      _notifCourier = nCourier;
-      _notifWhatsApp = nWa;
     });
   }
 
@@ -73,10 +53,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => EditProfileScreen(
-          initialUser: _user,
-          initialExtras: _extras,
-        ),
+        builder: (_) => EditProfileScreen(initialUser: _user),
       ),
     );
     await _loadUserAndPreferences();
@@ -178,59 +155,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.secondaryBg,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.fingerprint_rounded,
-                          color: AppColors.primary,
-                          size: 22,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _isEn
-                                    ? 'Biometric & Transaction PIN'
-                                    : 'PIN Transaksi & Biometrik',
-                                style: AppTextStyles.bodyMedium.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              Text(
-                                _isEn
-                                    ? 'Quick verification during checkout'
-                                    : 'Verifikasi cepat saat transaksi pesanan',
-                                style: AppTextStyles.bodySmall.copyWith(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Switch(
-                          value: _biometricEnabled,
-                          activeTrackColor: AppColors.primary,
-                          onChanged: (val) async {
-                            setSheetState(() => _biometricEnabled = val);
-                            setState(() => _biometricEnabled = val);
-                            await _prefs.setBool('app_pref_biometric', val);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                   Text(
                     _isEn ? 'Change Account Password' : 'Ubah Password Akun',
                     style: AppTextStyles.bodyMedium.copyWith(
@@ -359,149 +283,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
         );
       },
-    );
-  }
-
-  /// 2. Sheet Pengaturan Notifikasi
-  void _showNotificationSettingsSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) {
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _isEn
-                              ? 'Notification Settings'
-                              : 'Pengaturan Notifikasi',
-                          style: AppTextStyles.h3.copyWith(fontSize: 17),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded, size: 20),
-                          onPressed: () => Navigator.pop(ctx),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    _buildNotifSwitchTile(
-                      title: _isEn
-                          ? 'Meal Time & Pre-Order Reminder'
-                          : 'Pengingat Jam Makan & Pre-Order',
-                      subtitle: _isEn
-                          ? 'Remind before daily quota closes'
-                          : 'Ingatkan sebelum kuota porsi harian habis',
-                      value: _notifMealTime,
-                      onChanged: (v) async {
-                        setSheetState(() => _notifMealTime = v);
-                        setState(() => _notifMealTime = v);
-                        await _prefs.setBool('app_notif_meal', v);
-                      },
-                    ),
-                    const Divider(height: 1),
-                    _buildNotifSwitchTile(
-                      title: _isEn
-                          ? 'Danusan Promo & Discount'
-                          : 'Promo & Diskon Paket Danusan',
-                      subtitle: _isEn
-                          ? 'Special wholesale price info from vendors'
-                          : 'Info diskon grosir & paket hemat organisasi',
-                      value: _notifPromo,
-                      onChanged: (v) async {
-                        setSheetState(() => _notifPromo = v);
-                        setState(() => _notifPromo = v);
-                        await _prefs.setBool('app_notif_promo', v);
-                      },
-                    ),
-                    const Divider(height: 1),
-                    _buildNotifSwitchTile(
-                      title: _isEn ? 'Order Status' : 'Status Pesanan',
-                      subtitle: _isEn
-                          ? 'When your order is confirmed, cooking & ready for pickup'
-                          : 'Saat pesanan dikonfirmasi, dimasak & siap diambil',
-                      value: _notifCourier,
-                      onChanged: (v) async {
-                        setSheetState(() => _notifCourier = v);
-                        setState(() => _notifCourier = v);
-                        await _prefs.setBool('app_notif_courier', v);
-                      },
-                    ),
-                    const Divider(height: 1),
-                    _buildNotifSwitchTile(
-                      title: _isEn
-                          ? 'WhatsApp Order Confirmation'
-                          : 'Notifikasi Konfirmasi WhatsApp',
-                      subtitle: _isEn
-                          ? 'Send invoice & receipt to WhatsApp'
-                          : 'Kirim bukti pesanan otomatis via WhatsApp',
-                      value: _notifWhatsApp,
-                      onChanged: (v) async {
-                        setSheetState(() => _notifWhatsApp = v);
-                        setState(() => _notifWhatsApp = v);
-                        await _prefs.setBool('app_notif_wa', v);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildNotifSwitchTile({
-    required String title,
-    required String subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13.5,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
-                    fontSize: 11.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: value,
-            activeTrackColor: AppColors.primary,
-            onChanged: onChanged,
-          ),
-        ],
-      ),
     );
   }
 
@@ -1007,9 +788,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final name = (_user?.fullName != null && _user!.fullName.trim().isNotEmpty)
         ? _user!.fullName
         : 'Abdurrahim';
-    final bioLines = _extras.bio.trim().isNotEmpty
-        ? _extras.bio.trim()
-        : 'Mahasiswa\nUniversitas Brawijaya';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -1037,7 +815,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 16),
 
               // 1. Kartu Profil Pengguna (Sesuai Redesign)
-              _buildProfileHeaderCard(name: name, bioLines: bioLines),
+              _buildProfileHeaderCard(name: name),
               const SizedBox(height: 22),
 
               // 2. Section: AKUN & KEAMANAN (Tanpa Akun WhatsApp terpisah karena sudah ada di Kelola Profil)
@@ -1060,27 +838,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   iconBg: const Color(0xFFFEF3C7),
                   iconColor: const Color(0xFFD97706),
                   title: _isEn ? 'Password & Security' : 'Password & Keamanan',
-                  subtitle: _biometricEnabled
-                      ? (_isEn
-                          ? 'Transaction PIN & Biometric active'
-                          : 'PIN Transaksi & Biometrik aktif')
-                      : (_isEn
-                          ? 'Manage account password'
-                          : 'Kelola password keamanan akun'),
-                  onTap: _showPasswordSecuritySheet,
-                ),
-                _buildCardDivider(),
-                _buildSettingTile(
-                  icon: Icons.notifications_none_rounded,
-                  iconBg: const Color(0xFFEFF6FF),
-                  iconColor: const Color(0xFF3B82F6),
-                  title: _isEn
-                      ? 'Notification Settings'
-                      : 'Pengaturan Notifikasi',
                   subtitle: _isEn
-                      ? 'Meal time, promos, order status'
-                      : 'Jam makan, promo, status pesanan',
-                  onTap: _showNotificationSettingsSheet,
+                      ? 'Manage account password'
+                      : 'Kelola password keamanan akun',
+                  onTap: _showPasswordSecuritySheet,
                 ),
                 _buildCardDivider(),
                 _buildSettingTile(
@@ -1289,10 +1050,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ==================== WIDGET HELPERS ====================
 
-  Widget _buildProfileHeaderCard({
-    required String name,
-    required String bioLines,
-  }) {
+  Widget _buildProfileHeaderCard({required String name}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: _openEditProfile,
@@ -1368,17 +1126,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    bioLines,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                      height: 1.35,
-                    ),
                   ),
                   const SizedBox(height: 10),
                   Container(
