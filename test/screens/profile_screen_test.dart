@@ -68,6 +68,28 @@ void main() {
     expect(find.text('B'), findsOneWidget);
   });
 
+  testWidgets('tanpa bahasa, notifikasi lokal, biometrik, maupun bio palsu',
+      (tester) async {
+    await _pump(tester, _user());
+    for (final gone in [
+      'Bahasa',
+      'English',
+      'Pengaturan Notifikasi',
+      'PIN Transaksi & Biometrik aktif',
+      'Mahasiswa\nUniversitas Brawijaya',
+    ]) {
+      expect(find.text(gone), findsNothing);
+    }
+    expect(find.text('Kelola Profil'), findsOneWidget);
+    expect(find.text('Tema Tampilan'), findsOneWidget);
+
+    await tester.tap(find.text('Password & Keamanan'));
+    await tester.pumpAndSettle();
+    expect(find.text('Ubah Password Akun'), findsOneWidget);
+    expect(find.text('PIN Transaksi & Biometrik'), findsNothing);
+    expect(find.byType(Switch), findsNothing);
+  });
+
   testWidgets('tanpa avatar_url: inisial nama, tanpa gambar jaringan',
       (tester) async {
     await _pump(tester, _user());

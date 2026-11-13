@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_colors.dart';
@@ -23,30 +22,18 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  static final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
-
   ApiUser? _user;
-
-  // Pengaturan Preferensi
-  String _selectedLanguage = 'Indonesia'; // 'Indonesia' atau 'English'
-
-  bool get _isEn => _selectedLanguage == 'English';
 
   @override
   void initState() {
     super.initState();
-    _loadUserAndPreferences();
+    _loadUser();
   }
 
-  Future<void> _loadUserAndPreferences() async {
+  Future<void> _loadUser() async {
     final user = await context.read<AuthRepository>().currentUser();
-    final lang = await _prefs.getString('app_pref_lang') ?? 'Indonesia';
-
     if (!mounted) return;
-    setState(() {
-      _user = user;
-      _selectedLanguage = (lang == 'English') ? 'English' : 'Indonesia';
-    });
+    setState(() => _user = user);
   }
 
   Future<void> _openEditProfile() async {
@@ -56,7 +43,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         builder: (_) => EditProfileScreen(initialUser: _user),
       ),
     );
-    await _loadUserAndPreferences();
+    await _loadUser();
   }
 
   void _showToast(String message) {
@@ -145,7 +132,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        _isEn ? 'Password & Security' : 'Password & Keamanan',
+                        'Password & Keamanan',
                         style: AppTextStyles.h3.copyWith(fontSize: 17),
                       ),
                       IconButton(
@@ -156,7 +143,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    _isEn ? 'Change Account Password' : 'Ubah Password Akun',
+                    'Ubah Password Akun',
                     style: AppTextStyles.bodyMedium.copyWith(
                       fontWeight: FontWeight.w700,
                       fontSize: 13.5,
@@ -167,8 +154,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: currentPwdCtrl,
                     obscureText: obscureCurrent,
                     decoration: InputDecoration(
-                      labelText:
-                          _isEn ? 'Current Password' : 'Password Saat Ini',
+                      labelText: 'Password Saat Ini',
                       suffixIcon: IconButton(
                         icon: Icon(
                           obscureCurrent
@@ -186,7 +172,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: newPwdCtrl,
                     obscureText: obscureNew,
                     decoration: InputDecoration(
-                      labelText: _isEn ? 'New Password' : 'Password Baru',
+                      labelText: 'Password Baru',
                       suffixIcon: IconButton(
                         icon: Icon(
                           obscureNew
@@ -204,9 +190,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: confirmPwdCtrl,
                     obscureText: obscureNew,
                     decoration: InputDecoration(
-                      labelText: _isEn
-                          ? 'Confirm New Password'
-                          : 'Konfirmasi Password Baru',
+                      labelText: 'Konfirmasi Password Baru',
                     ),
                   ),
                   if (errorMsg != null) ...[
@@ -268,7 +252,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _showToast('Password akun berhasil diperbarui!');
                       },
                       child: Text(
-                        _isEn ? 'Update Password' : 'Simpan Password Baru',
+                        'Simpan Password Baru',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
@@ -286,112 +270,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// 3. Sheet Pilih Bahasa (Hanya Bahasa Indonesia & English sesuai instruksi!)
-  void _showLanguagePickerSheet() {
-    final languages = [
-      ('Indonesia', 'Bahasa Indonesia (ID)', '🇮🇩'),
-      ('English', 'English (US)', '🇬🇧'),
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      _isEn ? 'Select Language' : 'Pilih Bahasa Aplikasi',
-                      style: AppTextStyles.h3.copyWith(fontSize: 17),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 20),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ...languages.map((lang) {
-                  final isSelected = _selectedLanguage == lang.$1;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () async {
-                        setState(() => _selectedLanguage = lang.$1);
-                        Navigator.pop(ctx);
-                        await _prefs.setString('app_pref_lang', lang.$1);
-                        _showToast(
-                          lang.$1 == 'English'
-                              ? 'Language changed to English'
-                              : 'Bahasa berhasil diubah ke Bahasa Indonesia',
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.primarySoft
-                              : AppColors.secondaryBg,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: isSelected
-                                ? AppColors.primary
-                                : AppColors.cardBorder,
-                            width: isSelected ? 1.5 : 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Text(lang.$3, style: const TextStyle(fontSize: 22)),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                lang.$2,
-                                style: AppTextStyles.bodyMedium.copyWith(
-                                  fontWeight: isSelected
-                                      ? FontWeight.w800
-                                      : FontWeight.w600,
-                                  color: isSelected
-                                      ? AppColors.primaryDark
-                                      : AppColors.textPrimary,
-                                ),
-                              ),
-                            ),
-                            if (isSelected)
-                              const Icon(
-                                Icons.check_circle_rounded,
-                                color: AppColors.primary,
-                                size: 22,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// 4. Sheet Pusat Bantuan & FAQ
+  /// 2. Sheet Pusat Bantuan & FAQ
   void _showHelpFaqSheet() {
     final faqs = [
       (
@@ -435,7 +314,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        _isEn ? 'Help Center & FAQ' : 'Pusat Bantuan & FAQ',
+                        'Pusat Bantuan & FAQ',
                         style: AppTextStyles.h3.copyWith(fontSize: 18),
                       ),
                       IconButton(
@@ -499,7 +378,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// 5. Sheet Syarat & Ketentuan Layanan / Kebijakan Privasi
+  /// 3. Sheet Syarat & Ketentuan Layanan / Kebijakan Privasi
   void _showLegalDocumentSheet({
     required String title,
     required List<(String, String)> sections,
@@ -580,7 +459,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// 6. Sheet Tentang KateringKita
+  /// 4. Sheet Tentang KateringKita
   void _showAboutAppSheet() {
     showModalBottomSheet(
       context: context,
@@ -670,7 +549,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// 7. Sheet Beri Rating di App Store
+  /// 5. Sheet Beri Rating di App Store
   void _showRateAppSheet() {
     int selectedStars = 5;
     final reviewCtrl = TextEditingController();
@@ -696,16 +575,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    _isEn
-                        ? 'Rate KateringKita App'
-                        : 'Beri Rating KateringKita',
+                    'Beri Rating KateringKita',
                     style: AppTextStyles.h3.copyWith(fontSize: 18),
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    _isEn
-                        ? 'How is your experience ordering with KateringKita?'
-                        : 'Bagaimana pengalamanmu memesan katering & danusan di aplikasi ini?',
+                    'Bagaimana pengalamanmu memesan katering & danusan di aplikasi ini?',
                     textAlign: TextAlign.center,
                     style: AppTextStyles.bodySmall.copyWith(
                       color: AppColors.textSecondary,
@@ -738,11 +613,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: reviewCtrl,
                     maxLines: 2,
                     decoration: InputDecoration(
-                      labelText:
-                          _isEn ? 'Your Feedback (Optional)' : 'Masukan / Ulasan (Opsional)',
-                      hintText: _isEn
-                          ? 'Write your review here...'
-                          : 'Tulis kesan atau saranmu untuk KateringKita...',
+                      labelText: 'Masukan / Ulasan (Opsional)',
+                      hintText: 'Tulis kesan atau saranmu untuk KateringKita...',
                     ),
                   ),
                   const SizedBox(height: 18),
@@ -763,7 +635,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         );
                       },
                       child: Text(
-                        _isEn ? 'Submit Rating' : 'Kirim Rating Sekarang',
+                        'Kirim Rating Sekarang',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
@@ -802,7 +674,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               // Judul Halaman: Profil & Pengaturan
               Text(
-                _isEn ? 'Profile & Settings' : 'Profil & Pengaturan',
+                'Profil & Pengaturan',
                 style: AppTextStyles.h2.copyWith(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
@@ -819,17 +691,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 22),
 
               // 2. Section: AKUN & KEAMANAN (Tanpa Akun WhatsApp terpisah karena sudah ada di Kelola Profil)
-              _buildSectionHeader(_isEn ? 'ACCOUNT & SECURITY' : 'AKUN & KEAMANAN'),
+              _buildSectionHeader('AKUN & KEAMANAN'),
               const SizedBox(height: 8),
               _buildSectionCard([
                 _buildSettingTile(
                   icon: Icons.person_outline_rounded,
                   iconBg: const Color(0xFFFFF1E8),
                   iconColor: const Color(0xFFD9774A),
-                  title: _isEn ? 'Manage Profile' : 'Kelola Profil',
-                  subtitle: _isEn
-                      ? 'Name, Email, & WhatsApp Number'
-                      : 'Nama, Email, & No. WhatsApp',
+                  title: 'Kelola Profil',
+                  subtitle: 'Nama, Email, & No. WhatsApp',
                   onTap: _openEditProfile,
                 ),
                 _buildCardDivider(),
@@ -837,27 +707,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.lock_outline_rounded,
                   iconBg: const Color(0xFFFEF3C7),
                   iconColor: const Color(0xFFD97706),
-                  title: _isEn ? 'Password & Security' : 'Password & Keamanan',
-                  subtitle: _isEn
-                      ? 'Manage account password'
-                      : 'Kelola password keamanan akun',
+                  title: 'Password & Keamanan',
+                  subtitle: 'Kelola password keamanan akun',
                   onTap: _showPasswordSecuritySheet,
-                ),
-                _buildCardDivider(),
-                _buildSettingTile(
-                  icon: Icons.translate_rounded,
-                  iconBg: const Color(0xFFF3E8FF),
-                  iconColor: const Color(0xFF9333EA),
-                  title: _isEn ? 'Language' : 'Bahasa',
-                  trailingText: _selectedLanguage,
-                  onTap: _showLanguagePickerSheet,
                 ),
               ]),
               const SizedBox(height: 20),
 
               // 3. Section: PREFERENSI & LAYANAN (Dibersihkan sesuai arahan user: Hanya Tema Tampilan)
-              _buildSectionHeader(
-                  _isEn ? 'PREFERENCES & APPEARANCE' : 'PREFERENSI & LAYANAN'),
+              _buildSectionHeader('PREFERENSI & LAYANAN'),
               const SizedBox(height: 8),
               _buildSectionCard([
                 _buildThemeToggleTile(),
@@ -865,17 +723,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 20),
 
               // 4. Section: BANTUAN & DUKUNGAN
-              _buildSectionHeader(_isEn ? 'HELP & SUPPORT' : 'BANTUAN & DUKUNGAN'),
+              _buildSectionHeader('BANTUAN & DUKUNGAN'),
               const SizedBox(height: 8),
               _buildSectionCard([
                 _buildSettingTile(
                   icon: Icons.help_outline_rounded,
                   iconBg: const Color(0xFFFFF1E8),
                   iconColor: const Color(0xFFD9774A),
-                  title: _isEn ? 'Help Center & FAQ' : 'Pusat Bantuan & FAQ',
-                  subtitle: _isEn
-                      ? 'Complete campus catering guide'
-                      : 'Panduan lengkap katering kampus',
+                  title: 'Pusat Bantuan & FAQ',
+                  subtitle: 'Panduan lengkap katering kampus',
                   onTap: _showHelpFaqSheet,
                 ),
                 _buildCardDivider(),
@@ -883,11 +739,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.chat_bubble_outline_rounded,
                   iconBg: const Color(0xFFDCFCE7),
                   iconColor: const Color(0xFF16A34A),
-                  title:
-                      _isEn ? 'Contact WhatsApp CS' : 'Hubungi CS WhatsApp',
-                  subtitle: _isEn
-                      ? 'Fast response < 2 mins'
-                      : 'Respon cepat < 2 menit',
+                  title: 'Hubungi CS WhatsApp',
+                  subtitle: 'Respon cepat < 2 menit',
                   subtitleColor: const Color(0xFF16A34A),
                   onTap: () {
                     AppModalDialog.showCustomerSupport(
@@ -901,9 +754,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.description_outlined,
                   iconBg: const Color(0xFFE0F2FE),
                   iconColor: const Color(0xFF0284C7),
-                  title: _isEn
-                      ? 'Terms of Service'
-                      : 'Syarat & Ketentuan Layanan',
+                  title: 'Syarat & Ketentuan Layanan',
                   onTap: () => _showLegalDocumentSheet(
                     title: 'Syarat & Ketentuan Layanan',
                     sections: const [
@@ -927,7 +778,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.verified_user_outlined,
                   iconBg: const Color(0xFFF3E8FF),
                   iconColor: const Color(0xFF7C3AED),
-                  title: _isEn ? 'Privacy Policy' : 'Kebijakan Privasi',
+                  title: 'Kebijakan Privasi',
                   onTap: () => _showLegalDocumentSheet(
                     title: 'Kebijakan Privasi KateringKita',
                     sections: const [
@@ -950,17 +801,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 20),
 
               // 5. Section: TENTANG APLIKASI
-              _buildSectionHeader(_isEn ? 'ABOUT APPLICATION' : 'TENTANG APLIKASI'),
+              _buildSectionHeader('TENTANG APLIKASI'),
               const SizedBox(height: 8),
               _buildSectionCard([
                 _buildSettingTile(
                   icon: Icons.access_time_rounded,
                   iconBg: const Color(0xFFF1F5F9),
                   iconColor: const Color(0xFF475569),
-                  title: _isEn ? 'About KateringKita' : 'Tentang KateringKita',
-                  subtitle: _isEn
-                      ? 'Malang Student Lunch & Catering Solution'
-                      : 'Solusi Makan Siang Mahasiswa Malang',
+                  title: 'Tentang KateringKita',
+                  subtitle: 'Solusi Makan Siang Mahasiswa Malang',
                   onTap: _showAboutAppSheet,
                 ),
                 _buildCardDivider(),
@@ -968,7 +817,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.star_rounded,
                   iconBg: const Color(0xFFFEF3C7),
                   iconColor: const Color(0xFFF59E0B),
-                  title: _isEn ? 'Rate on App Store' : 'Beri Rating di App Store',
+                  title: 'Beri Rating di App Store',
                   onTap: _showRateAppSheet,
                 ),
               ]),
@@ -1016,7 +865,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          _isEn ? 'Log Out of Account' : 'Keluar dari Akun',
+                          'Keluar dari Akun',
                           style: AppTextStyles.h4.copyWith(
                             color: const Color(0xFFE11D48),
                             fontSize: 13.5,
@@ -1115,7 +964,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          _isEn ? 'Active' : 'Aktif',
+                          'Aktif',
                           style: TextStyle(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w700,
@@ -1143,7 +992,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          _isEn ? 'Edit Profile' : 'Edit Profil',
+                          'Edit Profil',
                           style: TextStyle(
                             color: AppColors.isDarkMode
                                 ? const Color(0xFFFF8243)
@@ -1230,7 +1079,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required String title,
     String? subtitle,
     Color? subtitleColor,
-    String? trailingText,
     required VoidCallback onTap,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1286,19 +1134,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
-            if (trailingText != null) ...[
-              const SizedBox(width: 8),
-              Text(
-                trailingText,
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: isDark
-                      ? AppColors.darkTextSecondary
-                      : AppColors.textSecondary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-            ],
             const SizedBox(width: 4),
             Icon(
               Icons.chevron_right_rounded,
@@ -1338,7 +1173,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _isEn ? 'Appearance Theme' : 'Tema Tampilan',
+                  'Tema Tampilan',
                   style: AppTextStyles.bodyMedium.copyWith(
                     fontWeight: FontWeight.w700,
                     fontSize: 13.5,
@@ -1349,9 +1184,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  isDark
-                      ? (_isEn ? 'Dark Mode' : 'Mode Gelap')
-                      : (_isEn ? 'Light Mode' : 'Mode Terang'),
+                  isDark ? 'Mode Gelap' : 'Mode Terang',
                   style: AppTextStyles.bodySmall.copyWith(
                     color: isDark
                         ? AppColors.darkTextSecondary
@@ -1381,30 +1214,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _buildThemeOptionChip(
-                  label: _isEn ? 'Light' : 'Terang',
+                  label: 'Terang',
                   selected: !isDark,
                   isDark: isDark,
                   onTap: () async {
                     if (!isDark) return;
                     await themeProvider.setDarkMode(false);
                     _showToast(
-                      _isEn
-                          ? 'Appearance set to Light Mode'
-                          : 'Tema tampilan diatur ke Mode Terang',
+                      'Tema tampilan diatur ke Mode Terang',
                     );
                   },
                 ),
                 _buildThemeOptionChip(
-                  label: _isEn ? 'Dark' : 'Gelap',
+                  label: 'Gelap',
                   selected: isDark,
                   isDark: isDark,
                   onTap: () async {
                     if (isDark) return;
                     await themeProvider.setDarkMode(true);
                     _showToast(
-                      _isEn
-                          ? 'Appearance set to Dark Mode'
-                          : 'Tema tampilan diatur ke Mode Gelap',
+                      'Tema tampilan diatur ke Mode Gelap',
                     );
                   },
                 ),
