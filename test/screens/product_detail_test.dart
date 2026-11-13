@@ -255,6 +255,23 @@ void main() {
     expect(find.text('Lihat Keranjang (1)'), findsOneWidget);
   });
 
+  testWidgets('profil toko: tanpa label "Terlaris" karangan', (tester) async {
+    await _open(tester, _wrap(const StoreProfileScreen(), 'dapur-a'));
+    // Server tidak memberi data "terlaris" per toko; filter berbasis rating.
+    expect(find.text('Terlaris'), findsNothing);
+
+    // Yang disalin hanya teks info dapur, bukan tautan.
+    await tester.tap(find.byIcon(Icons.share_outlined));
+    await tester.pump();
+    expect(find.textContaining('Tautan'), findsNothing);
+    expect(find.text('Info dapur disalin ke clipboard.'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Rating 4.8+'));
+    await tester.tap(find.text('Rating 4.8+'));
+    await tester.pumpAndSettle();
+    expect(find.text('Belum ada menu di kategori ini'), findsOneWidget);
+  });
+
   group('hati favorit di detail', () {
     Finder heartOn() => find.byIcon(Icons.favorite_rounded);
     Finder heartOff() => find.byIcon(Icons.favorite_border_rounded);

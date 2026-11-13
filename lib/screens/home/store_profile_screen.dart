@@ -41,6 +41,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   final TextEditingController _searchController = TextEditingController();
 
   int _selectedTabIndex = 0; // 0: Menu, 1: Untukmu, 2: Penilaian, 3: Informasi
+  static const _topRatedFilter = 'Rating 4.8+';
   String _selectedMenuCategory = 'Semua';
 
   // Tab Penilaian: dimuat saat tab pertama kali dibuka.
@@ -174,12 +175,9 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               (m.description ?? '').toLowerCase().contains(q))
           .toList();
     }
-    if (_selectedMenuCategory == 'Terlaris') {
-      return list
-          .where((m) =>
-              (m.badgeText ?? '').toLowerCase().contains('terlaris') ||
-              m.rating >= 4.8)
-          .toList();
+    if (_selectedMenuCategory == _topRatedFilter) {
+      // Berdasar rating_avg server; tidak ada data penjualan per toko.
+      return list.where((m) => m.rating >= 4.8).toList();
     } else if (_selectedMenuCategory == 'Paket & Katering') {
       return list.where((m) => m.category?.slug == 'katering').toList();
     } else if (_selectedMenuCategory == 'Danusan & Snack') {
@@ -367,7 +365,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                             'Cek menu ${_vendor.businessName} di KateringKita! Rating ⭐ ${_vendor.ratingAvg}',
                       ),
                     );
-                    _showToast('Tautan profil dapur berhasil disalin!');
+                    _showToast('Info dapur disalin ke clipboard.');
                   },
                 ),
               ],
@@ -873,7 +871,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   Widget _buildMenuTab(bool isDark) {
     final categories = [
       'Semua',
-      'Terlaris',
+      _topRatedFilter,
       'Danusan & Snack',
       'Paket & Katering',
     ];
@@ -1002,7 +1000,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Foto Menu dengan Badge Diskon & Pita Terlaris (Gaya ShopeeFood)
+                        // Foto Menu dengan pita status stok dari server (badge)
                         Stack(
                           children: [
                             ClipRRect(
@@ -1013,31 +1011,32 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                 fit: BoxFit.cover,
                               ),
                             ),
-                            Positioned(
-                              bottom: 0,
-                              left: 0,
-                              right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: menu.badgeType == 'quota'
-                                      ? AppColors.success
-                                      : AppColors.primary,
-                                  borderRadius: const BorderRadius.vertical(
-                                    bottom: Radius.circular(14),
+                            if (menu.badgeText != null)
+                              Positioned(
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: menu.badgeType == 'quota'
+                                        ? AppColors.success
+                                        : AppColors.primary,
+                                    borderRadius: const BorderRadius.vertical(
+                                      bottom: Radius.circular(14),
+                                    ),
                                   ),
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  menu.badgeText ?? 'Terlaris',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w800,
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    menu.badgeText!,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
                           ],
                         ),
                         const SizedBox(width: 14),
@@ -1227,7 +1226,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                 ),
                               ),
                             ),
-                            // Pita "Terlaris" di Bawah Foto (Persis GrabFood)
+                            // Pita status stok di bawah foto (badge server)
                             Positioned(
                               left: 0,
                               right: 0,
@@ -1339,7 +1338,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
             const SizedBox(height: 12),
           ],
 
-          // Kartu Detail Lokasi, Jam Buka & Kebijakan Holding 5 Menit
+          // Kartu Detail Lokasi & Jam Buka
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(

@@ -677,26 +677,14 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 18),
 
               // ---------------- DAFTAR MENU HEADER ----------------
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _selectedCategory == 'Semua'
-                        ? 'Daftar Menu (${products.length})'
-                        : '$_selectedCategory (${products.length})',
-                    style: AppTextStyles.h3.copyWith(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  Text(
-                    'Semua halal & higienis',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.textMuted,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
+              Text(
+                _selectedCategory == 'Semua'
+                    ? 'Daftar Menu (${products.length})'
+                    : '$_selectedCategory (${products.length})',
+                style: AppTextStyles.h3.copyWith(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const SizedBox(height: 14),
 

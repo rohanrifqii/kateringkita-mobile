@@ -155,6 +155,8 @@ void main() {
       await pump(tester);
       expect(find.text('Pilih titik temu favorit ▾'), findsOneWidget);
       expect(find.textContaining('Pengantaran'), findsNothing);
+      // Tidak ada data halal/higienis di server: jangan diklaim.
+      expect(find.textContaining('halal'), findsNothing);
     });
 
     testWidgets('favorit dari profil server tampil dengan namanya',
