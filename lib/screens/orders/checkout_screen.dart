@@ -23,6 +23,8 @@ import '../../widgets/app_modal_dialog.dart';
 import '../../widgets/menu_image.dart';
 import '../../widgets/payment_method_tile.dart';
 import '../../widgets/primary_button.dart';
+import '../../models/voucher.dart';
+import '../../widgets/voucher_picker_sheet.dart';
 import 'pickup_point_picker_screen.dart';
 
 /// Checkout isi keranjang: quote server, titik temu, waktu ambil,
@@ -64,6 +66,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
   final TextEditingController _promoController = TextEditingController();
+  // Voucher: maks satu voucher toko + satu voucher platform; kode manual opsional
+  Voucher? _tokoVoucher;
+  Voucher? _platformVoucher;
+  bool _manualCode = false;
 
   /// true setelah lolos requireLogin.
   bool _authorized = false;
@@ -245,7 +251,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       'items': _cart.toQuoteItems(),
       'pickup_point_id': _point?.id,
       'note': _opt(_noteController),
-      'promo_code': _opt(_promoController),
+      'promo_codes': <String>{
+        if (_tokoVoucher != null) _tokoVoucher!.code,
+        if (_platformVoucher != null) _platformVoucher!.code,
+        if (_opt(_promoController) != null) _opt(_promoController)!.toUpperCase(),
+      }.toList(),
       'customer_name': _opt(_nameController),
       'customer_phone': _opt(_phoneController),
       if (!_isAsap && at != null) 'pickup_at': at.toUtc().toIso8601String(),
@@ -272,7 +282,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       } else if (k == 'pickup_point_id') {
         _pointError = v.first;
         matched = true;
-      } else if (k == 'promo_code') {
+      } else if (k == 'promo_code' || k == 'promo_codes') {
         _promoError = v.first;
         matched = true;
       } else if (k == 'customer_name') {
@@ -834,20 +844,107 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           },
         ),
         const SizedBox(height: 12),
-        _OrderField(
-          label: 'Kode Promo (opsional)',
-          controller: _promoController,
-          hintText: 'Masukkan kode promo',
-          action: TextInputAction.done,
-          textCapitalization: TextCapitalization.characters,
-          errorText: _promoError,
-          onChanged: (_) {
-            if (_promoError != null) setState(() => _promoError = null);
-            _scheduleQuote();
-          },
-        ),
+        _buildVoucherSection(cart),
       ],
     );
+  }
+
+  /// Bagian Voucher: baris voucher toko & platform (lembar pemilih) + kode manual.
+  Widget _buildVoucherSection(CartProvider cart) {
+    Widget baris(VoucherSlot slot, String label, Voucher? v) => InkWell(
+          key: ValueKey('voucher-slot-${slot.name}'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _pickVoucher(cart, slot),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.confirmation_number_outlined,
+                    size: 20, color: slot == VoucherSlot.toko ? AppColors.primary : AppColors.blue),
+                const SizedBox(width: 10),
+                Expanded(child: Text(label, style: AppTextStyles.bodyMedium)),
+                if (v == null)
+                  Text('Pilih voucher', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary))
+                else ...[
+                  Flexible(
+                    child: Text('${v.code} · ${v.label}',
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w700, color: AppColors.primary)),
+                  ),
+                  IconButton(
+                    tooltip: 'Lepas voucher',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    onPressed: () {
+                      setState(() {
+                        if (slot == VoucherSlot.toko) {
+                          _tokoVoucher = null;
+                        } else {
+                          _platformVoucher = null;
+                        }
+                        _promoError = null;
+                      });
+                      _scheduleQuote();
+                    },
+                  ),
+                ],
+                if (v == null) const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
+          ),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Voucher', style: AppTextStyles.h4),
+        baris(VoucherSlot.toko, 'Voucher toko', _tokoVoucher),
+        baris(VoucherSlot.platform, 'Voucher platform', _platformVoucher),
+        if (_manualCode)
+          TextField(
+            key: const ValueKey('voucher-manual'),
+            controller: _promoController,
+            textCapitalization: TextCapitalization.characters,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(labelText: 'Kode voucher', hintText: 'Kode dari WhatsApp / Instagram'),
+            onChanged: (_) {
+              if (_promoError != null) setState(() => _promoError = null);
+              _scheduleQuote();
+            },
+          )
+        else
+          TextButton(
+            onPressed: () => setState(() => _manualCode = true),
+            child: const Text('Pakai kode'),
+          ),
+        if (_promoError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(_promoError!, style: AppTextStyles.bodySmall.copyWith(color: AppColors.danger)),
+          ),
+      ],
+    );
+  }
+
+  Future<void> _pickVoucher(CartProvider cart, VoucherSlot slot) async {
+    final merchantId = cart.merchantId;
+    if (merchantId == null) return;
+    final v = await showVoucherPicker(
+      context,
+      slot: slot,
+      merchantId: merchantId,
+      subtotal: _quote?.subtotal ?? 0,
+      paymentMethod: _payment.apiValue,
+    );
+    if (v == null || !mounted) return;
+    setState(() {
+      if (slot == VoucherSlot.toko) {
+        _tokoVoucher = v;
+      } else {
+        _platformVoucher = v;
+      }
+      _promoError = null;
+    });
+    _scheduleQuote();
   }
 
   Widget _buildLocationSelectorCard() {
@@ -1209,7 +1306,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         children: [
           _summaryRow('Subtotal (${cart.count} Porsi)',
               AppCurrency.format(q.subtotal)),
-          if (q.discount > 0)
+          // voucher per slot; server lama / tanpa rincian → satu baris Diskon
+          if (q.vouchersApplied.isNotEmpty)
+            for (final v in q.vouchersApplied)
+              if (v.amount > 0)
+                _summaryRow(v.slot == VoucherSlot.toko ? 'Voucher toko (${v.code})' : 'Voucher platform (${v.code})',
+                    '- ${AppCurrency.format(v.amount)}', color: AppColors.success)
+              else
+                const SizedBox.shrink()
+          else if (q.discount > 0)
             _summaryRow('Diskon', '- ${AppCurrency.format(q.discount)}',
                 color: AppColors.success),
           _summaryRow(
@@ -1304,27 +1409,23 @@ class _OrderField extends StatefulWidget {
   final String label;
   final TextEditingController controller;
   final TextInputType? keyboardType;
-  final TextInputAction action;
   final Widget? trailing;
   final Color? fillColor;
   final int lines;
   final String hintText;
   final String? errorText;
   final ValueChanged<String>? onChanged;
-  final TextCapitalization textCapitalization;
 
   const _OrderField({
     required this.label,
     required this.controller,
     this.keyboardType,
-    this.action = TextInputAction.next,
     this.trailing,
     this.fillColor,
     this.lines = 1,
     this.hintText = '',
     this.errorText,
     this.onChanged,
-    this.textCapitalization = TextCapitalization.none,
   });
 
   @override
@@ -1390,8 +1491,7 @@ class _OrderFieldState extends State<_OrderField> {
                         controller: widget.controller,
                         focusNode: _focusNode,
                         keyboardType: widget.keyboardType,
-                        textInputAction: widget.action,
-                        textCapitalization: widget.textCapitalization,
+                        textInputAction: TextInputAction.next,
                         onChanged: widget.onChanged,
                         minLines: widget.lines,
                         maxLines: widget.lines,
