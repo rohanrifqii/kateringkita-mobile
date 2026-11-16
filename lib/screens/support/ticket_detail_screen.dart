@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -15,7 +17,9 @@ import 'ticket_widgets.dart';
 /// [TicketDetail] yang baru dibuat (langsung tampil sambil dimuat ulang).
 ///
 /// Setiap pemuatan memakai `GET /me/tickets/:code`, yang sekaligus menandai
-/// balasan admin sudah dibaca.
+/// balasan admin sudah dibaca. Selama layar terbuka dan tiket belum ditutup,
+/// utas dimuat ulang diam-diam tiap [ticketPollInterval] agar balasan admin
+/// muncul sendiri.
 class TicketDetailScreen extends StatefulWidget {
   const TicketDetailScreen({super.key, this.code});
 
@@ -26,9 +30,13 @@ class TicketDetailScreen extends StatefulWidget {
   State<TicketDetailScreen> createState() => _TicketDetailScreenState();
 }
 
+/// Jeda muat ulang utas tiket di latar.
+const Duration ticketPollInterval = Duration(seconds: 5);
+
 class _TicketDetailScreenState extends State<TicketDetailScreen> {
   final _reply = TextEditingController();
   final _scroll = ScrollController();
+  Timer? _poll;
 
   String _code = '';
   bool _argsLoaded = false;
@@ -55,10 +63,20 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
       _code = widget.code ?? '';
     }
     WidgetsBinding.instance.addPostFrameCallback((_) => _load(silent: true));
+    _poll = Timer.periodic(ticketPollInterval, (_) => _pollOnce());
+  }
+
+  /// Muat ulang latar: dilewati selama ada aksi berjalan atau tiket ditutup.
+  void _pollOnce() {
+    final t = _ticket;
+    if (!mounted || t == null || t.isClosed) return;
+    if (_loading || _sending || _closing) return;
+    _load(silent: true, background: true);
   }
 
   @override
   void dispose() {
+    _poll?.cancel();
     _reply.dispose();
     _scroll.dispose();
     super.dispose();
@@ -82,8 +100,9 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
   }
 
   /// [silent]: tanpa indikator layar penuh (tarik-untuk-muat-ulang, atau
-  /// data awal sudah ada).
-  Future<void> _load({bool silent = false}) async {
+  /// data awal sudah ada). [background]: muat ulang berkala; gagal tidak
+  /// memunculkan snackbar (dicoba lagi di putaran berikutnya).
+  Future<void> _load({bool silent = false, bool background = false}) async {
     if (!mounted) return;
     final repo = context.read<TicketRepository>();
     final badge = context.read<TicketUnreadProvider>();
@@ -104,15 +123,18 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         _loading = false;
       });
       if (grew) _scrollToEnd();
-      // GET menandai balasan admin sudah dibaca: perbarui titik Profil.
-      if (t.lastSenderRole == 'admin') badge.refresh();
+      // GET menandai balasan admin sudah dibaca: perbarui titik Profil
+      // (muat ulang latar hanya bila ada pesan baru).
+      if (t.lastSenderRole == 'admin' && (grew || !background)) {
+        badge.refresh();
+      }
     } catch (e) {
       if (!mounted || seq != _seq) return;
       setState(() {
         _loading = false;
         if (_ticket == null) _error = _msg(e);
       });
-      if (_ticket != null) _snack(_msg(e));
+      if (_ticket != null && !background) _snack(_msg(e));
     }
   }
 

@@ -698,6 +698,50 @@ void main() {
       expect(find.text('Ada lagi yang bisa kami bantu?'), findsOneWidget);
     });
 
+    testWidgets('balasan admin baru muncul sendiri tiap 5 detik, tanpa tarik',
+        (tester) async {
+      final h = _Harness();
+      h.server.tickets['TK-1'] = _detail('TK-1');
+      await h.open(tester, AppRoutes.ticketDetail, arguments: 'TK-1');
+      final awal = h.server.where('GET', '/me/tickets/TK-1').length;
+      h.server.tickets['TK-1']!['messages'] = [
+        ...h.server.tickets['TK-1']!['messages'] as List,
+        {
+          'id': 3,
+          'sender_role': 'admin',
+          'sender_name': 'Tim KateringKita',
+          'body': 'Balasan baru dari admin.',
+          'created_at': _t1,
+        },
+      ];
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(h.server.where('GET', '/me/tickets/TK-1'), hasLength(awal + 1));
+      expect(find.text('Balasan baru dari admin.'), findsOneWidget);
+    });
+
+    testWidgets('muat ulang berkala gagal: tanpa snackbar, utas tetap tampil',
+        (tester) async {
+      final h = _Harness();
+      h.server.tickets['TK-1'] = _detail('TK-1');
+      await h.open(tester, AppRoutes.ticketDetail, arguments: 'TK-1');
+      h.server.tickets.remove('TK-1');
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.byType(SnackBar), findsNothing);
+      expect(find.text('Sudah kami cek, pembayaranmu masuk.'), findsOneWidget);
+    });
+
+    testWidgets('tiket tertutup: tidak dimuat ulang berkala', (tester) async {
+      final h = _Harness();
+      h.server.tickets['TK-1'] =
+          _detail('TK-1', status: 'closed', closedBy: 'admin');
+      await h.open(tester, AppRoutes.ticketDetail, arguments: 'TK-1');
+      final awal = h.server.where('GET', '/me/tickets/TK-1').length;
+      await tester.pump(const Duration(seconds: 11));
+      expect(h.server.where('GET', '/me/tickets/TK-1'), hasLength(awal));
+    });
+
     testWidgets('404: pesan server + Coba Lagi', (tester) async {
       final h = _Harness();
       await h.open(tester, AppRoutes.ticketDetail, arguments: 'TK-X');
