@@ -589,6 +589,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 8),
                 _buildSectionCard([
                   _buildSettingTile(
+                    key: const ValueKey('profile-vouchers'),
+                    icon: Icons.confirmation_number_outlined,
+                    iconBg: const Color(0xFFFFEDD5),
+                    iconColor: const Color(0xFFEA580C),
+                    title: 'Voucher Saya',
+                    subtitle: 'Voucher toko & KateringKita yang sudah diklaim',
+                    onTap: () => Navigator.pushNamed(context, AppRoutes.myVouchers),
+                  ),
+                  _buildCardDivider(),
+                  _buildSettingTile(
                     icon: Icons.person_outline_rounded,
                     iconBg: const Color(0xFFFFF1E8),
                     iconColor: const Color(0xFFD9774A),

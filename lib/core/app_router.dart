@@ -19,6 +19,7 @@ import '../screens/orders/orders_screen.dart';
 import '../screens/orders/payment_screen.dart';
 import '../screens/orders/whatsapp_generator_screen.dart';
 import '../screens/home/notification_screen.dart';
+import '../screens/profile/my_vouchers_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/splash/splash_screen.dart';
 import '../screens/support/ticket_create_screen.dart';
@@ -68,6 +69,7 @@ class AppRouter {
     AppRoutes.profile: (context) => const ProfileScreen(),
     AppRoutes.notifications: (context) => const NotificationScreen(),
     AppRoutes.tickets: (context) => const TicketListScreen(),
+    AppRoutes.myVouchers: (context) => const MyVouchersScreen(),
     AppRoutes.ticketCreate: (context) => const TicketCreateScreen(),
     // Argumen: kode tiket (String) atau TicketDetail yang baru dibuat.
     AppRoutes.ticketDetail: (context) => const TicketDetailScreen(),
