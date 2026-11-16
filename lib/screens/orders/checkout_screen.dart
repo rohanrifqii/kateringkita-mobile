@@ -43,7 +43,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           method: PaymentMethod.online,
           code: 'QR',
           title: 'QRIS / E-Wallet',
-          subtitle: 'GoPay, ShopeePay & QRIS lewat Midtrans',
+          subtitle: 'QR tampil di aplikasi: GoPay, OVO, DANA, m-banking',
           badge: 'Cepat',
           accent: AppColors.primaryDark,
           accentBg: AppColors.primarySoft,

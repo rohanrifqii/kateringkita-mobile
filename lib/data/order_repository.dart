@@ -33,6 +33,10 @@ class OrderRepository {
   Future<OrderApiModel> startOnline(String code) async =>
       _order(await _api.post('${_path(code)}/online'));
 
+  /// QRIS langsung di aplikasi; idempoten di server (satu QR per pesanan).
+  Future<OrderApiModel> startQris(String code) async =>
+      _order(await _api.post('${_path(code)}/qris'));
+
   Future<({List<OrderApiModel> items, int total})> list({
     required String tab,
     String? q,

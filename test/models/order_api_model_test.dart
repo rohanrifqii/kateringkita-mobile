@@ -86,6 +86,26 @@ void main() {
     final j = order()
       ..['payment'] = {'method': 'online', 'status': 'pending', 'amount': 1};
     expect(OrderApiModel.fromJson(j).payment!.va, isNull);
+    expect(OrderApiModel.fromJson(j).payment!.qris, isNull);
+  });
+
+  test('payment online dengan qris', () {
+    final j = order()
+      ..['payment'] = {
+        'method': 'online',
+        'status': 'pending',
+        'amount': 1,
+        'payment_url': null,
+        'qris': {
+          'qr_string': '000201QR',
+          'qr_url': 'https://api.sandbox.midtrans.com/v2/qris/t/qr-code',
+          'expires_at': '2026-11-12T04:00:00.000Z',
+        },
+      };
+    final q = OrderApiModel.fromJson(j).payment!.qris!;
+    expect(q.qrString, '000201QR');
+    expect(q.qrUrl, 'https://api.sandbox.midtrans.com/v2/qris/t/qr-code');
+    expect(q.expiresAt, DateTime.utc(2026, 11, 12, 4));
   });
 
   test('parses Quote', () {

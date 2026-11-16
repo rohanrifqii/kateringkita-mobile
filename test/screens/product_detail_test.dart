@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -173,6 +174,21 @@ Future<void> _open(WidgetTester tester, Widget w) async {
   await tester.pumpAndSettle();
 }
 
+/// Meniru clipboard platform; mengembalikan daftar teks yang disalin.
+List<String> _tirukanClipboard(WidgetTester tester, {bool gagal = false}) {
+  final disalin = <String>[];
+  final messenger = tester.binding.defaultBinaryMessenger;
+  messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+    if (call.method != 'Clipboard.setData') return null;
+    if (gagal) throw PlatformException(code: 'copy_fail');
+    disalin.add((call.arguments as Map)['text'] as String);
+    return null;
+  });
+  addTearDown(
+      () => messenger.setMockMethodCallHandler(SystemChannels.platform, null));
+  return disalin;
+}
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -261,8 +277,12 @@ void main() {
     expect(find.text('Terlaris'), findsNothing);
 
     // Yang disalin hanya teks info dapur, bukan tautan.
+    final disalin = _tirukanClipboard(tester);
     await tester.tap(find.byIcon(Icons.share_outlined));
     await tester.pump();
+    await tester.pump();
+    expect(disalin.single, startsWith('Cek menu '));
+    expect(disalin.single, isNot(contains('http')));
     expect(find.textContaining('Tautan'), findsNothing);
     expect(find.text('Info dapur disalin ke clipboard.'), findsOneWidget);
 
@@ -270,6 +290,17 @@ void main() {
     await tester.tap(find.text('Rating 4.8+'));
     await tester.pumpAndSettle();
     expect(find.text('Belum ada menu di kategori ini'), findsOneWidget);
+  });
+
+  testWidgets('profil toko: salin gagal tidak mengaku berhasil',
+      (tester) async {
+    await _open(tester, _wrap(const StoreProfileScreen(), 'dapur-a'));
+    _tirukanClipboard(tester, gagal: true);
+    await tester.tap(find.byIcon(Icons.share_outlined));
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Info dapur disalin ke clipboard.'), findsNothing);
+    expect(find.text('Gagal menyalin info dapur.'), findsOneWidget);
   });
 
   group('hati favorit di detail', () {

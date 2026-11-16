@@ -11,10 +11,10 @@ import '../../widgets/primary_button.dart';
 import '../../widgets/cart_button.dart';
 import '../../providers/cart_provider.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/clipboard_copy.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
@@ -358,14 +358,14 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                 const SizedBox(width: 8),
                 _buildCircleTopButton(
                   icon: Icons.share_outlined,
-                  onTap: () {
-                    Clipboard.setData(
-                      ClipboardData(
-                        text:
-                            'Cek menu ${_vendor.businessName} di KateringKita! Rating ⭐ ${_vendor.ratingAvg}',
-                      ),
+                  onTap: () async {
+                    final ok = await copyText(
+                      'Cek menu ${_vendor.businessName} di KateringKita! Rating ⭐ ${_vendor.ratingAvg}',
                     );
-                    _showToast('Info dapur disalin ke clipboard.');
+                    if (!mounted) return;
+                    _showToast(ok
+                        ? 'Info dapur disalin ke clipboard.'
+                        : 'Gagal menyalin info dapur.');
                   },
                 ),
               ],

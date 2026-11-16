@@ -50,12 +50,35 @@ class OrderVa {
       );
 }
 
+/// QRIS yang digambar langsung di aplikasi (POST /orders/:code/qris).
+class OrderQris {
+  /// Isi QR (standar QRIS) untuk digambar sendiri.
+  final String qrString;
+
+  /// Gambar QR dari Midtrans (bisa dibuka/disimpan di browser).
+  final String qrUrl;
+  final DateTime expiresAt;
+
+  const OrderQris({
+    required this.qrString,
+    required this.qrUrl,
+    required this.expiresAt,
+  });
+
+  factory OrderQris.fromJson(Map<String, dynamic> json) => OrderQris(
+        qrString: json['qr_string'] as String,
+        qrUrl: json['qr_url'] as String,
+        expiresAt: DateTime.parse(json['expires_at'] as String),
+      );
+}
+
 class OrderPayment {
   final String method;
   final String status;
   final int amount;
   final OrderVa? va;
   final String? paymentUrl;
+  final OrderQris? qris;
 
   const OrderPayment({
     required this.method,
@@ -63,6 +86,7 @@ class OrderPayment {
     required this.amount,
     this.va,
     this.paymentUrl,
+    this.qris,
   });
 
   factory OrderPayment.fromJson(Map<String, dynamic> json) => OrderPayment(
@@ -73,6 +97,9 @@ class OrderPayment {
             ? null
             : OrderVa.fromJson(json['va'] as Map<String, dynamic>),
         paymentUrl: json['payment_url'] as String?,
+        qris: json['qris'] == null
+            ? null
+            : OrderQris.fromJson(json['qris'] as Map<String, dynamic>),
       );
 }
 

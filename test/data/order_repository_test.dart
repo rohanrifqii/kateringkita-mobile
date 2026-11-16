@@ -150,12 +150,14 @@ void main() {
     await r.startOnline('KK-1');
     await r.complete('KK-1');
     await r.cancel('KK-1', reason: 'Salah pesan');
+    await r.startQris('KK-1');
     expect(seen, [
       'GET /api/v1/orders/KK-1',
       'POST /api/v1/orders/KK-1/va',
       'POST /api/v1/orders/KK-1/online',
       'POST /api/v1/orders/KK-1/complete',
       'POST /api/v1/orders/KK-1/cancel',
+      'POST /api/v1/orders/KK-1/qris',
     ]);
     expect(jsonDecode(bodies[1]), {'bank': 'bca'});
     expect(jsonDecode(bodies[4]), {'reason': 'Salah pesan'});

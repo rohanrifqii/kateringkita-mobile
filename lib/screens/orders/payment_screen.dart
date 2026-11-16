@@ -1,14 +1,16 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_exception.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
+import '../../core/clipboard_copy.dart';
 import '../../core/payment_poller.dart';
 import '../../data/order_repository.dart';
 import '../../models/order_api_model.dart';
@@ -21,12 +23,28 @@ Future<void> _openSnapWebView(BuildContext context, String url) => Navigator.of(
   context,
 ).push<void>(MaterialPageRoute(builder: (_) => SnapWebViewScreen(url: url)));
 
+/// Membuka tautan di luar aplikasi (browser / tab baru). Dapat diganti di test.
+typedef LinkOpener = Future<void> Function(String url);
+
+Future<void> _openExternal(String url) async {
+  if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
+    throw StateError('tautan tidak terbuka');
+  }
+}
+
 /// Halaman pembayaran pesanan (argumen rute: [OrderApiModel]).
 /// Status bayar selalu berasal dari server (polling GET /orders/:code).
+/// Pesanan `online`: QRIS dibuat otomatis dan QR-nya digambar di aplikasi;
+/// halaman Snap Midtrans hanya cadangan selama QR belum ada.
 class PaymentScreen extends StatefulWidget {
-  const PaymentScreen({super.key, this.snapOpener = _openSnapWebView});
+  const PaymentScreen({
+    super.key,
+    this.snapOpener = _openSnapWebView,
+    this.linkOpener = _openExternal,
+  });
 
   final SnapOpener snapOpener;
+  final LinkOpener linkOpener;
 
   @override
   State<PaymentScreen> createState() => _PaymentScreenState();
@@ -56,6 +74,8 @@ class _PaymentScreenState extends State<PaymentScreen>
   bool _snapOpen = false;
   bool _serverConfirmed = false;
   OrderVa? _va;
+  OrderQris? _qris;
+  bool _qrisTried = false;
   String? _error;
 
   @override
@@ -79,11 +99,27 @@ class _PaymentScreenState extends State<PaymentScreen>
     _repo = context.read<OrderRepository>();
     _order = arg;
     _va = arg.payment?.va;
+    _qris = arg.payment?.qris;
     _remainingSeconds = _computeRemaining(arg);
     _startWatching();
     if (_order.isPaid) _scheduleSuccess();
-    // Argumen rute bisa usang: segarkan dari server segera.
-    Future.microtask(_refresh);
+    // Argumen rute bisa usang: segarkan dari server segera, lalu siapkan QRIS.
+    Future.microtask(() async {
+      await _refresh();
+      _autoQris();
+    });
+  }
+
+  /// QRIS dibuat sekali secara otomatis untuk pesanan online yang menunggu
+  /// bayar. Tidak bila halaman Snap sudah pernah dibuka: pembeli mungkin
+  /// sudah memilih metode di sana (order_id Midtrans sudah terpakai).
+  void _autoQris() {
+    if (!mounted || _qrisTried || _qris != null) return;
+    if (_order.paymentMethod != 'online' || _order.isPaid) return;
+    if (_outcome != PaymentOutcome.waiting) return;
+    final snap = _order.payment?.paymentUrl;
+    if (snap != null && snap.isNotEmpty) return;
+    _createQris();
   }
 
   /// Sisa waktu berpatokan pada `seconds_left` server, bukan jam perangkat.
@@ -166,6 +202,7 @@ class _PaymentScreenState extends State<PaymentScreen>
       _serverConfirmed = true;
       _order = o;
       _va = o.payment?.va ?? _va;
+      _qris = o.payment?.qris ?? _qris;
       _remainingSeconds = _computeRemaining(o);
     });
     if (_outcome != PaymentOutcome.waiting) _stopWatching();
@@ -212,6 +249,38 @@ class _PaymentScreenState extends State<PaymentScreen>
     }
   }
 
+  Future<void> _createQris() async {
+    _qrisTried = true;
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final o = await _repo.startQris(_order.code);
+      if (!mounted) return;
+      _apply(o);
+    } catch (e) {
+      _onApiError(e);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _openQrImage(String url) async {
+    try {
+      await widget.linkOpener(url);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Gambar QR tidak bisa dibuka. Screenshot QR di layar ini.'),
+          backgroundColor: AppColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<void> _payOnline() async {
     setState(() {
       _busy = true;
@@ -248,12 +317,15 @@ class _PaymentScreenState extends State<PaymentScreen>
     }
   }
 
-  void _copy(String text, String label) {
-    Clipboard.setData(ClipboardData(text: text));
+  Future<void> _copy(String text, String label) async {
+    final ok = await copyText(text);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('$label berhasil disalin'),
-        backgroundColor: AppColors.successDark,
+        content: Text(ok
+            ? '$label berhasil disalin'
+            : 'Gagal menyalin. Catat $label secara manual.'),
+        backgroundColor: ok ? AppColors.successDark : AppColors.danger,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
@@ -592,32 +664,112 @@ class _PaymentScreenState extends State<PaymentScreen>
     );
   }
 
-  Widget _onlineSection() => Container(
+  Widget _onlineSection() {
+    final q = _qris;
+    if (q != null) return _qrisCard(q);
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: _cardDecoration,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('QRIS', style: AppTextStyles.h4),
+          const SizedBox(height: 6),
+          Text(
+            'Kode QR pembayaran tampil di halaman ini. Scan dengan aplikasi e-wallet atau m-banking.',
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _busy ? null : _createQris,
+              child: _busy
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Tampilkan QRIS'),
+            ),
+          ),
+          const SizedBox(height: 4),
+          SizedBox(
+            width: double.infinity,
+            child: TextButton(
+              onPressed: _busy ? null : _payOnline,
+              child: const Text('Bayar lewat halaman Midtrans'),
+            ),
+          ),
+          Text(
+            'Halaman Midtrans: GoPay, ShopeePay, atau Virtual Account.',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.bodySmall.copyWith(
+              color: AppColors.textSecondary,
+              fontSize: 11.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _qrisCard(OrderQris q) => Container(
     padding: const EdgeInsets.all(16),
     decoration: _cardDecoration,
     child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('QRIS / E-Wallet', style: AppTextStyles.h4),
+        Text('Scan QRIS', style: AppTextStyles.h4),
         const SizedBox(height: 6),
         Text(
-          'Anda akan diarahkan ke halaman pembayaran Midtrans.',
+          'Bayar ${AppCurrency.format(_order.total)} dengan GoPay, OVO, DANA, ShopeePay, LinkAja, atau m-banking.',
           style: AppTextStyles.bodySmall.copyWith(
             color: AppColors.textSecondary,
           ),
         ),
         const SizedBox(height: 14),
-        SizedBox(
-          width: double.infinity,
-          child: ElevatedButton(
-            onPressed: _busy ? null : _payOnline,
-            child: _busy
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Bayar dengan QRIS / E-Wallet'),
+        Center(
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              // QR selalu di latar putih agar terbaca pemindai, juga di tema gelap.
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.cardBorder),
+            ),
+            child: QrImageView(
+              key: ValueKey('qris:${q.qrString}'),
+              data: q.qrString,
+              size: 220,
+              backgroundColor: Colors.white,
+              semanticsLabel: 'Kode QRIS pembayaran',
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Membayar dari HP ini? Buka gambar QR lalu simpan (atau screenshot layar ini), kemudian pilih unggah dari galeri di menu scan aplikasi pembayaran.',
+          style: AppTextStyles.bodySmall.copyWith(
+            color: AppColors.textSecondary,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 10),
+        OutlinedButton.icon(
+          icon: const Icon(Icons.open_in_new_rounded, size: 18),
+          label: const Text('Buka Gambar QR'),
+          onPressed: () => _openQrImage(q.qrUrl),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Status diperbarui otomatis setelah pembayaran diterima.',
+          textAlign: TextAlign.center,
+          style: AppTextStyles.bodySmall.copyWith(
+            color: AppColors.textSecondary,
+            fontSize: 11.5,
           ),
         ),
       ],
