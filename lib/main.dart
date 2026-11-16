@@ -14,6 +14,7 @@ import 'data/assistant_repository.dart';
 import 'data/auth_repository.dart';
 import 'data/catalog_repository.dart';
 import 'data/favorite_repository.dart';
+import 'data/voucher_repository.dart';
 import 'data/notification_repository.dart';
 import 'data/order_repository.dart';
 import 'data/ticket_repository.dart';
@@ -93,6 +94,7 @@ Widget buildAppProviders({
   // dikosongkan saat logout / sesi tidak valid.
   final cart = CartProvider();
   final favoriteRepo = FavoriteRepository(api);
+  final voucherRepo = VoucherRepository(api);
   final favorites = FavoritesProvider(favoriteRepo);
   final notificationRepo = NotificationRepository(api);
   final notifications = NotificationProvider(notificationRepo);
@@ -119,6 +121,7 @@ Widget buildAppProviders({
       Provider<CatalogRepository>.value(value: CatalogRepository(api)),
       Provider<OrderRepository>.value(value: OrderRepository(api)),
       Provider<FavoriteRepository>.value(value: favoriteRepo),
+      Provider<VoucherRepository>.value(value: voucherRepo),
       ChangeNotifierProvider<FavoritesProvider>.value(value: favorites),
       Provider<NotificationRepository>.value(value: notificationRepo),
       ChangeNotifierProvider<NotificationProvider>.value(value: notifications),

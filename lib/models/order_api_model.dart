@@ -1,5 +1,6 @@
 import 'pickup_point.dart';
 import 'product_model.dart';
+import 'voucher.dart';
 
 DateTime? _dt(dynamic v) => v == null ? null : DateTime.parse(v as String);
 
@@ -222,6 +223,11 @@ class Quote {
   final List<OrderItem> items;
   final int subtotal;
   final int discount;
+
+  /// Potongan voucher toko / platform (server lama: 0).
+  final int merchantDiscount;
+  final int platformDiscount;
+  final List<AppliedVoucher> vouchersApplied;
   final int serviceFee;
   final int total;
   final List<QuoteWarning> warnings;
@@ -230,6 +236,9 @@ class Quote {
     required this.items,
     required this.subtotal,
     required this.discount,
+    this.merchantDiscount = 0,
+    this.platformDiscount = 0,
+    this.vouchersApplied = const [],
     required this.serviceFee,
     required this.total,
     this.warnings = const [],
@@ -241,6 +250,11 @@ class Quote {
             .toList(),
         subtotal: (json['subtotal'] as num).toInt(),
         discount: (json['discount'] as num).toInt(),
+        merchantDiscount: (json['merchant_discount'] as num?)?.toInt() ?? 0,
+        platformDiscount: (json['platform_discount'] as num?)?.toInt() ?? 0,
+        vouchersApplied: ((json['vouchers_applied'] as List?) ?? const [])
+            .map((e) => AppliedVoucher.fromJson(e as Map<String, dynamic>))
+            .toList(),
         serviceFee: (json['service_fee'] as num).toInt(),
         total: (json['total'] as num).toInt(),
         warnings: ((json['warnings'] as List?) ?? const [])

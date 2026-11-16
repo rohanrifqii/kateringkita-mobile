@@ -2,6 +2,7 @@ import '../api/api_client.dart';
 import '../models/category_model.dart';
 import '../models/pickup_point.dart';
 import '../models/product_model.dart';
+import '../models/voucher.dart';
 
 class MenuPage {
   final List<ProductModel> items;
@@ -49,6 +50,9 @@ class MerchantProfile {
   /// dan server yang belum memuat kolom ini.
   final bool isFavorite;
 
+  /// Voucher toko publik yang berlaku (hanya dari GET /merchants/:slug).
+  final List<Voucher> vouchers;
+
   const MerchantProfile({
     required this.id,
     required this.slug,
@@ -63,6 +67,7 @@ class MerchantProfile {
     required this.ratingCount,
     this.pickupPoints = const [],
     this.isFavorite = false,
+    this.vouchers = const [],
   });
 
   factory MerchantProfile.fromJson(Map<String, dynamic> json) =>
@@ -83,6 +88,9 @@ class MerchantProfile {
             .map((e) => PickupPoint.fromJson(e as Map<String, dynamic>))
             .toList(),
         isFavorite: (json['is_favorite'] as bool?) ?? false,
+        vouchers: ((json['vouchers'] as List?) ?? const [])
+            .map((e) => Voucher.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 }
 
