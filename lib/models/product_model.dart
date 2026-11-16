@@ -145,9 +145,11 @@ class ProductData {
   ];
 
   static ProductModel getProductByName(String name) {
+    // Pesanan multi-menu disimpan sebagai "Menu A + 2 menu lain": ambil menu pertama.
+    final lookup = name.split(' + ').first;
     try {
       return mockProducts.firstWhere(
-        (p) => p.name.trim().toLowerCase() == name.trim().toLowerCase(),
+        (p) => p.name.trim().toLowerCase() == lookup.trim().toLowerCase(),
       );
     } catch (_) {
       return defaultProduct;

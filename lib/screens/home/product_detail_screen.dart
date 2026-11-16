@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../data/liked_store.dart';
+import '../../models/cart_item.dart';
 import '../../models/product_model.dart';
 import '../../models/vendor_model.dart';
-import '../../widgets/primary_button.dart';
+import '../../providers/cart_provider.dart';
+import '../../widgets/cart_actions.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final ProductModel? product;
@@ -21,6 +24,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late ProductModel _product;
   int _selectedOptionIndex = 0;
   int _currentImageIndex = 0;
+  int _selectedQty = 1;
   final PageController _imagePageController = PageController();
 
   List<String> get _galleryImages {
@@ -54,6 +58,48 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   void dispose() {
     _imagePageController.dispose();
     super.dispose();
+  }
+
+  Future<void> _addToCart() async {
+    final added = await CartActions.addProduct(
+      context,
+      _product,
+      count: _selectedQty,
+    );
+    if (!added || !mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            '$_selectedQty porsi ${_product.name} masuk keranjang',
+          ),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+          action: SnackBarAction(
+            label: 'Lihat Dapur',
+            onPressed: () {
+              Navigator.pushNamed(
+                context,
+                AppRoutes.storeProfile,
+                arguments: _product.vendor,
+              );
+            },
+          ),
+        ),
+      );
+  }
+
+  Future<void> _promptDetailQuantity() async {
+    final newQty = await CartActions.showQuantityDialog(
+      context,
+      product: _product,
+      initialQuantity: _selectedQty,
+      allowZeroRemove: false,
+    );
+    if (newQty != null && newQty >= 1 && mounted) {
+      setState(() => _selectedQty = newQty);
+    }
   }
 
   @override
@@ -500,23 +546,199 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
           ),
 
-          // Bottom Fixed Button
+          // Bottom Bar: Stepper (bisa diketik) + Tambah ke Keranjang + Ringkasan Keranjang
           Positioned(
-            left: 20,
-            right: 20,
-            bottom: 24,
-            child: PrimaryButton(
-              text: 'Add to Orders',
-              onPressed: () {
-                Navigator.pushNamed(
-                  context,
-                  AppRoutes.checkout,
-                  arguments: _product,
-                );
-              },
-            ),
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _buildBottomActionArea(),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBottomActionArea() {
+    final cart = context.watch<CartProvider>();
+    final hasSameVendorCart =
+        !cart.isEmpty && cart.vendorName == _product.vendor;
+
+    Widget stepBtn(IconData icon, VoidCallback onTap, {bool filled = false}) {
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: filled ? AppColors.primary : AppColors.background,
+            borderRadius: BorderRadius.circular(11),
+            border: filled
+                ? null
+                : Border.all(color: AppColors.primary, width: 1.3),
+          ),
+          child: Icon(
+            icon,
+            size: 20,
+            color: filled ? Colors.white : AppColors.primary,
+          ),
+        ),
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(top: BorderSide(color: AppColors.cardBorder)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 12,
+            offset: const Offset(0, -3),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (hasSameVendorCart) ...[
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.checkout,
+                      arguments: CheckoutRequest(
+                        items: cart.items.map((i) => i.copy()).toList(),
+                        fromCart: true,
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 9,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppColors.primarySoft,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.shopping_basket_rounded,
+                          color: AppColors.primary,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Keranjang: ${cart.items.length} menu (${cart.itemCount} porsi) • ${AppCurrency.format(cart.totalPrice)}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                        const Text(
+                          'Checkout >',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              Row(
+                children: [
+                  stepBtn(
+                    Icons.remove_rounded,
+                    () {
+                      if (_selectedQty > 1) {
+                        setState(() => _selectedQty--);
+                      }
+                    },
+                  ),
+                  GestureDetector(
+                    onTap: _promptDetailQuantity,
+                    behavior: HitTestBehavior.opaque,
+                    child: Container(
+                      constraints: const BoxConstraints(minWidth: 50),
+                      margin: const EdgeInsets.symmetric(horizontal: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primarySoft,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: AppColors.primary.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Text(
+                        '$_selectedQty',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  stepBtn(
+                    Icons.add_rounded,
+                    () {
+                      if (_selectedQty < CartProvider.maxQuantityPerItem) {
+                        setState(() => _selectedQty++);
+                      }
+                    },
+                    filled: true,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(13),
+                        ),
+                      ),
+                      onPressed: _addToCart,
+                      child: Text(
+                        'Tambah • ${AppCurrency.format(_product.price * _selectedQty)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

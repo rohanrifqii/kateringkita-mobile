@@ -12,9 +12,12 @@ import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
+import '../../models/cart_item.dart';
 import '../../models/product_model.dart';
+import '../../providers/cart_provider.dart';
 import '../../services/map_service.dart';
 import '../../widgets/app_modal_dialog.dart';
+import '../../widgets/cart_actions.dart';
 import '../../widgets/payment_method_tile.dart';
 import '../../widgets/primary_button.dart';
 import 'location_picker_screen.dart';
@@ -59,8 +62,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     ),
   ];
 
-  late ProductModel _product;
-  int _quantity = 1;
+  /// Daftar menu yang di-checkout (bisa lebih dari satu, selalu dari 1 dapur).
+  List<CartItem> _lines = [];
+  bool _fromCart = false;
+  bool _itemsLoaded = false;
+
+  int get _totalQuantity => _lines.fold<int>(0, (s, l) => s + l.quantity);
+  double get _subtotal => _lines.fold<double>(0, (s, l) => s + l.subtotal);
+  String get _vendorName => _lines.isEmpty ? '' : _lines.first.product.vendor;
   PaymentMethod _selectedPayment = PaymentMethod.qris;
 
   // ValueNotifier: hanya teks timer yang rebuild tiap detik,
@@ -99,11 +108,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is ProductModel) {
-      _product = args;
-    } else {
-      _product = widget.product ?? ProductData.defaultProduct;
+    if (!_itemsLoaded) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is CheckoutRequest) {
+        _lines = args.items.map((i) => i.copy()).toList();
+        _fromCart = args.fromCart;
+      } else if (args is ProductModel) {
+        _lines = [CartItem(product: args)];
+      } else {
+        _lines = [
+          CartItem(product: widget.product ?? ProductData.defaultProduct),
+        ];
+      }
+      _itemsLoaded = true;
     }
     if (!_userDataLoaded) {
       _loadUserData();
@@ -215,8 +232,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           context,
           AppRoutes.payment,
           arguments: {
-            'product': _product,
-            'quantity': _quantity,
+            'items': _lines.map((l) => l.copy()).toList(),
+            'fromCart': _fromCart,
+            'product': _lines.first.product,
+            'quantity': _totalQuantity,
             'total': total,
             'orderCode': orderCode,
             'paymentMethod': _selectedPayment,
@@ -240,7 +259,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final subtotal = _product.price * _quantity;
+    final subtotal = _subtotal;
     final total = subtotal;
 
     return Scaffold(
@@ -261,7 +280,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             children: [
               _buildTimerBanner(),
               const SizedBox(height: 16),
-              _buildItemCard(),
+              _buildItemsSection(),
               const SizedBox(height: 22),
               _sectionLabel('DATA PEMESAN'),
               const SizedBox(height: 10),
@@ -380,7 +399,52 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  Widget _buildItemCard() {
+  Widget _buildItemsSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(
+              Icons.storefront_rounded,
+              size: 16,
+              color: AppColors.primary,
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                _vendorName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.bodyMedium.copyWith(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        for (final line in _lines) ...[
+          _buildItemCard(line),
+          const SizedBox(height: 10),
+        ],
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: () => Navigator.pop(context),
+            icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+            label: const Text(
+              'Tambah menu lain',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildItemCard(CartItem line) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: _cardDecoration,
@@ -389,7 +453,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: Image.asset(
-              _product.image,
+              line.product.image,
               width: 64,
               height: 64,
               fit: BoxFit.cover,
@@ -407,7 +471,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _product.name,
+                  line.product.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.h4.copyWith(fontSize: 15),
@@ -417,7 +481,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   TextSpan(
                     children: [
                       TextSpan(
-                        text: _price(_product.price),
+                        text: _price(line.product.price),
                         style: AppTextStyles.price.copyWith(fontSize: 14),
                       ),
                       TextSpan(
@@ -431,13 +495,55 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          _buildStepper(),
+          _buildStepper(line),
         ],
       ),
     );
   }
 
-  Widget _buildStepper() {
+  void _changeQuantity(CartItem line, int delta) {
+    final next = line.quantity + delta;
+    if (next > CartProvider.maxQuantityPerItem) return;
+    if (next <= 0) {
+      _removeLine(line);
+      return;
+    }
+    setState(() => line.quantity = next);
+    if (_fromCart) {
+      context.read<CartProvider>().setQuantity(line.id, next);
+    }
+  }
+
+  void _removeLine(CartItem line) {
+    setState(() => _lines.removeWhere((l) => l.id == line.id));
+    if (_fromCart) context.read<CartProvider>().remove(line.id);
+    if (_lines.isEmpty && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Keranjang kosong. Pilih menu dulu ya.')),
+      );
+      Navigator.pop(context);
+    }
+  }
+
+  Future<void> _promptLineQuantity(CartItem line) async {
+    final newQty = await CartActions.showQuantityDialog(
+      context,
+      product: line.product,
+      initialQuantity: line.quantity,
+      allowZeroRemove: true,
+    );
+    if (newQty == null || !mounted) return;
+    if (newQty <= 0) {
+      _removeLine(line);
+      return;
+    }
+    setState(() => line.quantity = newQty);
+    if (_fromCart) {
+      context.read<CartProvider>().setQuantity(line.id, newQty);
+    }
+  }
+
+  Widget _buildStepper(CartItem line) {
     Widget button(String label, Color color, VoidCallback onTap) {
       return InkResponse(
         onTap: onTap,
@@ -465,11 +571,32 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          button('-', AppColors.textPrimary, () {
-            if (_quantity > 1) setState(() => _quantity--);
-          }),
-          Text('$_quantity', style: AppTextStyles.h4.copyWith(fontSize: 14)),
-          button('+', AppColors.primary, () => setState(() => _quantity++)),
+          button(
+            line.quantity == 1 ? '×' : '-',
+            AppColors.textPrimary,
+            () => _changeQuantity(line, -1),
+          ),
+          GestureDetector(
+            onTap: () => _promptLineQuantity(line),
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 36),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: AppColors.primary.withValues(alpha: 0.35),
+                ),
+              ),
+              child: Text(
+                '${line.quantity}',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.h4.copyWith(fontSize: 14),
+              ),
+            ),
+          ),
+          button('+', AppColors.primary, () => _changeQuantity(line, 1)),
         ],
       ),
     );
@@ -743,7 +870,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Subtotal ($_quantity Porsi)', style: AppTextStyles.bodyMedium),
+              Text('Subtotal ($_totalQuantity Porsi)', style: AppTextStyles.bodyMedium),
               Text(
                 _price(subtotal),
                 style: AppTextStyles.bodyLarge.copyWith(

@@ -8,7 +8,9 @@ import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../data/app_database.dart';
+import '../../models/cart_item.dart';
 import '../../models/product_model.dart';
+import '../../providers/cart_provider.dart';
 import '../../widgets/payment_method_tile.dart';
 
 /// Halaman Gateway Pembayaran Mandiri (QRIS, Virtual Account, & COD)
@@ -23,6 +25,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
   bool _argsLoaded = false;
   late ProductModel _product;
   late int _quantity;
+  late List<CartItem> _items;
+  bool _fromCart = false;
   late double _total;
   late String _orderCode;
   late PaymentMethod _paymentMethod;
@@ -56,6 +60,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
               {};
       _product = args['product'] as ProductModel? ?? ProductData.defaultProduct;
       _quantity = args['quantity'] as int? ?? 1;
+      final rawItems = args['items'];
+      _items = rawItems is List<CartItem> && rawItems.isNotEmpty
+          ? rawItems
+          : [CartItem(product: _product, quantity: _quantity)];
+      _fromCart = args['fromCart'] as bool? ?? false;
+      _quantity = _items.fold<int>(0, (s, i) => s + i.quantity);
       _total = args['total'] as double? ?? _product.price * _quantity;
       _orderCode = args['orderCode'] as String? ??
           '#KK-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch % 900 + 100}';
@@ -139,14 +149,24 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     if (!mounted) return;
     final db = context.read<AppDb>();
+    final cart = context.read<CartProvider>();
+
+    // Ringkas nama menu untuk riwayat pesanan: "Lumpia Diego + 2 menu lain".
+    final summaryName = _items.length == 1
+        ? _items.first.product.name
+        : '${_items.first.product.name} + ${_items.length - 1} menu lain';
 
     // Simpan pesanan ke database SQLite lokal
     await db.addOrder(
       orderCode: _orderCode,
-      productName: _product.name,
+      productName: summaryName,
       quantity: _quantity,
       totalPrice: _total,
     );
+
+    if (!mounted) return;
+    // Pesanan dari keranjang sudah dibayar -> kosongkan keranjang.
+    if (_fromCart) cart.clear();
 
     setState(() => _isProcessing = false);
     _showPaymentSuccessSheet();
@@ -299,6 +319,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         context,
                         AppRoutes.whatsappGenerator,
                         arguments: {
+                          'items': _items,
                           'product': _product,
                           'quantity': _quantity,
                           'total': _total,
@@ -1103,51 +1124,75 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(10),
-                child: Image.asset(
-                  _product.image,
-                  width: 50,
-                  height: 50,
-                  fit: BoxFit.cover,
-                  errorBuilder: (ctx, err, stack) => Container(
+          for (final item in _items) ...[
+            Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.asset(
+                    item.product.image,
                     width: 50,
                     height: 50,
-                    color: AppColors.secondaryBg,
-                    child: const Icon(Icons.image_not_supported_outlined),
+                    fit: BoxFit.cover,
+                    errorBuilder: (ctx, err, stack) => Container(
+                      width: 50,
+                      height: 50,
+                      color: AppColors.secondaryBg,
+                      child: const Icon(Icons.image_not_supported_outlined),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      _product.name,
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 13,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item.product.name,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '$_quantity Porsi x ${AppCurrency.format(_product.price)}',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: AppColors.textSecondary,
-                        fontSize: 11.5,
+                      const SizedBox(height: 2),
+                      Text(
+                        '${item.quantity} Porsi x ${AppCurrency.format(item.product.price)}',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.textSecondary,
+                          fontSize: 11.5,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+                Text(
+                  AppCurrency.format(item.subtotal),
+                  style: AppTextStyles.bodyMedium.copyWith(
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
+          Divider(height: 1, color: AppColors.cardBorder),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Total ($_quantity Porsi)',
+                style: AppTextStyles.bodyMedium.copyWith(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
                 ),
               ),
               Text(
                 AppCurrency.format(_total),
                 style: AppTextStyles.bodyMedium.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: AppColors.textPrimary,
+                  color: AppColors.primary,
                 ),
               ),
             ],

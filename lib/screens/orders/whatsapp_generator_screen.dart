@@ -4,6 +4,7 @@ import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
+import '../../models/cart_item.dart';
 import '../../models/product_model.dart';
 import '../../widgets/primary_button.dart';
 
@@ -20,6 +21,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
   late TextEditingController _messageController;
   bool _initialized = false;
   ProductModel? _product;
+  List<CartItem> _items = [];
 
   @override
   void initState() {
@@ -46,12 +48,20 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
       final note = map['note'] as String? ?? '-';
 
       _product = prod;
+      _items = (map['items'] is List<CartItem> && (map['items'] as List).isNotEmpty)
+          ? map['items'] as List<CartItem>
+          : [CartItem(product: prod, quantity: qty)];
+      final menuText = _items.length == 1
+          ? '${prod.name} ($qty Porsi)'
+          : '\n${_items
+                  .map((i) => '   - ${i.product.name} (${i.quantity} Porsi)')
+                  .join('\n')}';
 
       _messageController.text =
           'Halo Admin KateringKita! 👋\n\n'
           'Saya ingin konfirmasi pesanan:\n'
           '• Kode Pesanan: $code\n'
-          '• Menu: ${prod.name} ($qty Porsi)\n'
+          '• Menu: $menuText\n'
           '• Total: ${AppCurrency.format(tot)}\n'
           '• Pemesan: $name ($phone)\n'
           '• Titik Temu: $location\n'
@@ -227,7 +237,9 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              _product!.name,
+                              _items.length > 1
+                                  ? '${_items.length} menu pesanan'
+                                  : _product!.name,
                               style: AppTextStyles.h4.copyWith(fontSize: 14),
                             ),
                             const SizedBox(height: 2),
