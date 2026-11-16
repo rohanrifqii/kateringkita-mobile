@@ -2,6 +2,10 @@ import '../../api/api_exception.dart';
 import '../../core/relative_time.dart';
 import '../../data/catalog_repository.dart';
 import '../../data/store_reviews.dart';
+import '../../data/voucher_repository.dart';
+import '../../models/voucher.dart';
+import '../../core/require_login.dart';
+import '../../widgets/voucher_card.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/favorites_provider.dart';
 import '../../widgets/favorite_button.dart';
@@ -34,6 +38,9 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   String? _slug;
   MerchantProfile? _merchant;
   List<ProductModel> _menus = const [];
+  // Voucher toko publik (+ status klaim pembeli ini); id yang sedang diklaim
+  List<Voucher> _vouchers = const [];
+  int? _claiming;
   bool _loading = true;
   bool _failed = false;
   bool _isSearching = false;
@@ -113,6 +120,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       setState(() {
         _merchant = merchant;
         _menus = page.items;
+        _vouchers = merchant.vouchers;
         _loading = false;
         // Menu bisa berubah: ulasan dimuat ulang saat tab Penilaian dibuka.
         _reviews = null;
@@ -127,6 +135,59 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       });
     }
   }
+
+  /// Klaim ke Voucher Saya; tamu diarahkan ke login dulu.
+  Future<void> _claim(Voucher v) async {
+    if (_claiming != null || !await requireLogin(context)) return;
+    if (!mounted) return;
+    final repo = context.read<VoucherRepository>();
+    setState(() => _claiming = v.id);
+    try {
+      final hasil = await repo.claim(v.id);
+      if (!mounted) return;
+      setState(() => _vouchers = [for (final x in _vouchers) x.id == v.id ? x.copyWith(claimed: hasil.claimed) : x]);
+      _showToast('Voucher disimpan ke Voucher Saya');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(e is ApiException ? e.message : 'Voucher belum bisa diklaim. Coba lagi.'),
+          behavior: SnackBarBehavior.floating,
+        ));
+    } finally {
+      if (mounted) setState(() => _claiming = null);
+    }
+  }
+
+  Widget _buildVoucherStrip() => Padding(
+        padding: const EdgeInsets.fromLTRB(0, 4, 0, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text('Voucher toko',
+                  style: AppTextStyles.h4.copyWith(color: AppColors.textPrimary)),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 92,
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                scrollDirection: Axis.horizontal,
+                itemCount: _vouchers.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (_, i) => VoucherCard(
+                  voucher: _vouchers[i],
+                  busy: _claiming == _vouchers[i].id,
+                  onClaim: () => _claim(_vouchers[i]),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
 
   @override
   void dispose() {
@@ -554,6 +615,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_vouchers.isNotEmpty) _buildVoucherStrip(),
         if (_isSearching)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
