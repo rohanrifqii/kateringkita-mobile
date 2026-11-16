@@ -15,6 +15,7 @@ import 'data/auth_repository.dart';
 import 'data/catalog_repository.dart';
 import 'data/favorite_repository.dart';
 import 'data/voucher_repository.dart';
+import 'data/promo_content_repository.dart';
 import 'data/notification_repository.dart';
 import 'data/order_repository.dart';
 import 'data/ticket_repository.dart';
@@ -95,6 +96,7 @@ Widget buildAppProviders({
   final cart = CartProvider();
   final favoriteRepo = FavoriteRepository(api);
   final voucherRepo = VoucherRepository(api);
+  final promoContentRepo = PromoContentRepository(api);
   final favorites = FavoritesProvider(favoriteRepo);
   final notificationRepo = NotificationRepository(api);
   final notifications = NotificationProvider(notificationRepo);
@@ -122,6 +124,7 @@ Widget buildAppProviders({
       Provider<OrderRepository>.value(value: OrderRepository(api)),
       Provider<FavoriteRepository>.value(value: favoriteRepo),
       Provider<VoucherRepository>.value(value: voucherRepo),
+      Provider<PromoContentRepository>.value(value: promoContentRepo),
       ChangeNotifierProvider<FavoritesProvider>.value(value: favorites),
       Provider<NotificationRepository>.value(value: notificationRepo),
       ChangeNotifierProvider<NotificationProvider>.value(value: notifications),
