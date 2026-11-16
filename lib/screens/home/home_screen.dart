@@ -11,6 +11,7 @@ import '../../data/promo_content_repository.dart';
 import '../../data/voucher_repository.dart';
 import '../../widgets/menu_image.dart';
 import '../../widgets/voucher_card.dart';
+import '../../widgets/promo_popup.dart';
 import '../../models/category_model.dart';
 import '../../models/pickup_point.dart';
 import '../../models/product_model.dart';
@@ -157,6 +158,18 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     } catch (_) {
       // gagal / repositori tidak dipasang: tetap kartu informasi bawaan
+    }
+    await _loadPopup();
+  }
+
+  /// Pop-up promo admin: sekali sehari, tidak tampil bila vouchernya sudah diklaim.
+  Future<void> _loadPopup() async {
+    try {
+      final popup = await context.read<PromoContentRepository>().popup();
+      if (popup == null || !mounted) return;
+      await maybeShowPromoPopup(context, popup);
+    } catch (_) {
+      // pop-up hanya pelengkap: gagal dimuat tidak mengganggu beranda
     }
   }
 
