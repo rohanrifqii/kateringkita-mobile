@@ -50,6 +50,8 @@ class ProfileAvatar extends StatelessWidget {
       width: size,
       height: size,
       fit: BoxFit.cover,
+      // web: penyimpanan foto tanpa header CORS → tampilkan lewat elemen <img>
+      webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
       errorBuilder: (_, _, _) => _initials(),
       loadingBuilder: (_, w, progress) => progress == null ? w : _initials(),
     );

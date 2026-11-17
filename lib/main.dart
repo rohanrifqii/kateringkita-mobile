@@ -26,6 +26,7 @@ import 'providers/favorites_provider.dart';
 import 'providers/notification_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/ticket_unread_provider.dart';
+import 'widgets/phone_frame.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -154,6 +155,7 @@ class KateringKitaApp extends StatelessWidget {
       themeMode: themeProvider.themeMode,
       initialRoute: AppRouter.initialRoute,
       routes: AppRouter.routes,
+      builder: (context, child) => PhoneFrame(child: child ?? const SizedBox.shrink()),
     );
   }
 }

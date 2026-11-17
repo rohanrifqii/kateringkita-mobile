@@ -1,11 +1,11 @@
 {
-    "name": "kateringkita_pbl",
-    "short_name": "kateringkita_pbl",
-    "start_url": ".",
+    "name": "KateringKita",
+    "short_name": "KateringKita",
+    "start_url": "/",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#FFFFFF",
+    "theme_color": "#FF6B35",
+    "description": "Pesan katering kampus, bayar online, ambil di titik temu.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
