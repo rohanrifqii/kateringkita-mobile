@@ -932,7 +932,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       context,
       slot: slot,
       merchantId: merchantId,
-      subtotal: _quote?.subtotal ?? 0,
+      // quote gagal / belum ada (mis. titik temu belum dipilih): estimasi keranjang, bukan 0
+      subtotal: _quote?.subtotal ?? cart.items.fold<int>(0, (s, i) => s + i.estimatedLineTotal),
       paymentMethod: _payment.apiValue,
     );
     if (v == null || !mounted) return;

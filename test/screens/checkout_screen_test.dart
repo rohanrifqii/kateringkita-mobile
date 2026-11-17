@@ -654,6 +654,19 @@ void voucherTests() {
     expect(find.text('- Rp 3.000'), findsOneWidget);
   });
 
+  _testWidgets('quote gagal: pemilih voucher memakai subtotal keranjang, bukan 0', (tester) async {
+    final h = await _open(tester,
+        lines: [(_p(7, 'Nasi Box', 45000), 2)],
+        mine: mine,
+        onQuote: (_) async => _json({
+              'error': {'code': 'VALIDATION_ERROR', 'message': 'Promo tidak bisa dipakai.'}
+            }, 422));
+    await tester.tap(find.byKey(const ValueKey('voucher-slot-toko')));
+    await tester.pumpAndSettle();
+    final q = h.requests.lastWhere((r) => r.url.path.endsWith('/me/vouchers')).url.queryParameters;
+    expect(q['subtotal'], '90000');
+  });
+
   _testWidgets('galat voucher dari server tampil di bagian voucher; Pakai kode manual tetap ada', (tester) async {
     final h = await _open(tester,
         lines: [(_p(7, 'Nasi Box', 45000), 2)],
