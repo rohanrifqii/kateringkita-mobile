@@ -1,14 +1,15 @@
 // Demo aplikasi (Flutter web) di HP lewat WiFi yang sama dengan laptop.
 //
-//   node tool/demo_wifi.mjs           -> sajikan build/web (build dulu bila belum ada)
-//   node tool/demo_wifi.mjs --build   -> build ulang dulu, lalu sajikan
+//   tool\demo_wifi.bat (klik dua kali) atau node tool/demo_wifi.mjs
+//                                     -> build otomatis bila build/web belum ada atau kode lebih baru, lalu sajikan
+//   node tool/demo_wifi.mjs --build   -> paksa build ulang dulu, lalu sajikan
 //
 // Build memakai API_BASE_URL=/api/v1 (relatif): aplikasi memanggil API ke alamat yang sedang
 // dibuka di HP, jadi build yang sama tetap jalan walau IP WiFi laptop berubah. Server ini
 // meneruskan /api/ ke backend production dan /img/ ke penyimpanan foto, dari SATU origin
 // (tanpa masalah CORS). Pengaturan production tidak diubah.
 import { spawnSync } from "node:child_process";
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import { networkInterfaces } from "node:os";
@@ -22,7 +23,21 @@ const IMG_HOST = "img.edufin.app";
 const PORT = Number(process.env.PORT ?? 8080);
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".mjs": "text/javascript", ".json": "application/json", ".wasm": "application/wasm", ".png": "image/png", ".jpg": "image/jpeg", ".svg": "image/svg+xml", ".ttf": "font/ttf", ".otf": "font/otf", ".css": "text/css", ".ico": "image/x-icon" };
 
-if (process.argv.includes("--build") || !existsSync(join(ROOT, "index.html"))) {
+// Waktu ubah terbaru di bawah p (0 bila tidak ada).
+const terbaru = (p) => {
+  const s = statSync(p, { throwIfNoEntry: false });
+  if (!s) return 0;
+  return s.isDirectory() ? Math.max(s.mtimeMs, ...readdirSync(p).map((n) => terbaru(join(p, n)))) : s.mtimeMs;
+};
+const INDEX = join(ROOT, "index.html");
+const MAIN_JS = join(ROOT, "main.dart.js");
+// flutter build langsung dari Git Bash mengubah /api/v1 jadi "C:/Program Files/Git/api/v1" (konversi path MSYS),
+// semua panggilan API gagal dan menu kosong. Build dari skrip ini (lewat node) aman, jadi build seperti itu dibuat ulang.
+const apiRusak = (js) => !js.includes('"/api/v1"');
+const basi = !existsSync(INDEX) || !existsSync(MAIN_JS) || apiRusak(readFileSync(MAIN_JS, "utf8"))
+  || ["lib", "web", "assets", "pubspec.yaml", "pubspec.lock"].some((p) => terbaru(join(REPO, p)) > statSync(INDEX).mtimeMs);
+
+if (process.argv.includes("--build") || basi) {
   console.log("Build Flutter web (beberapa menit)...");
   const r = spawnSync("flutter", ["build", "web", "--release", "--dart-define=API_BASE_URL=/api/v1"], { cwd: REPO, stdio: "inherit", shell: true });
   if (r.status !== 0) process.exit(r.status ?? 1);

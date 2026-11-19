@@ -43,9 +43,11 @@ sama saat menjalankan ulang. Logo diunggah ulang tiap jalan (profil diperbarui).
 dengan laptop. API diteruskan ke backend production dari alamat yang sama, jadi tidak ada
 masalah CORS dan foto menu tetap tampil.
 
+Cara paling mudah: klik dua kali `tool\demo_wifi.bat`. Atau dari terminal:
+
 ```
-node tool/demo_wifi.mjs           # build dulu bila build/web belum ada, lalu sajikan
-node tool/demo_wifi.mjs --build   # build ulang (setelah kode berubah), lalu sajikan
+node tool/demo_wifi.mjs           # build otomatis bila build/web belum ada atau lib/, web/, assets/, pubspec lebih baru, lalu sajikan
+node tool/demo_wifi.mjs --build   # paksa build ulang, lalu sajikan
 ```
 
 Terminal mencetak alamat untuk dibuka di HP, mis. `http://192.168.100.218:8080`.
