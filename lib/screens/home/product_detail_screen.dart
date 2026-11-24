@@ -31,7 +31,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   int _currentImageIndex = 0;
   final PageController _imagePageController = PageController();
 
-  List<String?> get _galleryImages => [_product.imageUrl];
+  // tanpa foto sama sekali: satu halaman placeholder
+  List<String?> get _galleryImages =>
+      _product.photos.isEmpty ? const [null] : _product.photos;
 
   @override
   void didChangeDependencies() {

@@ -38,6 +38,9 @@ class MerchantProfile {
   final String businessName;
   final String? description;
   final String? logoUrl;
+
+  /// Background profil toko (foto lanskap dari penjual); null = warna utama.
+  final String? coverUrl;
   final String merchantTypeName;
   final bool isOpen;
   final String openTime;
@@ -59,6 +62,7 @@ class MerchantProfile {
     required this.businessName,
     this.description,
     this.logoUrl,
+    this.coverUrl,
     required this.merchantTypeName,
     required this.isOpen,
     required this.openTime,
@@ -77,6 +81,7 @@ class MerchantProfile {
         businessName: json['business_name'] as String,
         description: json['description'] as String?,
         logoUrl: json['logo_url'] as String?,
+        coverUrl: json['cover_url'] as String?,
         merchantTypeName:
             (json['merchant_type'] as Map<String, dynamic>)['name'] as String,
         isOpen: json['is_open'] as bool,

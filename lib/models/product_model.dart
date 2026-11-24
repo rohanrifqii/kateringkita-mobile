@@ -60,6 +60,9 @@ class ProductModel {
   final int price;
   final String unitLabel;
   final String? imageUrl;
+
+  /// Foto tambahan (maks 4) selain [imageUrl]; hanya dari detail menu.
+  final List<String> gallery;
   final CategoryModel? category;
   final MerchantRef merchant;
   final int available;
@@ -80,6 +83,7 @@ class ProductModel {
     required this.price,
     this.unitLabel = 'porsi',
     this.imageUrl,
+    this.gallery = const [],
     this.category,
     required this.merchant,
     this.available = 0,
@@ -101,6 +105,9 @@ class ProductModel {
         price: (json['price'] as num).toInt(),
         unitLabel: (json['unit_label'] as String?) ?? 'porsi',
         imageUrl: json['image_url'] as String?,
+        gallery: ((json['gallery'] as List?) ?? const [])
+            .whereType<String>()
+            .toList(),
         category: json['category'] == null
             ? null
             : CategoryModel.fromJson(json['category'] as Map<String, dynamic>),
@@ -122,6 +129,9 @@ class ProductModel {
             (json['is_preorder'] as bool?) ?? json['badge'] == 'preorder',
         preorderDays: (json['preorder_days'] as num?)?.toInt() ?? 0,
       );
+
+  /// Foto utama lalu foto tambahan, untuk galeri geser di detail menu.
+  List<String> get photos => [?imageUrl, ...gallery];
 
   // Getter kompatibilitas untuk layar lama.
   double get rating => ratingAvg;
@@ -153,6 +163,7 @@ class ProductModel {
         price: price,
         unitLabel: unitLabel,
         imageUrl: imageUrl,
+        gallery: gallery,
         category: category,
         merchant: merchant,
         available: available,
