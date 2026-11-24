@@ -14,7 +14,7 @@ import '../../widgets/primary_button.dart';
 
 /// URL wa.me untuk dibuka. Bila [text] sama dengan pesan server, pakai URL
 /// server apa adanya; bila diedit, pakai nomor dari URL server + teks baru.
-/// Nomor diambil dari segmen path terakhir URL server (wa.me/<nomor>).
+/// Nomor diambil dari segmen path terakhir URL server (`wa.me/<nomor>`).
 String buildWhatsAppUrl({
   required String serverUrl,
   required String serverMessage,
