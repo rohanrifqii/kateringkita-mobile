@@ -1,5 +1,6 @@
 // Layar pembayaran pesanan (alamat /payment/<kode>), dibuka dari checkout (setelah POST /orders) atau tombol
-// "Lanjutkan Bayar" di daftar pesanan; saat halaman web dimuat ulang, pesanan dimuat lagi dari kode di alamat. Bayar lewat Virtual Account (POST /orders/:code/va), QRIS yang QR-nya digambar langsung di layar ini
+// "Lanjutkan Bayar" di daftar pesanan; saat halaman web dimuat ulang, pesanan dimuat lagi dari kode di alamat.
+// Bayar lewat Virtual Account (POST /orders/:code/va), QRIS yang QR-nya digambar langsung di layar ini
 // (POST /orders/:code/qris), atau cadangan halaman Snap Midtrans (POST /orders/:code/online lalu SnapWebViewScreen).
 // Status bayar selalu dibaca dari server.
 import 'dart:async';
