@@ -43,8 +43,8 @@ class NotificationProvider extends ChangeNotifier {
 
   Future<void> _refreshNotifications(int epoch) async {
     try {
-      final n = await _repo.unreadCount();
-      if (epoch == _epoch) setUnread(n);
+      final unreadCount = await _repo.unreadCount();
+      if (epoch == _epoch) setUnread(unreadCount);
     } catch (_) {
       // Lencana bukan informasi penting; coba lagi pada jadwal berikutnya.
     }

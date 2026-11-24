@@ -46,8 +46,8 @@ String formatWibDate(DateTime utc) {
 
 /// Jam dinding WIB berformat "HH:mm", mis. "09:05".
 String formatWibClock(DateTime utc) {
-  final w = toWibWallClock(utc);
-  return '${_two(w.hour)}:${_two(w.minute)}';
+  final wallClock = toWibWallClock(utc);
+  return '${_two(wallClock.hour)}:${_two(wallClock.minute)}';
 }
 
 /// Mis. "Sab, 14 Nov 2026 · 10:00 WIB".
