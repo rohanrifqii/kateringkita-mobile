@@ -287,16 +287,23 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
   /// belum dibaca. Chat bisa dibuka saat terbuka, dan sesudah pesanan berakhir
   /// untuk membaca riwayatnya. Selama pesanan menunggu, atau untuk pesanan
   /// meja, tombol nonaktif dengan keterangannya.
+  ///
+  /// @param order pesanan yang sedang dilacak, beserta keadaan chat-nya.
+  /// @returns tombol Chat selebar layar, plus keterangan bila nonaktif.
   Widget _chatSection(OrderApiModel order) {
+    // 1. Chat bisa dibuka bila tersedia dan sudah dimulai (penjual sudah
+    //    menerima pesanan); sesudah pesanan berakhir pun tetap bisa dibaca.
     final chat = order.chat;
     final canOpenChat =
         chat != null && chat.available && chat.closedReason != 'not_started';
     final unreadCount = chat?.unreadCount ?? 0;
+    // 2. Keterangan di bawah tombol: alasan tombol nonaktif, bila ada.
     final hint = order.status == 'holding'
         ? chatClosedText('not_started')
         : chat?.available == false
         ? chatClosedText('unavailable')
         : null;
+    // 3. Tombol Chat dengan badge jumlah belum dibaca, lalu keterangannya.
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),

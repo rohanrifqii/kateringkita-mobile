@@ -124,7 +124,13 @@ class OrderTimeline {
     this.cancelledAt,
   });
 
-  /// Membaca objek `timeline` berisi string ISO UTC atau null per kunci.
+  /// Membaca objek `timeline` dari server.
+  ///
+  /// @param json objek berkunci `confirmed_at`, `cooking_at`, `ready_at`,
+  ///   `completed_at`, dan `cancelled_at`; tiap nilai string ISO UTC atau
+  ///   null. Kunci yang hilang dianggap null.
+  /// @returns jam tiap langkah; null untuk langkah yang belum terjadi.
+  /// @throws FormatException bila sebuah nilai bukan tanggal ISO yang sah.
   factory OrderTimeline.fromJson(Map<String, dynamic> json) => OrderTimeline(
         confirmedAt: _dt(json['confirmed_at']),
         cookingAt: _dt(json['cooking_at']),

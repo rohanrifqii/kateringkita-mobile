@@ -89,7 +89,15 @@ class ChatState {
 
   /// Salinan dengan beberapa nilai diganti; nilai lain tetap.
   ///
-  /// @returns keadaan chat baru.
+  /// `available` dan `otherPartyLastReadId` selalu disalin apa adanya.
+  ///
+  /// @param isOpen apakah chat masih menerima pesan baru.
+  /// @param closedReason alasan tertutup (`not_started`, `finished`,
+  ///   `unavailable`); null berarti alasan lama dipertahankan.
+  /// @param unreadCount jumlah pesan penjual yang belum dibaca, mis. 0
+  ///   sesudah ditandai dibaca.
+  /// @param reportedByMe true sesudah pembeli melaporkan chat ini.
+  /// @returns keadaan chat baru; objek lama tidak berubah.
   ChatState copyWith({
     bool? isOpen,
     String? closedReason,
