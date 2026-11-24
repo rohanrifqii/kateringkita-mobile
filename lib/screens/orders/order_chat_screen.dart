@@ -212,8 +212,11 @@ class _OrderChatScreenState extends State<OrderChatScreen>
                   .copyWith(isOpen: false, closedReason: closedReason),
         );
       } else {
-        // 3. Galat lain (batas kirim, jaringan): teks tetap di kotak ketik.
-        _showSnack(error.message);
+        // 3. Galat lain (validasi, batas kirim, jaringan): teks tetap di kotak
+        //    ketik; galat per kolom (mis. foto tidak valid) lebih jelas.
+        _showSnack(
+          error.field('image_url') ?? error.field('body') ?? error.message,
+        );
       }
     } catch (_) {
       if (mounted) _showSnack('Terjadi kesalahan. Coba lagi.');
