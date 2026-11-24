@@ -7,6 +7,7 @@ import 'package:kateringkita_pbl/data/order_repository.dart';
 import 'package:kateringkita_pbl/models/order_api_model.dart';
 import 'package:kateringkita_pbl/screens/orders/order_tracking_screen.dart';
 import 'package:provider/provider.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 /// Repository palsu yang selalu mengembalikan [order] dan menghitung berapa
 /// kali detail pesanan diminta.
@@ -27,9 +28,13 @@ class FakeOrderRepository implements OrderRepository {
 }
 
 /// Pesanan yang sedang dimasak, diterima 09:05 WIB dan mulai dimasak 09:10 WIB.
-OrderApiModel cookingOrder() => OrderApiModel.fromJson({
+/// [status] dan [extra] dipakai untuk membuat varian pesanan yang sama.
+OrderApiModel cookingOrder({
+  String status = 'cooking',
+  Map<String, dynamic> extra = const {},
+}) => OrderApiModel.fromJson({
   'code': 'KK-20261124-0001',
-  'status': 'cooking',
+  'status': status,
   'payment_method': 'va',
   'payment_status': 'paid',
   'pickup_point': {
@@ -61,6 +66,7 @@ OrderApiModel cookingOrder() => OrderApiModel.fromJson({
     'completed_at': null,
     'cancelled_at': null,
   },
+  ...extra,
 });
 
 /// Memasang halaman Lacak Pesanan di layar 390×844 dengan [repository].
@@ -149,5 +155,40 @@ void main() {
     ]);
     await tester.pump();
     expect(repository.getCalls, 2);
+  });
+
+  testWidgets('holding: tombol Chat nonaktif dengan keterangan kapan terbuka', (
+    tester,
+  ) async {
+    final repository = FakeOrderRepository(cookingOrder(status: 'holding'));
+    await pumpTrackingScreen(tester, repository);
+
+    final chatButton = tester.widget<ShadButton>(
+      find.widgetWithText(ShadButton, 'Chat'),
+    );
+    expect(chatButton.enabled, isFalse);
+    expect(
+      find.text('Chat terbuka setelah penjual menerima pesanan.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('status final: cek berkala berhenti', (tester) async {
+    for (final status in ['completed', 'cancelled', 'expired']) {
+      final repository = FakeOrderRepository(cookingOrder(status: status));
+      await pumpTrackingScreen(tester, repository);
+      expect(repository.getCalls, 1, reason: status);
+
+      await tester.pump(const Duration(seconds: 45));
+      expect(repository.getCalls, 1, reason: status);
+
+      sendLifecycle(tester, [
+        AppLifecycleState.inactive,
+        AppLifecycleState.resumed,
+      ]);
+      await tester.pump();
+      expect(repository.getCalls, 1, reason: '$status setelah kembali');
+      await tester.pumpWidget(const SizedBox());
+    }
   });
 }

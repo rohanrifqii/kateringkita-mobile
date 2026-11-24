@@ -194,6 +194,11 @@ class OrderApiModel {
 
   bool get isPaid => paymentStatus == 'paid';
 
+  /// True bila pesanan sudah berakhir (selesai, dibatalkan, atau kedaluwarsa)
+  /// sehingga statusnya tidak akan berubah lagi.
+  bool get isFinished =>
+      status == 'completed' || status == 'cancelled' || status == 'expired';
+
   factory OrderApiModel.fromJson(Map<String, dynamic> json) {
     final merchant = json['merchant'] as Map<String, dynamic>;
     return OrderApiModel(

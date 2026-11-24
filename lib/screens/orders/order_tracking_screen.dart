@@ -76,9 +76,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     super.dispose();
   }
 
-  /// Cek berkala: hanya saat terlihat, di depan, dan tidak sedang mengambil.
+  /// Cek berkala: hanya saat terlihat, di depan, tidak sedang mengambil, dan
+  /// pesanan belum berakhir (status akhir tidak akan berubah lagi).
   void _refresh() {
     if (!mounted || !_foreground || !_routeVisible || _fetching) return;
+    if (_order?.isFinished ?? false) return;
     _load();
   }
 
@@ -87,13 +89,17 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
   Future<void> _load() async {
     _fetching = true;
     try {
+      // 1. Ambil detail terbaru dari server.
       final order = await context.read<OrderRepository>().get(widget.orderCode);
       if (!mounted) return;
+      // 2. Simpan dan tampilkan; pesanan yang sudah berakhir tidak dicek lagi.
       setState(() {
         _order = order;
         _errorMessage = null;
       });
+      if (order.isFinished) _refreshTimer?.cancel();
     } catch (error) {
+      // 3. Gagal: data lama tetap tampil; galat hanya saat belum ada data.
       if (!mounted || _order != null) return;
       setState(
         () => _errorMessage = error is ApiException
