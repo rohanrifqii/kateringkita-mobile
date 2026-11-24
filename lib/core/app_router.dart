@@ -1,6 +1,7 @@
 // Tabel rute aplikasi: memetakan nama rute di AppRoutes ke layar yang dibuka lewat Navigator.pushNamed.
-// Lacak Pesanan, Chat pesanan, dan Bayar (kode pesanan ada di alamat) dibuat oleh onGenerateRoute. Dipasang ke
-// MaterialApp di main.dart; juga menyediakan appNavigatorKey untuk navigasi tanpa BuildContext.
+// Lacak Pesanan, Chat pesanan, Bayar, profil toko, dan detail menu (kode/slug/id ada di alamat) dibuat oleh
+// onGenerateRoute. Dipasang ke MaterialApp di main.dart; juga menyediakan appNavigatorKey untuk navigasi
+// tanpa BuildContext.
 import 'package:flutter/material.dart';
 
 import '../screens/ai/ai_assistant_screen.dart';
@@ -30,6 +31,7 @@ import '../screens/splash/splash_screen.dart';
 import '../screens/support/ticket_create_screen.dart';
 import '../screens/support/ticket_detail_screen.dart';
 import '../screens/support/ticket_list_screen.dart';
+import '../models/product_model.dart';
 import 'app_routes.dart';
 
 /// Kunci Navigator global, dipasang di MaterialApp (main.dart). Dipakai untuk pindah layar
@@ -58,8 +60,7 @@ class AppRouter {
     },
     AppRoutes.home: (context) => const HomeScreen(),
     AppRoutes.search: (context) => const SearchScreen(),
-    AppRoutes.productDetail: (context) => const ProductDetailScreen(),
-    AppRoutes.storeProfile: (context) => const StoreProfileScreen(),
+    // Detail menu, profil toko, dan Bayar dibuat di onGenerateRoute (id/slug/kode di alamat).
     AppRoutes.checkout: (context) => const CheckoutScreen(),
     AppRoutes.whatsappGenerator: (context) => const WhatsAppGeneratorScreen(),
     AppRoutes.aiAssistant: (context) => const AIAssistantScreen(),
@@ -73,7 +74,7 @@ class AppRouter {
     },
     AppRoutes.activeOrders: (context) => const ActiveOrdersScreen(),
     AppRoutes.completedOrders: (context) => const CompletedOrdersScreen(),
-    // Lacak Pesanan, Chat, dan Bayar dibuat di onGenerateRoute (kode di alamat).
+    // Lacak Pesanan dan Chat juga dibuat di onGenerateRoute (kode di alamat).
     AppRoutes.liked: (context) => const LikedScreen(),
     AppRoutes.profile: (context) => const ProfileScreen(),
     AppRoutes.notifications: (context) => const NotificationScreen(),
@@ -87,77 +88,86 @@ class AppRouter {
   /// Posisi tab Pesanan di [MainNavigationScreen].
   static const int ordersTabIndex = 1;
 
-  /// Rute yang alamatnya memuat kode pesanan: `/order-tracking/<kode>`,
-  /// `/order-chat/<kode>`, dan `/payment/<kode>`. Bentuk lama Lacak Pesanan
-  /// dan Chat (alamat tanpa kode + kode sebagai argumen String) tetap diterima.
+  /// Tab [MainNavigationScreen] tujuan tiap awalan alamat berparameter bila
+  /// parameternya kosong atau tidak sah: tab Pesanan atau beranda.
+  static const Map<String, int> _fallbackTabs = {
+    AppRoutes.orderTracking: ordersTabIndex,
+    AppRoutes.orderChat: ordersTabIndex,
+    AppRoutes.payment: ordersTabIndex,
+    AppRoutes.storeProfile: 0,
+    AppRoutes.productDetail: 0,
+  };
+
+  /// Rute yang alamatnya memuat parameter: `/order-tracking/<kode>`,
+  /// `/order-chat/<kode>`, `/payment/<kode>`, `/store-profile/<slug>`, dan
+  /// `/product-detail/<id>`.
+  /// Bentuk lama (alamat tanpa parameter + parameter sebagai argumen) tetap
+  /// diterima; argumen ProductModel detail menu ikut diteruskan ke layarnya.
   ///
   /// @param settings nama rute dan argumennya dari [Navigator].
-  /// @returns halaman Lacak Pesanan, Chat, atau Bayar untuk kode itu; tab
-  ///   Pesanan bila kodenya kosong atau tidak sah; null untuk rute lain.
+  /// @returns halaman untuk parameter itu; tab Pesanan atau beranda bila
+  ///   parameternya kosong atau tidak sah; null untuk rute lain.
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
-    // 1. Cocokkan alamat dengan salah satu halaman pesanan.
-    final trackingCode = orderCodeFromRoute(settings, AppRoutes.orderTracking);
-    final chatCode = orderCodeFromRoute(settings, AppRoutes.orderChat);
-    final paymentCode = orderCodeFromRoute(settings, AppRoutes.payment);
-    final orderCode = trackingCode ?? chatCode ?? paymentCode;
-    if (orderCode == null) return null;
-    // 2. Kode kosong/tidak sah: ke tab Pesanan, bukan memanggil `/orders//`.
-    if (orderCode.isEmpty) {
+    for (final MapEntry(key: basePath, value: fallbackTab)
+        in _fallbackTabs.entries) {
+      // 1. Cocokkan alamat dengan awalan ini.
+      final param = paramFromRoute(settings, basePath);
+      if (param == null) continue;
+      // 2. Buat halaman untuk parameternya; id menu harus berupa angka.
+      final menuId = int.tryParse(param);
+      final Widget? page = param.isEmpty
+          ? null
+          : switch (basePath) {
+              AppRoutes.orderTracking => OrderTrackingScreen(orderCode: param),
+              AppRoutes.orderChat => OrderChatScreen(orderCode: param),
+              AppRoutes.payment => PaymentScreen(orderCode: param),
+              AppRoutes.storeProfile => StoreProfileScreen(vendorName: param),
+              _ => menuId == null ? null : ProductDetailScreen(menuId: menuId),
+            };
+      if (page != null) {
+        return MaterialPageRoute(settings: settings, builder: (_) => page);
+      }
+      // 3. Parameter kosong/tidak sah: ke tab cadangan, bukan layar galat.
       return MaterialPageRoute(
-        settings: const RouteSettings(
+        settings: RouteSettings(
           name: AppRoutes.mainNav,
-          arguments: ordersTabIndex,
+          arguments: fallbackTab,
         ),
-        builder: (_) =>
-            const MainNavigationScreen(initialIndex: ordersTabIndex),
+        builder: (_) => MainNavigationScreen(initialIndex: fallbackTab),
       );
     }
-    // 3. Buka halaman untuk kode itu.
-    return MaterialPageRoute(
-      settings: settings,
-      builder: (_) => trackingCode != null
-          ? OrderTrackingScreen(orderCode: orderCode)
-          : chatCode != null
-          ? OrderChatScreen(orderCode: orderCode)
-          : PaymentScreen(orderCode: orderCode),
-    );
+    return null;
   }
 
-  /// Kode pesanan pada alamat [routeName] milik Lacak Pesanan, Chat, atau Bayar.
-  ///
-  /// @param routeName alamat rute, mis. alamat awal dari peramban.
-  /// @returns kode pesanan; string kosong bila kodenya kosong atau tidak sah;
-  ///   null bila alamat itu bukan alamat Lacak Pesanan, Chat, atau Bayar.
-  static String? orderCodeInPath(String routeName) {
-    final settings = RouteSettings(name: routeName);
-    return orderCodeFromRoute(settings, AppRoutes.orderTracking) ??
-        orderCodeFromRoute(settings, AppRoutes.orderChat) ??
-        orderCodeFromRoute(settings, AppRoutes.payment);
-  }
-
-  /// Kode pesanan dari rute [settings] bila rute itu milik [basePath].
+  /// Parameter (kode pesanan, slug toko, atau id menu) dari rute [settings]
+  /// bila rute itu milik [basePath].
   ///
   /// @param settings rute yang sedang dibuat.
-  /// @param basePath `AppRoutes.orderTracking`, `AppRoutes.orderChat`, atau `AppRoutes.payment`.
-  /// @returns kode pesanan; string kosong bila kodenya kosong atau tidak sah
+  /// @param basePath salah satu awalan di [_fallbackTabs], mis.
+  ///   `AppRoutes.orderTracking`.
+  /// @returns parameternya; string kosong bila kosong atau tidak sah
   ///   (mis. memuat "/"); null bila rute itu bukan milik [basePath].
-  static String? orderCodeFromRoute(RouteSettings settings, String basePath) {
+  static String? paramFromRoute(RouteSettings settings, String basePath) {
     final name = settings.name;
-    final String rawCode;
+    final String rawParam;
     if (name == basePath) {
-      // Bentuk lama: kode sebagai argumen.
+      // Bentuk lama: parameter sebagai argumen (String, atau ProductModel).
       final arguments = settings.arguments;
-      rawCode = arguments is String ? arguments : '';
+      rawParam = arguments is String
+          ? arguments
+          : arguments is ProductModel
+          ? '${arguments.id}'
+          : '';
     } else if (name != null && name.startsWith('$basePath/')) {
       try {
-        rawCode = Uri.decodeComponent(name.substring(basePath.length + 1));
+        rawParam = Uri.decodeComponent(name.substring(basePath.length + 1));
       } catch (_) {
         return ''; // Persen-encoding rusak di alamat.
       }
     } else {
       return null;
     }
-    final orderCode = rawCode.trim();
-    return orderCode.contains('/') ? '' : orderCode;
+    final param = rawParam.trim();
+    return param.contains('/') ? '' : param;
   }
 }

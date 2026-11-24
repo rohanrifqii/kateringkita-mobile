@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -71,11 +72,15 @@ Widget _wrap(Widget screen, Object? args,
     bool favorite = false,
     bool storeFavorite = false,
     List<http.Request>? storeLog,
-    int storeStatus = 204}) {
+    int storeStatus = 204,
+    List<String>? paths,
+    Future<void>? gate}) {
   final api = ApiClient(
     baseUrl: 'https://x.test/api/v1',
     client: MockClient((req) async {
       final p = req.url.path;
+      paths?.add(p);
+      await gate; // Menahan balasan supaya tampilan memuat bisa diperiksa.
       if (p.contains('/me/favorites/')) {
         favLog?.add(req);
         if (favStatus == 204) return http.Response('', 204);
@@ -237,6 +242,34 @@ void main() {
     expect(cart.items.first.qty, 1);
     expect(find.text('Ditambahkan ke keranjang'), findsOneWidget);
     expect(find.byType(ProductDetailScreen), findsOneWidget);
+  });
+
+  group('dimuat ulang hanya dengan id menu', () {
+    testWidgets('memuat menu lewat GET /menus/{id}', (tester) async {
+      final paths = <String>[];
+      final gate = Completer<void>();
+      await tester.pumpWidget(_wrap(const ProductDetailScreen(menuId: 7), null,
+          paths: paths, gate: gate.future));
+      await tester.tap(find.text('go'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      // Selama menunggu server: indikator muat.
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      gate.complete();
+      await tester.pumpAndSettle();
+      expect(paths, contains('/api/v1/menus/7'));
+      expect(find.text('Nasi Box'), findsWidgets);
+      expect(find.text('Tambah ke Keranjang'), findsOneWidget);
+    });
+
+    testWidgets('menu tidak ada: galat jelas + tombol Kembali', (tester) async {
+      await _open(tester, _wrap(const ProductDetailScreen(menuId: 404), null));
+      expect(find.text('Menu tidak ditemukan.'), findsOneWidget);
+      await tester.tap(find.text('Kembali'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ProductDetailScreen), findsNothing);
+      expect(find.text('go'), findsOneWidget);
+    });
   });
 
   testWidgets('different merchant asks, Ya replaces cart', (tester) async {

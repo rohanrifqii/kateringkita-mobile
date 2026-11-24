@@ -1,6 +1,7 @@
 // Layar Splash: layar pertama saat aplikasi dibuka. Menampilkan logo + bilah progres ~2,5 detik,
 // memuat sesi tersimpan lewat AuthProvider.load (GET /me bila ada token), lalu menyingkir: biasanya diganti MainNav,
-// tetapi di web yang dimuat ulang di alamat dalam (mis. /order-tracking/<kode>) halaman itu yang dipertahankan.
+// tetapi di web yang dimuat ulang di alamat berparameter (/order-tracking/<kode>, /store-profile/<slug>,
+// /product-detail/<id>, dst.) halaman itu yang dipertahankan.
 // Saat dimuat ulang di alamat dalam atau sesi sudah ada, animasi dan jeda 2,5 detik dilewati.
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -79,22 +80,27 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     }
     final initialRoute =
         WidgetsBinding.instance.platformDispatcher.defaultRouteName;
-    final orderCode = AppRouter.orderCodeInPath(initialRoute);
-    // 2. Beranda sendiri, atau /order-*/<kode> dan /payment/<kode> yang sudah
-    //    punya tab Pesanan di bawahnya: splash cukup menyingkir.
+    // Halaman yang dibuat router untuk alamat itu; null bila bukan alamat
+    // berparameter, rute mainNav bila parameternya kosong/tidak sah.
+    final deepLink = AppRouter.onGenerateRoute(
+      RouteSettings(name: initialRoute),
+    )?.settings;
+    // 2. Beranda sendiri, atau alamat berparameter sah (mis. /order-*/<kode>,
+    //    /payment/<kode>, /store-profile/<slug>) yang sudah punya tab
+    //    Pesanan/beranda di bawahnya: splash cukup menyingkir.
     if (initialRoute == AppRoutes.mainNav ||
-        (orderCode != null && orderCode.isNotEmpty)) {
+        (deepLink != null && deepLink.name != AppRoutes.mainNav)) {
       Navigator.removeRoute(context, splashRoute);
       return;
     }
-    // 3. Alamat pesanan tanpa kode sah: tumpukannya berisi tab Pesanan ganda,
-    //    jadi diganti satu tab Pesanan saja.
-    if (orderCode != null) {
+    // 3. Alamat berparameter tanpa parameter sah: tumpukannya berisi tab
+    //    Pesanan/beranda ganda, jadi diganti satu tab tujuan saja.
+    if (deepLink != null) {
       Navigator.pushNamedAndRemoveUntil(
         context,
         AppRoutes.mainNav,
         (_) => false,
-        arguments: AppRouter.ordersTabIndex,
+        arguments: deepLink.arguments,
       );
       return;
     }

@@ -12,8 +12,19 @@ class AppRoutes {
   static const String mainNav = '/main-nav';
   static const String home = '/home';
   static const String search = '/search';
+  /// Awalan alamat detail menu; alamat lengkapnya dari [productDetailFor].
   static const String productDetail = '/product-detail';
+
+  /// Awalan alamat profil toko; alamat lengkapnya dari [storeProfileFor].
   static const String storeProfile = '/store-profile';
+
+  /// Alamat detail menu untuk [menuId], mis. `/product-detail/7`.
+  /// Id ada di alamat supaya menu tetap bisa dimuat saat halaman web dimuat ulang.
+  static String productDetailFor(int menuId) => '$productDetail/$menuId';
+
+  /// Alamat profil toko untuk [slug], mis. `/store-profile/dapur-a`.
+  static String storeProfileFor(String slug) =>
+      '$storeProfile/${Uri.encodeComponent(slug)}';
   static const String checkout = '/checkout';
   /// Awalan alamat halaman Bayar; alamat lengkapnya dari [paymentFor].
   static const String payment = '/payment';

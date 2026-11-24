@@ -163,7 +163,7 @@ Widget buildAppProviders({
 }
 
 /// Widget akar aplikasi: membuat [MaterialApp] dengan tema terang/gelap dari [ThemeProvider]
-/// dan daftar rute dari [AppRouter] (termasuk `onGenerateRoute` untuk Lacak Pesanan dan Chat). Setiap layar dibungkus [PhoneFrame] (di web dengan layar
+/// dan daftar rute dari [AppRouter] (termasuk `onGenerateRoute` untuk Lacak Pesanan, Chat, profil toko, dan detail menu). Setiap layar dibungkus [PhoneFrame] (di web dengan layar
 /// lebih lebar dari ponsel, aplikasi tampil selebar ponsel di tengah).
 ///
 /// Widget ini dibangun ulang setiap kali tema berubah, dan saat itu juga menyalin status
