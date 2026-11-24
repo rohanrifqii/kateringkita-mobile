@@ -13,7 +13,7 @@ import '../models/product_model.dart';
 /// favorit ([FavoriteButton]), nama menu, nama toko, harga, dan rating.
 ///
 /// Mengetuk kartu menjalankan [onTap] (biasanya membuka detail menu). Mengetuk baris nama
-/// toko membuka profil toko (rute `AppRoutes.storeProfile`) dengan slug toko sebagai argumen.
+/// toko membuka profil toko di alamat `AppRoutes.storeProfileFor(slug toko)`.
 class FoodGridCard extends StatelessWidget {
   /// Menu yang ditampilkan.
   final ProductModel product;
@@ -138,8 +138,7 @@ class FoodGridCard extends StatelessWidget {
                     onTap: () {
                       Navigator.pushNamed(
                         context,
-                        AppRoutes.storeProfile,
-                        arguments: product.merchant.slug,
+                        AppRoutes.storeProfileFor(product.merchant.slug),
                       );
                     },
                     behavior: HitTestBehavior.opaque,

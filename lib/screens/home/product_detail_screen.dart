@@ -1,8 +1,10 @@
-// Layar Detail Produk (rute AppRoutes.productDetail), dibuka saat kartu menu diketuk; argumen rute = ProductModel.
+// Layar Detail Produk (alamat AppRoutes.productDetailFor(id)), dibuka saat kartu menu diketuk; argumen rute =
+// ProductModel supaya langsung tampil. Saat web dimuat ulang argumen hilang, jadi menu dimuat dari id di alamat.
 // Detail menu, ulasan, dan profil toko dimuat lewat CatalogRepository dari backend REST KateringKita;
 // status favorit (ikon hati) disimpan ke server lewat FavoriteButton -> FavoritesProvider (PUT/DELETE /me/favorites/{id}).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
@@ -20,7 +22,11 @@ class ProductDetailScreen extends StatefulWidget {
   /// Produk cadangan bila argumen rute bukan ProductModel.
   final ProductModel? product;
 
-  const ProductDetailScreen({super.key, this.product});
+  /// Id menu dari alamat `/product-detail/<id>`; dipakai memuat menu (GET /menus/{id}) bila argumen rute
+  /// dan [product] kosong, mis. saat halaman web dimuat ulang.
+  final int? menuId;
+
+  const ProductDetailScreen({super.key, this.product, this.menuId});
 
   @override
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
@@ -29,9 +35,12 @@ class ProductDetailScreen extends StatefulWidget {
 /// State detail menu: produk yang ditampilkan, opsi terpilih, profil toko, dan ulasan.
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late ProductModel _product;
-  // true bila tidak ada produk sama sekali; layar langsung ditutup (pop) setelah frame pertama.
+  // true bila tidak ada produk maupun id menu; layar langsung ditutup (pop) setelah frame pertama.
   bool _missing = false;
   bool _initialized = false;
+  // Hanya id yang diketahui: true selama menu dimuat; _fetchError terisi bila gagal.
+  bool _fetching = false;
+  String? _fetchError;
   MenuOption? _selectedOption; // null = tanpa opsi
   MerchantProfile? _merchant;
   List<MenuReview> _reviews = const [];
@@ -47,46 +56,59 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Hanya sekali: ambil produk dari argumen rute, kalau tidak ada dari widget.product.
+    // Hanya sekali: ambil produk dari argumen rute, kalau tidak ada dari widget.product,
+    // kalau tidak ada juga muat dari server lewat widget.menuId.
     if (_initialized) return;
+    _initialized = true;
     final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is ProductModel) {
-      _product = args;
+    final product = args is ProductModel ? args : widget.product;
+    if (product != null) {
+      _product = product;
+      _load(product.id);
+    } else if (widget.menuId != null) {
+      _fetching = true;
+      _load(widget.menuId!);
     } else {
-      final p = widget.product;
-      if (p == null) {
-        _missing = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) Navigator.pop(context);
+      _missing = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.pop(context);
+      });
+    }
+  }
+
+  /// Memuat detail menu [id] (GET /menus/{id}), ulasan (GET /menus/{id}/reviews), dan profil toko
+  /// (GET /merchants/{slug}) secara berurutan. Ulasan dan profil toko berdiri sendiri: bila gagal, galatnya
+  /// diabaikan. Detail yang gagal juga diabaikan bila data kartu sudah ada; tanpa kartu (hanya id dari
+  /// alamat) layar menampilkan galat dan berhenti.
+  Future<void> _load(int id) async {
+    final repo = context.read<CatalogRepository>();
+    try {
+      final detail = await repo.menuDetail(id);
+      if (!mounted) return;
+      setState(() {
+        _product = detail;
+        _fetching = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      // Dengan kartu: tetap menampilkan data kartu. Tanpa kartu: tampilkan galat dan berhenti.
+      if (_fetching) {
+        setState(() {
+          _fetching = false;
+          _fetchError = e is ApiException && e.status == 404
+              ? 'Menu tidak ditemukan.'
+              : 'Menu gagal dimuat. Periksa koneksi lalu coba lagi.';
         });
         return;
       }
-      _product = p;
-    }
-    _initialized = true;
-    _load();
-  }
-
-  /// Memuat detail menu (GET /menus/{id}), ulasan (GET /menus/{id}/reviews), dan profil toko
-  /// (GET /merchants/{slug}) secara berurutan. Tiap permintaan
-  /// berdiri sendiri: bila gagal, galatnya diabaikan dan layar tetap memakai data yang sudah ada.
-  Future<void> _load() async {
-    final repo = context.read<CatalogRepository>();
-    final card = _product;
-    try {
-      final detail = await repo.menuDetail(card.id);
-      if (!mounted) return;
-      setState(() => _product = detail);
-    } catch (_) {
-      // Tetap menampilkan data kartu bila detail gagal dimuat.
     }
     try {
-      final reviews = await repo.reviews(card.id);
+      final reviews = await repo.reviews(id);
       if (!mounted) return;
       setState(() => _reviews = reviews);
     } catch (_) {}
     try {
-      final merchant = await repo.merchant(card.merchant.slug);
+      final merchant = await repo.merchant(_product.merchant.slug);
       if (!mounted) return;
       setState(() => _merchant = merchant);
     } catch (_) {}
@@ -108,6 +130,28 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   @override
   Widget build(BuildContext context) {
     if (_missing) return const Scaffold();
+    // Hanya id dari alamat: indikator muat selama GET /menus/{id}, lalu galat + tombol kembali bila gagal.
+    if (_fetching || _fetchError != null) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(backgroundColor: AppColors.surface, elevation: 0),
+        body: Center(
+          child: _fetching
+              ? const CircularProgressIndicator()
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_fetchError!),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () => Navigator.maybePop(context),
+                      child: const Text('Kembali'),
+                    ),
+                  ],
+                ),
+        ),
+      );
+    }
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
@@ -280,8 +324,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                               onTap: () {
                                 Navigator.pushNamed(
                                   context,
-                                  AppRoutes.storeProfile,
-                                  arguments: _product.merchant.slug,
+                                  AppRoutes.storeProfileFor(_product.merchant.slug),
                                 );
                               },
                               child: Container(

@@ -1,5 +1,5 @@
-// Layar profil toko (merchant): dibuka dengan slug toko sebagai argumen rute, misalnya dari kartu menu atau Dapur
-// Favorit. Profil dan menu toko diambil lewat CatalogRepository (GET /merchants/:slug dan GET /menus?merchant=...);
+// Layar profil toko (merchant): dibuka di alamat /store-profile/<slug> (AppRoutes.storeProfileFor), misalnya dari
+// kartu menu atau Dapur Favorit; slug di alamat membuat halaman tetap terbuka saat web dimuat ulang. Profil dan menu toko diambil lewat CatalogRepository (GET /merchants/:slug dan GET /menus?merchant=...);
 // tab Penilaian menggabungkan ulasan beberapa menu (GET /menus/:id/reviews) karena backend belum punya ulasan per toko.
 // Voucher toko ikut dalam profil toko dan bisa diklaim ke Voucher Saya (POST /me/vouchers/:id/claim).
 import '../../api/api_exception.dart';
@@ -31,7 +31,8 @@ import '../../providers/theme_provider.dart';
 
 /// Layar profil satu toko: kartu toko (favorit, bagikan, cari menu) dan tab Menu / Galeri / Penilaian / Informasi.
 class StoreProfileScreen extends StatefulWidget {
-  /// Slug merchant cadangan bila argumen rute tidak berisi slug (namanya warisan, isinya slug).
+  /// Slug merchant dari alamat `/store-profile/<slug>`, dipakai bila argumen rute tidak berisi slug
+  /// (namanya warisan, isinya slug).
   final String? vendorName;
 
   const StoreProfileScreen({super.key, this.vendorName});
@@ -1087,7 +1088,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                   onTap: () {
                     Navigator.pushNamed(
                       context,
-                      AppRoutes.productDetail,
+                      AppRoutes.productDetailFor(menu.id),
                       arguments: menu,
                     );
                   },
@@ -1280,7 +1281,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                 onTap: () {
                   Navigator.pushNamed(
                     context,
-                    AppRoutes.productDetail,
+                    AppRoutes.productDetailFor(menu.id),
                     arguments: menu,
                   );
                 },

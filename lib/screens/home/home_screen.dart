@@ -116,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// banner tanpa target tidak melakukan apa-apa.
   void _onServerBannerTap(PromoBanner b) {
     if (b.target == BannerTarget.merchant && b.merchant != null) {
-      Navigator.pushNamed(context, AppRoutes.storeProfile, arguments: b.merchant!.slug);
+      Navigator.pushNamed(context, AppRoutes.storeProfileFor(b.merchant!.slug));
     } else if (b.target == BannerTarget.promo && b.promo != null) {
       _showBannerVoucher(b.promo!);
     }
@@ -173,7 +173,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     TextButton(
                       onPressed: () {
                         Navigator.pop(sheet);
-                        Navigator.pushNamed(context, AppRoutes.storeProfile, arguments: v.merchant!.slug);
+                        Navigator.pushNamed(context, AppRoutes.storeProfileFor(v.merchant!.slug));
                       },
                       child: Text('Lihat ${v.merchant!.businessName}'),
                     ),
@@ -726,7 +726,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       onTap: () {
                         Navigator.pushNamed(
                           context,
-                          AppRoutes.productDetail,
+                          AppRoutes.productDetailFor(product.id),
                           arguments: product,
                         );
                       },

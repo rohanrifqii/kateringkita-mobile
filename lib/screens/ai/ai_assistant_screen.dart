@@ -476,9 +476,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     }
   }
 
-  /// Buka layar detail menu ([AppRoutes.productDetail]).
+  /// Buka layar detail menu ([AppRoutes.productDetailFor]); menu ikut sebagai argumen supaya tampil instan.
   void _openDetail(ProductModel menu) {
-    Navigator.pushNamed(context, AppRoutes.productDetail, arguments: menu);
+    Navigator.pushNamed(context, AppRoutes.productDetailFor(menu.id), arguments: menu);
   }
 
   /// Seluruh menu satu toko ke keranjang; bila keranjang berisi toko lain,
