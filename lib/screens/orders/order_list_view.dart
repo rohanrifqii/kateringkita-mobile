@@ -311,8 +311,8 @@ class _OrderListViewState extends State<OrderListView>
         itemBuilder: (_, i) => Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: () => Navigator.pushNamed(context, AppRoutes.orderTracking,
-                arguments: _orders[i].code),
+            onTap: () => Navigator.pushNamed(
+                context, AppRoutes.orderTrackingFor(_orders[i].code)),
             borderRadius: BorderRadius.circular(16),
             child: _card(_orders[i]),
           ),

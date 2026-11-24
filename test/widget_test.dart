@@ -64,6 +64,28 @@ void main() {
     expect(_currentRoute(), AppRoutes.mainNav);
   });
 
+  testWidgets('web dimuat ulang di /order-chat/<kode>: Chat tetap terbuka', (
+    tester,
+  ) async {
+    tester.binding.platformDispatcher.defaultRouteNameTestValue =
+        '/order-chat/ABC123';
+    addTearDown(
+      tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+    );
+    await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Splash menyingkir; Chat tetap di atas dengan tab Pesanan di bawahnya.
+    final routeNames = <String?>[];
+    appNavigatorKey.currentState!.popUntil((route) {
+      routeNames.add(route.settings.name);
+      return route.isFirst;
+    });
+    expect(routeNames, ['/order-chat/ABC123', AppRoutes.mainNav]);
+    expect(find.text('ABC123'), findsOneWidget);
+  });
+
   testWidgets('expired token at splash: guest continues to main nav', (
     tester,
   ) async {

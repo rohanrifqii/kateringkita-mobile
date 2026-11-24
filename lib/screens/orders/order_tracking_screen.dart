@@ -279,11 +279,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
   /// Membuka halaman Chat, lalu mengambil ulang detail supaya badge pesan
   /// belum dibaca ikut diperbarui (juga untuk pesanan yang sudah berakhir).
   Future<void> _openChat(OrderApiModel order) async {
-    await Navigator.pushNamed(
-      context,
-      AppRoutes.orderChat,
-      arguments: order.code,
-    );
+    await Navigator.pushNamed(context, AppRoutes.orderChatFor(order.code));
     if (mounted && !_fetching) _load();
   }
 

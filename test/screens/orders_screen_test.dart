@@ -116,17 +116,15 @@ void main() {
 
   testWidgets('ketuk kartu pesanan membuka Lacak Pesanan dengan kodenya',
       (tester) async {
-    Object? trackingArgs;
     await tester.pumpWidget(_wrap(
       (req) async => _json({
         'data': [_order('KK-1')],
         'meta': {'total': 1}
       }),
       routes: {
-        AppRoutes.orderTracking: (context) {
-          trackingArgs = ModalRoute.of(context)?.settings.arguments;
-          return const Scaffold(body: Text('layar-lacak'));
-        },
+        // Kode pesanan ada di alamat rute.
+        AppRoutes.orderTrackingFor('KK-1'): (_) =>
+            const Scaffold(body: Text('layar-lacak')),
       },
     ));
     await tester.pumpAndSettle();
@@ -134,7 +132,6 @@ void main() {
     await tester.tap(find.text('Nasi Box +1 menu lain'));
     await tester.pumpAndSettle();
     expect(find.text('layar-lacak'), findsOneWidget);
-    expect(trackingArgs, 'KK-1');
   });
 
   testWidgets('kartu menampilkan jumlah chat belum dibaca dari chat.unread_count',

@@ -19,6 +19,15 @@ class AppRoutes {
   static const String completedOrders = '/completed-orders';
   static const String orderTracking = '/order-tracking';
   static const String orderChat = '/order-chat';
+
+  /// Alamat Lacak Pesanan untuk [orderCode], mis. `/order-tracking/KK-1`.
+  /// Kode ada di alamat supaya tetap terbaca saat halaman web dimuat ulang.
+  static String orderTrackingFor(String orderCode) =>
+      '$orderTracking/${Uri.encodeComponent(orderCode)}';
+
+  /// Alamat Chat pesanan untuk [orderCode], mis. `/order-chat/KK-1`.
+  static String orderChatFor(String orderCode) =>
+      '$orderChat/${Uri.encodeComponent(orderCode)}';
   static const String liked = '/liked';
   static const String profile = '/profile';
   static const String notifications = '/notifications';

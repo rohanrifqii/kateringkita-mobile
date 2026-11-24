@@ -199,8 +199,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
     final code = n.orderCode;
     if (n.isOrderStatus && code != null && code.isNotEmpty) {
-      await Navigator.pushNamed(context, AppRoutes.orderTracking,
-          arguments: code);
+      await Navigator.pushNamed(context, AppRoutes.orderTrackingFor(code));
     }
   }
 

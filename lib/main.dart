@@ -159,6 +159,7 @@ class KateringKitaApp extends StatelessWidget {
       themeMode: themeProvider.themeMode,
       initialRoute: AppRouter.initialRoute,
       routes: AppRouter.routes,
+      onGenerateRoute: AppRouter.onGenerateRoute,
       builder: (context, child) => PhoneFrame(child: child ?? const SizedBox.shrink()),
     );
   }

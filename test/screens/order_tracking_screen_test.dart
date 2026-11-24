@@ -198,7 +198,6 @@ void main() {
   testWidgets('chat terbuka: tombol aktif dengan badge, membuka halaman Chat', (
     tester,
   ) async {
-    Object? chatArguments;
     final repository = FakeOrderRepository(
       cookingOrder(
         extra: {
@@ -217,10 +216,9 @@ void main() {
       tester,
       repository,
       routes: {
-        AppRoutes.orderChat: (context) {
-          chatArguments = ModalRoute.of(context)?.settings.arguments;
-          return const Scaffold(body: Text('layar-chat'));
-        },
+        // Kode pesanan ada di alamat rute.
+        AppRoutes.orderChatFor('KK-20261124-0001'): (_) =>
+            const Scaffold(body: Text('layar-chat')),
       },
     );
 
@@ -234,6 +232,5 @@ void main() {
     await tester.tap(chatButton);
     await tester.pumpAndSettle();
     expect(find.text('layar-chat'), findsOneWidget);
-    expect(chatArguments, 'KK-20261124-0001');
   });
 }

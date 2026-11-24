@@ -29,6 +29,13 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       // Muat sesi tersimpan (bila ada), lalu selalu ke beranda: tamu boleh jelajah.
       await context.read<AuthProvider>().load();
       if (!mounted) return;
+      // Web dimuat ulang di alamat dalam (mis. /order-chat/<kode>): halaman
+      // itu sudah di atas splash, jadi splash cukup menyingkir dari tumpukan.
+      final splashRoute = ModalRoute.of(context);
+      if (splashRoute != null && !splashRoute.isCurrent) {
+        Navigator.removeRoute(context, splashRoute);
+        return;
+      }
       Navigator.pushReplacementNamed(context, AppRoutes.mainNav);
     });
   }
