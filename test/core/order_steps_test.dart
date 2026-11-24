@@ -44,10 +44,10 @@ void main() {
       'Selesai',
     ]);
     expect(steps.map((step) => step.state), [
-      StepState.done,
-      StepState.current,
-      StepState.upcoming,
-      StepState.upcoming,
+      OrderStepState.done,
+      OrderStepState.current,
+      OrderStepState.upcoming,
+      OrderStepState.upcoming,
     ]);
     expect(steps.first.at, DateTime.utc(2026, 11, 24, 2, 5));
     expect(steps[1].at, DateTime.utc(2026, 11, 24, 2, 10));
@@ -59,22 +59,22 @@ void main() {
       buildOrder('holding', paymentStatus: 'unpaid'),
     );
     expect(steps.first.label, 'Menunggu pembayaran');
-    expect(steps.first.state, StepState.current);
+    expect(steps.first.state, OrderStepState.current);
     expect(
       steps.skip(1).map((step) => step.state),
-      everyElement(StepState.upcoming),
+      everyElement(OrderStepState.upcoming),
     );
   });
 
   test('holding sudah bayar: Menunggu konfirmasi', () {
     final steps = buildOrderSteps(buildOrder('holding'));
     expect(steps.first.label, 'Menunggu konfirmasi');
-    expect(steps.first.state, StepState.current);
+    expect(steps.first.state, OrderStepState.current);
   });
 
   test('completed: semua langkah selesai', () {
     final steps = buildOrderSteps(buildOrder('completed'));
-    expect(steps.map((step) => step.state), everyElement(StepState.done));
+    expect(steps.map((step) => step.state), everyElement(OrderStepState.done));
   });
 
   test('cancelled: langkah terakhir Dibatalkan gagal dengan jam batal', () {
@@ -88,15 +88,15 @@ void main() {
       ),
     );
     expect(steps.map((step) => step.label), ['Diterima', 'Dibatalkan']);
-    expect(steps.first.state, StepState.done);
-    expect(steps.last.state, StepState.failed);
+    expect(steps.first.state, OrderStepState.done);
+    expect(steps.last.state, OrderStepState.failed);
     expect(steps.last.at, DateTime.utc(2026, 11, 24, 2, 20));
   });
 
   test('expired: Kedaluwarsa gagal, jam jatuh ke waktu perubahan terakhir', () {
     final steps = buildOrderSteps(buildOrder('expired'));
     expect(steps.last.label, 'Kedaluwarsa');
-    expect(steps.last.state, StepState.failed);
+    expect(steps.last.state, OrderStepState.failed);
     expect(steps.last.at, DateTime.utc(2026, 11, 24, 2, 30));
   });
 }

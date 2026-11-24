@@ -1,8 +1,7 @@
 // Gambar urutan langkah pesanan (titik, garis, label, jam WIB) untuk halaman
 // Lacak Pesanan. Warna mengikuti satu aksen oranye; langkah gagal merah,
 // langkah yang belum terjadi abu-abu.
-// Material punya StepState sendiri (untuk Stepper); yang dipakai di sini milik order_steps.
-import 'package:flutter/material.dart' hide StepState;
+import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
 import '../core/app_text_styles.dart';
@@ -47,15 +46,15 @@ class _StepRow extends StatelessWidget {
   Widget build(BuildContext context) {
     // 1. Pilih warna dan ikon titik sesuai keadaan langkah.
     final (dotColor, icon) = switch (step.state) {
-      StepState.done => (AppColors.primary, Icons.check_rounded),
-      StepState.current => (AppColors.primary, Icons.circle),
-      StepState.failed => (AppColors.danger, Icons.close_rounded),
-      StepState.upcoming => (AppColors.cardBorder, null),
+      OrderStepState.done => (AppColors.primary, Icons.check_rounded),
+      OrderStepState.current => (AppColors.primary, Icons.circle),
+      OrderStepState.failed => (AppColors.danger, Icons.close_rounded),
+      OrderStepState.upcoming => (AppColors.cardBorder, null),
     };
-    final isUpcoming = step.state == StepState.upcoming;
+    final isUpcoming = step.state == OrderStepState.upcoming;
     final labelColor = switch (step.state) {
-      StepState.failed => AppColors.danger,
-      StepState.upcoming => AppColors.textMuted,
+      OrderStepState.failed => AppColors.danger,
+      OrderStepState.upcoming => AppColors.textMuted,
       _ => AppColors.textPrimary,
     };
     final at = step.at;
@@ -79,7 +78,7 @@ class _StepRow extends StatelessWidget {
                     ? null
                     : Icon(
                         icon,
-                        size: step.state == StepState.current ? 8 : 14,
+                        size: step.state == OrderStepState.current ? 8 : 14,
                         color: Colors.white,
                       ),
               ),
@@ -88,7 +87,7 @@ class _StepRow extends StatelessWidget {
                   child: Container(
                     width: 2,
                     margin: const EdgeInsets.symmetric(vertical: 2),
-                    color: step.state == StepState.done
+                    color: step.state == OrderStepState.done
                         ? AppColors.primary
                         : AppColors.cardBorder,
                   ),
@@ -103,7 +102,7 @@ class _StepRow extends StatelessWidget {
                 step.label,
                 style: AppTextStyles.bodyMedium.copyWith(
                   color: labelColor,
-                  fontWeight: step.state == StepState.current
+                  fontWeight: step.state == OrderStepState.current
                       ? FontWeight.w700
                       : FontWeight.w500,
                 ),

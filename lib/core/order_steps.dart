@@ -7,7 +7,7 @@ import '../models/order_api_model.dart';
 ///
 /// `done` sudah lewat, `current` sedang berjalan, `upcoming` belum terjadi,
 /// dan `failed` dipakai untuk akhir yang gagal (dibatalkan atau kedaluwarsa).
-enum StepState { done, current, upcoming, failed }
+enum OrderStepState { done, current, upcoming, failed }
 
 /// Satu langkah pesanan: teks yang tampil, keadaannya, dan jam mulainya.
 class OrderStep {
@@ -15,7 +15,7 @@ class OrderStep {
   final String label;
 
   /// Keadaan langkah saat ini.
-  final StepState state;
+  final OrderStepState state;
 
   /// Jam langkah dimulai (UTC), atau null bila belum terjadi atau tidak
   /// tercatat.
@@ -47,10 +47,11 @@ List<OrderStep> buildOrderSteps(OrderApiModel order) {
   if (order.status == 'cancelled' || order.status == 'expired') {
     return [
       for (final (label, at) in normalSteps)
-        if (at != null) OrderStep(label: label, state: StepState.done, at: at),
+        if (at != null)
+          OrderStep(label: label, state: OrderStepState.done, at: at),
       OrderStep(
         label: order.status == 'cancelled' ? 'Dibatalkan' : 'Kedaluwarsa',
-        state: StepState.failed,
+        state: OrderStepState.failed,
         // Server tidak punya jam khusus kedaluwarsa; pakai jam batal bila ada,
         // kalau tidak jam perubahan terakhir pesanan.
         at: timeline.cancelledAt ?? order.updatedAt,
@@ -74,10 +75,10 @@ List<OrderStep> buildOrderSteps(OrderApiModel order) {
       OrderStep(
         label: normalSteps[i].$1,
         state: i < currentIndex
-            ? StepState.done
+            ? OrderStepState.done
             : i == currentIndex
-            ? StepState.current
-            : StepState.upcoming,
+            ? OrderStepState.current
+            : OrderStepState.upcoming,
         at: normalSteps[i].$2,
       ),
   ];
@@ -88,7 +89,7 @@ List<OrderStep> buildOrderSteps(OrderApiModel order) {
       0,
       OrderStep(
         label: order.isPaid ? 'Menunggu konfirmasi' : 'Menunggu pembayaran',
-        state: StepState.current,
+        state: OrderStepState.current,
         at: order.createdAt,
       ),
     );
