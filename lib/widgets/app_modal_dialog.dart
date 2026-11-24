@@ -1,6 +1,6 @@
 // Dialog modal bergaya KateringKita (ikon tanya/centang, judul, pesan, tombol) beserta pintasan untuk
-// kasus umum: keluar akun, konfirmasi bayar, sandi diperbarui, dan berhasil login. (Pusat Bantuan kini
-// berupa layar tiket, bukan modal WhatsApp.)
+// kasus umum: keluar akun, konfirmasi bayar, dan sandi diperbarui. (Pusat Bantuan kini berupa layar tiket,
+// bukan modal WhatsApp; berhasil login kini cukup toast sapaan di LoginScreen.)
 import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
@@ -130,28 +130,6 @@ class AppModalDialog extends StatelessWidget {
       message:
           'Kata sandi baru kamu berhasil disimpan. Silakan masuk kembali menggunakan kata sandi baru kamu.',
       primaryButtonText: 'Masuk Sekarang',
-      onPrimaryPressed: () {
-        Navigator.pop(context);
-        onConfirm();
-      },
-    );
-  }
-
-  /// 4. Modal Berhasil Login; [message] mengganti teks bawaan. Tombol "Ke
-  /// Beranda" menutup modal lalu memanggil [onConfirm].
-  static Future<void> showLoginSuccess(
-    BuildContext context, {
-    required VoidCallback onConfirm,
-    String? message,
-  }) {
-    return show(
-      context: context,
-      barrierDismissible: false,
-      type: AppModalType.success,
-      title: 'Anda Berhasil Login!',
-      message: message ??
-          'Kata sandi baru Anda telah disimpan. Silakan login kembali dengan kata sandi baru Anda.',
-      primaryButtonText: 'Ke Beranda',
       onPrimaryPressed: () {
         Navigator.pop(context);
         onConfirm();

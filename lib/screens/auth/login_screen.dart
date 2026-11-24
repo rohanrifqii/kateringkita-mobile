@@ -7,7 +7,6 @@ import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../api/api_exception.dart';
 import '../../providers/auth_provider.dart';
-import '../../widgets/app_modal_dialog.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/primary_button.dart';
 
@@ -59,7 +58,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   /// Validasi kolom kosong, panggil AuthProvider.login (POST /auth/login). Galat ApiException
   /// ditaruh di bawah kolom identifier/password; bila bukan galat kolom, tampil di SnackBar.
-  /// Berhasil: pop(true) bila returnTo, selain itu dialog sukses lalu ke MainNav dan tumpukan rute dibersihkan.
+  /// Berhasil: pop(true) bila returnTo, selain itu langsung ke MainNav (tumpukan rute dibersihkan) lalu
+  /// toast sapaan ±2 detik.
   Future<void> _onLogin() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;
@@ -97,14 +97,45 @@ class _LoginScreenState extends State<LoginScreen> {
       Navigator.pop(context, true);
       return;
     }
-    AppModalDialog.showLoginSuccess(
-      context,
-      message: 'Selamat datang kembali di KateringKita.',
-      onConfirm: () {
-        Navigator.pushNamedAndRemoveUntil(context, AppRoutes.mainNav, (r) => false);
-      },
-    );
+    // Messenger akar MaterialApp diambil sebelum layar ini dibuang, jadi toast tetap tampil di MainNav.
+    final messenger = ScaffoldMessenger.of(context);
+    final firstName =
+        (context.read<AuthProvider>().user?.fullName ?? '').trim().split(' ').first;
+    Navigator.pushNamedAndRemoveUntil(context, AppRoutes.mainNav, (r) => false);
+    messenger.showSnackBar(_welcomeToast(firstName));
   }
+
+  /// Toast sapaan setelah login: latar gelap netral, ikon centang, 2 detik. Margin bawah
+  /// menjaga toast di atas navbar MainNav.
+  SnackBar _welcomeToast(String firstName) => SnackBar(
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+        elevation: 0,
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 96),
+        backgroundColor: AppColors.lightTextPrimary,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+          side: const BorderSide(color: AppColors.darkCardBorder),
+        ),
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                firstName.isEmpty
+                    ? 'Selamat datang di KateringKita'
+                    : 'Selamat datang, $firstName',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
