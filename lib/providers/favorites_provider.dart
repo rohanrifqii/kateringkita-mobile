@@ -1,3 +1,5 @@
+// Provider status favorit menu & toko yang dibagi semua layar (kartu menu, detail, profil toko, Favorit).
+// Alur: layar/FavoriteButton → FavoritesProvider → FavoriteRepository → ApiClient → backend.
 import 'package:flutter/foundation.dart';
 
 import '../data/catalog_repository.dart';
@@ -14,6 +16,7 @@ class FavoritesProvider extends ChangeNotifier {
   FavoritesProvider(this._repo);
 
   final FavoriteRepository _repo;
+  /// Override status per id menu/toko dan id yang permintaannya masih berjalan.
   final Map<int, bool> _menus = {};
   final Set<int> _menuBusy = {};
   final Map<int, bool> _merchants = {};
@@ -22,22 +25,30 @@ class FavoritesProvider extends ChangeNotifier {
   /// Naik setiap kali favorit menu di server berubah atau status dikosongkan;
   /// layar Favorit memakainya untuk tahu kapan perlu memuat ulang.
   int _revision = 0;
+
+  /// Nomor revisi favorit menu; layar Favorit memuat ulang saat nilainya berubah.
   int get revision => _revision;
 
   /// Padanan [revision] untuk toko favorit.
   int _merchantRevision = 0;
+
+  /// Nomor revisi toko favorit, dipakai layar Dapur Favorit.
   int get merchantRevision => _merchantRevision;
 
   /// Naik saat [clear]; jawaban permintaan dari sesi sebelumnya diabaikan.
   int _epoch = 0;
 
+  /// Status favorit [menu]: aksi di sesi ini bila ada, selain itu `is_favorite` dari server.
   bool isFavorite(ProductModel menu) => _menus[menu.id] ?? menu.isFavorite;
 
+  /// True selama permintaan simpan/hapus menu [menuId] masih berjalan.
   bool isBusy(int menuId) => _menuBusy.contains(menuId);
 
+  /// Status favorit toko, aturan sama dengan [isFavorite].
   bool isFavoriteMerchant(MerchantProfile merchant) =>
       _merchants[merchant.id] ?? merchant.isFavorite;
 
+  /// True selama permintaan simpan/hapus toko [merchantId] masih berjalan.
   bool isMerchantBusy(int merchantId) => _merchantBusy.contains(merchantId);
 
   /// Simpan/hapus menu favorit. Ketukan saat permintaan menu yang sama masih
@@ -64,6 +75,9 @@ class FavoritesProvider extends ChangeNotifier {
         () => _merchantRevision++,
       );
 
+  /// Logika bersama menu & toko: ubah status dulu (optimistis), panggil
+  /// [call] ke server, lalu naikkan revisi lewat [onSaved] bila berhasil atau
+  /// kembalikan status lama bila gagal. Hasil dari sesi lama (epoch beda) diabaikan.
   Future<void> _set(
     Map<int, bool> overrides,
     Set<int> busy,

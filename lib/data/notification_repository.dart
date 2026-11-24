@@ -1,6 +1,10 @@
+// Repository notifikasi in-app: daftar notifikasi dan tandai sudah dibaca.
+// Alur: layar Notifikasi / NotificationProvider → NotificationRepository → ApiClient → backend (/me/notifications).
 import '../api/api_client.dart';
 import '../models/app_notification.dart';
 
+/// Satu halaman hasil [NotificationRepository.list]: [items], [total] sesuai
+/// filter, [page] mulai 1, dan [unreadCount].
 class NotificationPage {
   final List<AppNotification> items;
   final int total;
@@ -23,6 +27,8 @@ class NotificationRepository {
 
   final ApiClient _api;
 
+  /// GET /me/notifications: satu halaman notifikasi, terbaru menurut server.
+  /// [unreadOnly] hanya yang belum dibaca.
   /// [type]: `order_status` | `promo` | `info` (filter di server; tipe lain
   /// ditolak 400). `total` mengikuti filter, `unreadCount` tidak.
   Future<NotificationPage> list({
@@ -50,18 +56,22 @@ class NotificationRepository {
     );
   }
 
-  /// Hanya jumlah belum dibaca (untuk lencana lonceng).
+  /// Hanya jumlah belum dibaca (untuk lencana lonceng); meminta 1 item saja
+  /// lalu membaca `unread_count` dari meta.
   Future<int> unreadCount() async =>
       (await list(limit: 1, unreadOnly: true)).unreadCount;
 
-  /// Tandai [ids] (1–100) sudah dibaca. Mengembalikan sisa belum dibaca.
+  /// POST /me/notifications/read `{ids}`: tandai [ids] (1–100) sudah dibaca.
+  /// Mengembalikan sisa belum dibaca.
   Future<int> markRead(List<int> ids) =>
       _read({'ids': ids});
 
-  /// Tandai semua sudah dibaca. Backend mewajibkan `all: true`
+  /// POST /me/notifications/read `{all: true}`: tandai semua sudah dibaca dan
+  /// kembalikan sisa belum dibaca. Backend mewajibkan `all: true`
   /// (body kosong ditolak 400).
   Future<int> markAllRead() => _read({'all': true});
 
+  /// Kirim permintaan tandai-dibaca; balasan tanpa unread_count dianggap 0.
   Future<int> _read(Map<String, Object> body) async {
     final res = await _api.post('/me/notifications/read', body: body);
     final d = res.data;

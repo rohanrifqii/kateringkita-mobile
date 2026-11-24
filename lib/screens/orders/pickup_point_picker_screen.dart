@@ -1,5 +1,5 @@
-// Layar pemilih titik temu, dibuka dari kartu "Titik Temu Pengambilan" di Checkout.
-// Daftar titik diterima dari Checkout (dimuat dari GET /menus/{id}); layar ini tidak memanggil server.
+// Layar pemilih titik temu, dibuka dari kartu "Titik Temu Pengambilan" di Checkout dan dari kartu
+// "Titik Temu Favorit" di Beranda. Daftar titik diterima dari layar pemanggil; layar ini tidak memanggil server.
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -16,15 +16,19 @@ const LatLng ubPickupMapCenter = LatLng(-7.9526, 112.6145);
 /// dari beranda). Peta hanya latar (titik belum punya koordinat);
 /// `pop(PickupPoint)` saat satu titik dipilih.
 class PickupPointPickerScreen extends StatelessWidget {
-  /// Titik temu milik toko yang boleh dipilih.
+  /// Titik temu yang boleh dipilih (milik toko di Checkout, semua titik aktif di Beranda).
   final List<PickupPoint> points;
 
-  /// Id titik yang sedang terpilih di Checkout (diberi tanda centang), atau null.
+  /// Id titik yang sedang terpilih (diberi tanda centang), atau null.
   final int? selectedId;
+
+  /// Judul di AppBar.
   final String title;
 
   /// Keterangan singkat di atas daftar; tidak tampil bila null.
   final String? note;
+
+  /// Teks yang tampil bila [points] kosong.
   final String emptyText;
 
   const PickupPointPickerScreen({

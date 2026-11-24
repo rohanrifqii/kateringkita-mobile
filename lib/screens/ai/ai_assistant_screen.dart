@@ -1,6 +1,6 @@
-// Layar Asisten AI (tab ketiga MainNavigationScreen, juga rute AppRoutes.aiAssistant): rekomendasi paket danusan dan chat.
-// Rekomendasi & chat lewat GeminiService (langsung ke Google Gemini bila API key tersedia, kalau tidak dihitung lokal);
-// riwayat sesi disimpan lokal (SharedPreferences), bukan di backend KateringKita.
+// Layar Asisten AI (tab ketiga MainNavigationScreen, juga rute AppRoutes.aiAssistant): rekomendasi menu + kalkulator danusan.
+// Rekomendasi lewat AssistantRepository → POST /assistant/recommendations di backend KateringKita (kunci AI ada di server);
+// riwayat sesi disimpan lokal per akun lewat AiHistoryStore (SharedPreferences), bukan di backend.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -24,12 +24,14 @@ import '../../providers/cart_provider.dart';
 import '../../widgets/add_to_cart.dart';
 import '../../widgets/menu_image.dart';
 
+/// Warna aksen oranye khusus layar ini (tombol, chip terpilih, angka kalkulator).
 const _accent = Color(0xFFD9774A);
 
 /// Asisten AI pembeli: kebutuhan dalam bahasa bebas (+ anggaran, porsi,
 /// kategori opsional) → `POST /assistant/recommendations`. Menu hasil
 /// rekomendasi adalah kartu katalog asli: bisa dibuka ke detail dan
-/// dimasukkan ke keranjang.
+/// dimasukkan ke keranjang. Tamu hanya melihat ajakan masuk; pengguna yang
+/// masuk juga mendapat laci riwayat sesi dan kalkulator danusan.
 class AIAssistantScreen extends StatefulWidget {
   const AIAssistantScreen({super.key});
 
@@ -37,7 +39,10 @@ class AIAssistantScreen extends StatefulWidget {
   State<AIAssistantScreen> createState() => _AIAssistantScreenState();
 }
 
+/// State layar: isian formulir, hasil rekomendasi, sesi riwayat yang tampil,
+/// dan status muat/galat.
 class _AIAssistantScreenState extends State<AIAssistantScreen> {
+  /// Pesan galat validasi lokal; batasnya sama dengan aturan server.
   static const _questionRule = 'Ceritakan kebutuhanmu 3–500 karakter.';
   static const _budgetRule = 'Anggaran Rp 1.000–100.000.000.';
   static const _portionsRule = 'Jumlah porsi 1–1.000.';
@@ -47,13 +52,20 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   final _portionsController = TextEditingController();
   final _sellPriceController = TextEditingController();
   final _scrollController = ScrollController();
+  /// Penanda kartu hasil, dipakai untuk menggulir layar ke hasil.
   final _resultKey = GlobalKey();
+
+  /// Dipakai tombol riwayat di app bar untuk membuka laci kanan.
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
+  /// Kategori dari GET /meta/categories untuk chip penyaring (kosong = chip disembunyikan).
   List<CategoryModel> _categories = const [];
   String? _categorySlug;
 
   bool _loading = false;
+
+  /// Nomor urut permintaan; jawaban yang datang setelah nomornya berganti
+  /// (permintaan baru, buka riwayat, reset) diabaikan.
   int _seq = 0;
   Recommendation? _result;
 
@@ -67,6 +79,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   // Riwayat di perangkat, per akun.
   late final AiHistoryStore _store;
   List<AiSession> _history = const [];
+
+  /// Id akun pemilik [_history] yang sedang dimuat (null = belum dimuat).
   int? _historyUserId;
 
   /// Sesi yang sedang tampil (null = belum ada hasil / tidak tersimpan).
@@ -74,6 +88,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
 
   /// true bila [_result] dibuka dari riwayat (snapshot lama).
   bool _isSnapshot = false;
+
+  /// true selama tombol "Perbarui" pada snapshot riwayat memanggil server lagi.
   bool _refreshing = false;
   String? _refreshError;
 
@@ -81,6 +97,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   Future<void> _saveChain = Future.value();
 
   late final AuthProvider _auth;
+
+  /// Status masuk terakhir, untuk mendeteksi perpindahan masuk/keluar di [_onAuthChanged].
   late bool _wasLoggedIn;
 
   @override
@@ -89,7 +107,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     _auth = context.read<AuthProvider>();
     _store = context.read<AiHistoryStore>();
     _wasLoggedIn = _auth.isLoggedIn;
+    // Layar ini hidup terus di IndexedStack, jadi perlu mendengar masuk/keluar akun.
     _auth.addListener(_onAuthChanged);
+    // Muat kategori & riwayat setelah frame pertama (context sudah siap).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadCategories();
       _loadHistory();
@@ -121,8 +141,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     _resetScreen(clearHistory: true);
   }
 
-  /// Kosongkan isian & hasil (percakapan baru / keluar).
+  /// Kosongkan isian & hasil (percakapan baru / keluar). [clearHistory] juga
+  /// membuang daftar riwayat dari layar (data di perangkat tidak dihapus).
   void _resetScreen({bool clearHistory = false}) {
+    // Naikkan nomor urut supaya jawaban server yang masih berjalan diabaikan.
     _seq++;
     setState(() {
       _loading = false;
@@ -148,11 +170,13 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     });
   }
 
+  /// Muat riwayat sesi akun yang sedang masuk dari penyimpanan perangkat.
   Future<void> _loadHistory() async {
     final uid = _auth.user?.id;
     if (!_auth.isLoggedIn || uid == null) return;
     try {
       final list = await _store.load(uid);
+      // Abaikan bila akun sudah berganti selama memuat.
       if (!mounted || _auth.user?.id != uid) return;
       setState(() {
         _history = list;
@@ -163,15 +187,20 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     }
   }
 
+  /// Simpan (tambah atau timpa) sesi [s] ke riwayat perangkat, antre di
+  /// [_saveChain]; galat penyimpanan diabaikan.
   void _persist(AiSession s) {
     final uid = _historyUserId ?? _auth.user?.id;
     if (uid == null) return;
+    // Daftar di layar hanya diganti bila akun yang sama masih masuk.
     _saveChain = _saveChain.then((_) async {
       final list = await _store.upsert(uid, s);
       if (mounted && _auth.user?.id == uid) setState(() => _history = list);
     }).catchError((_) {});
   }
 
+  /// Harga jual diubah: simpan ke sesi yang tampil (riwayat ikut ditulis tiap
+  /// ketikan) lalu gambar ulang kalkulator.
   void _onSellPriceChanged(String _) {
     final s = _session;
     if (s != null) {
@@ -181,6 +210,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     setState(() {});
   }
 
+  /// Tampilkan sesi riwayat [s] sebagai snapshot: hasil lama dan isian
+  /// formulirnya dipulihkan tanpa memanggil server.
   void _openSession(AiSession s) {
     _seq++;
     setState(() {
@@ -204,7 +235,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     _scrollToResult();
   }
 
-  /// Panggil ulang API dengan parameter sesi lama; sesi diganti hasil baru.
+  /// Panggil ulang POST /assistant/recommendations dengan parameter sesi lama
+  /// (bukan isian terkini); sesi diganti hasil baru dan disimpan ulang.
+  /// Galat ditampilkan di catatan snapshot ([_refreshError]).
   Future<void> _refreshSession() async {
     final s = _session;
     if (s == null || _refreshing || _loading) return;
@@ -242,9 +275,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     }
   }
 
+  /// Hapus satu sesi riwayat. Daftar di layar langsung diperbarui, lalu
+  /// penyimpanan perangkat ditulis lewat antrean [_saveChain].
   Future<void> _deleteSession(AiSession s) async {
     final uid = _historyUserId;
     if (uid == null) return;
+    // Sesi yang sedang tampil ikut dikosongkan dari layar.
     if (_session?.id == s.id) _resetScreen();
     setState(() => _history = [
           for (final h in _history)
@@ -256,6 +292,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     }).catchError((_) {});
   }
 
+  /// Minta konfirmasi lewat dialog, lalu hapus seluruh riwayat akun ini di perangkat.
   Future<void> _clearHistory() async {
     final uid = _historyUserId;
     if (uid == null) return;
@@ -282,6 +319,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         _saveChain.then((_) => _store.clear(uid)).catchError((_) {});
   }
 
+  /// Gulir ke kartu hasil setelah frame berikutnya (kartunya baru dibangun).
   void _scrollToResult() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final ctx = _resultKey.currentContext;
@@ -293,6 +331,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     });
   }
 
+  /// Ambil kategori lewat CatalogRepository (GET /meta/categories), sekali saja
+  /// dan hanya bila sudah masuk.
   Future<void> _loadCategories() async {
     if (!mounted || !_auth.isLoggedIn || _categories.isNotEmpty) return;
     try {
@@ -303,11 +343,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     }
   }
 
+  /// Ambil angka dari isian [c] (karakter selain digit dibuang); null bila kosong.
   int? _parse(TextEditingController c) {
     final digits = c.text.replaceAll(RegExp(r'[^0-9]'), '');
     return digits.isEmpty ? null : int.tryParse(digits);
   }
 
+  /// Validasi lokal sebelum kirim: kebutuhan 3–500 karakter, anggaran dan
+  /// porsi (bila diisi) dalam batas. Mengisi pesan galat per kolom; true bila lolos.
   bool _validate() {
     final q = _questionController.text.trim();
     final budget = _parse(_budgetController);
@@ -327,6 +370,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         _portionsError == null;
   }
 
+  /// Ubah galat menjadi pesan untuk pengguna: 429 = kuota pertanyaan habis,
+  /// 503 = AI di server belum aktif, galat API lain memakai pesan server.
   String _errorText(Object e) {
     if (e is! ApiException) return 'Terjadi kesalahan. Coba lagi.';
     if (e.status == 429) {
@@ -338,6 +383,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     return e.message;
   }
 
+  /// Tombol "Cari Rekomendasi": validasi, kirim POST /assistant/recommendations,
+  /// lalu tampilkan hasil sebagai sesi baru dan simpan ke riwayat perangkat.
   Future<void> _submit() async {
     if (_loading || _refreshing) return;
     FocusScope.of(context).unfocus();
@@ -360,6 +407,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         category: category,
       );
       if (!mounted || seq != _seq) return;
+      // Id sesi dari waktu simpan (mikrodetik), cukup unik untuk riwayat satu perangkat.
       final now = DateTime.now().toUtc();
       final session = AiSession(
         id: '${now.microsecondsSinceEpoch}',
@@ -385,6 +433,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       if (!mounted || seq != _seq) return;
       setState(() {
         _loading = false;
+        // Galat validasi server ditempel ke kolomnya; galat kategori atau
+        // tanpa kolom dikenal tampil di kotak galat umum.
         if (e is ApiException && e.code == 'VALIDATION_ERROR') {
           _questionError = e.field('question');
           _budgetError = e.field('budget');
@@ -398,17 +448,19 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     }
   }
 
+  /// Buka layar detail menu ([AppRoutes.productDetail]).
   void _openDetail(ProductModel menu) {
     Navigator.pushNamed(context, AppRoutes.productDetail, arguments: menu);
   }
 
   /// Seluruh menu satu toko ke keranjang; bila keranjang berisi toko lain,
-  /// pembeli ditanya dulu (sama dengan katalog).
+  /// pembeli ditanya dulu (sama dengan katalog). Menu yang tidak bisa dipesan dilewati.
   Future<void> _addGroup(RecommendationGroup g) async {
     final items = g.items.where((i) => i.menu.canOrder).toList();
     if (items.isEmpty) return;
     final cart = context.read<CartProvider>();
     final first = items.first;
+    // Menu pertama lewat dialog konfirmasi; sisanya langsung ditambahkan.
     await addToCartWithPrompt(context, first.menu, qty: first.qty);
     if (cart.merchantId != g.merchant.id) return; // dibatalkan
     for (final i in items.skip(1)) {
@@ -459,6 +511,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
+  /// App bar buatan sendiri: tombol kembali hanya bila dibuka sebagai rute
+  /// (bukan tab), tombol riwayat hanya bila sudah masuk.
   Widget _appBar(bool loggedIn) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         child: SizedBox(
@@ -610,6 +664,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
+  /// Satu baris riwayat: pertanyaan, waktu simpan, dan total; ketuk untuk
+  /// membuka sesi, ikon tempat sampah untuk menghapusnya.
   Widget _historyTile(AiSession s) {
     final selected = s.id == _session?.id;
     return Padding(
@@ -665,6 +721,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
+  /// Gaya kartu putih bersudut bulat yang dipakai bagian-bagian layar ini.
   BoxDecoration _card() => BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
@@ -678,6 +735,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         ],
       );
 
+  /// Lencana ikon AI berukuran [size].
   Widget _aiBadge({double size = 44}) => Container(
         width: size,
         height: size,
@@ -693,6 +751,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             color: Colors.white, size: size * 0.5),
       );
 
+  /// Tampilan untuk tamu: ajakan masuk; tombolnya memanggil [requireLogin].
   Widget _guestPrompt() => Container(
         width: double.infinity,
         margin: const EdgeInsets.only(top: 40),
@@ -737,6 +796,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         ),
       );
 
+  /// Kartu sapaan dengan nama depan pengguna.
   Widget _greeting(String? fullName) {
     final first = (fullName ?? '').trim().split(' ').first;
     return Container(
@@ -777,6 +837,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
+  /// Dekorasi kolom isian seragam: petunjuk, pesan galat, dan akhiran satuan.
   InputDecoration _input(String hint, {String? error, String? suffix}) =>
       InputDecoration(
         hintText: hint,
@@ -803,6 +864,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         ),
       );
 
+  /// Label kecil di atas kolom isian.
   Widget _label(String text) => Padding(
         padding: const EdgeInsets.only(bottom: 6),
         child: Text(
@@ -815,6 +877,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         ),
       );
 
+  /// Formulir kebutuhan: teks kebutuhan, modal & porsi opsional, chip kategori
+  /// (bila daftar kategori termuat), kotak galat umum, dan tombol kirim.
   Widget _form() {
     final style = TextStyle(
       fontSize: 13,
@@ -972,6 +1036,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
+  /// Chip pilihan kategori; [slug] null berarti "Semua" (tanpa penyaring).
   Widget _chip(String label, String? slug) {
     final selected = _categorySlug == slug;
     return ChoiceChip(
@@ -990,6 +1055,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
+  /// Kartu hasil: catatan snapshot (bila dari riwayat), ringkasan server,
+  /// penanda saran cadangan tanpa AI, menu per toko, lalu kalkulator danusan.
   Widget _resultSection(Recommendation r) => Container(
         key: _resultKey,
         width: double.infinity,
@@ -1071,6 +1138,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         ),
       );
 
+  /// Catatan bahwa hasil berasal dari riwayat (harga/stok bisa berubah) dengan
+  /// tombol "Perbarui" yang menjalankan [_refreshSession].
   Widget _snapshotNote(AiSession s) => Container(
         key: const ValueKey('ai-snapshot-note'),
         width: double.infinity,
@@ -1131,6 +1200,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         ),
       );
 
+  /// Satu baris label–nilai di kalkulator; [strong] menebalkan nilainya.
   Widget _calcRow(String label, String value,
           {Color? color, bool strong = false, Key? key}) =>
       Padding(
@@ -1162,6 +1232,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   /// Kalkulator danusan: modal dari total server, laba/ROI dari harga jual
   /// isian pembeli. Semua dihitung di [estimateDanusan].
   Widget _calculator(Recommendation r) {
+    // Total porsi = jumlah qty semua menu rekomendasi.
     final qty = r.groups
         .expand((g) => g.items)
         .fold<int>(0, (s, i) => s + i.qty);
@@ -1255,6 +1326,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
+  /// Judul grup per toko dengan tombol "Tambah semua" (nonaktif bila tak ada
+  /// menu yang bisa dipesan).
   Widget _groupHeader(RecommendationGroup g) => Row(
         children: [
           const Icon(Icons.storefront_rounded,
@@ -1289,6 +1362,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         ],
       );
 
+  /// Kartu satu menu rekomendasi: foto, qty × harga, subtotal, alasan AI
+  /// (bila ada); ketuk untuk detail, tombol untuk masuk keranjang.
   Widget _itemCard(RecommendedItem item) {
     final menu = item.menu;
     return Material(

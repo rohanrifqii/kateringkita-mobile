@@ -1,3 +1,6 @@
+// Layar "Ubah Profil": dibuka dari tombol ubah di layar Profil. Menampilkan foto, nama, nomor WhatsApp, dan email
+// pengguna dari AuthProvider, lalu menyimpan perubahannya ke backend (PATCH /me, POST /me/avatar) lewat
+// AuthProvider → AuthRepository → ApiClient.
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -19,10 +22,12 @@ class EditProfileScreen extends StatefulWidget {
   State<EditProfileScreen> createState() => _EditProfileScreenState();
 }
 
+/// State layar Ubah Profil: lembar edit tiap isian dan proses unggah/hapus foto.
 class _EditProfileScreenState extends State<EditProfileScreen> {
+  /// true selama foto sedang diunggah/dihapus; mencegah lembar foto dibuka lagi dan memunculkan putaran di avatar.
   bool _avatarBusy = false;
 
-  /// Sensor nomor HP ala Shopee: **********52
+  /// Sensor nomor HP ala Shopee: hanya dua digit terakhir yang tampil, mis. **********52.
   String _maskPhone(String raw) {
     final clean = raw.trim();
     if (clean.length <= 2) return clean;
@@ -30,7 +35,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return '**********$lastTwo';
   }
 
-  /// Sensor email ala Shopee: a**************m@gmail.com
+  /// Sensor email ala Shopee, mis. a************m@gmail.com; teks yang bukan email dikembalikan apa adanya.
   String _maskEmail(String raw) {
     final clean = raw.trim();
     final parts = clean.split('@');
@@ -74,7 +79,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  /// SnackBar mengambang berikon centang (juga dipakai untuk pesan gagal memilih foto).
+  /// SnackBar hijau mengambang berikon centang untuk pesan berhasil.
   void _showSuccessToast(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -101,15 +106,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  // ---------------- MODAL EDIT TIAP FIELD ----------------
-
+  /// SnackBar biasa untuk pesan gagal.
   void _showErrorToast(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
   }
 
-  /// Ambil foto lalu unggah ke server (presign → PUT → PATCH /me).
+  /// Ambil foto dari galeri/kamera ([source]), lalu unggah lewat [AuthProvider.uploadAvatar]: POST /me/avatar meminta
+  /// URL presign, berkas di-PUT ke penyimpanan, lalu PATCH /me menyimpan alamat fotonya. Galat tampil sebagai SnackBar.
   Future<void> _pickAndUploadAvatar(ImageSource source) async {
     final auth = context.read<AuthProvider>();
     final XFile? picked;
@@ -124,6 +129,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _showErrorToast('Gagal membuka galeri/kamera. Coba lagi.');
       return;
     }
+    // null berarti pengguna batal memilih foto.
     if (picked == null || !mounted) return;
 
     setState(() => _avatarBusy = true);
@@ -143,6 +149,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
+  /// Hapus foto profil (PATCH /me dengan avatar_url kosong); avatar kembali ke inisial nama.
   Future<void> _removeAvatar() async {
     final auth = context.read<AuthProvider>();
     setState(() => _avatarBusy = true);
@@ -156,7 +163,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
+  /// Lembar bawah pilihan foto: galeri, kamera, dan (bila sudah ada foto) hapus foto.
   void _showAvatarPickerSheet() {
+    // Abaikan ketukan selama unggahan sebelumnya belum selesai.
     if (_avatarBusy) return;
     final user = context.read<AuthProvider>().user;
     if (user == null) {
@@ -310,6 +319,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
+  // ---------------- MODAL EDIT TIAP FIELD ----------------
+
+  /// Lembar bawah berisi satu kolom teks (dipakai untuk mengubah nama). Tombol Simpan menutup lembar lalu memanggil
+  /// [onSave] dengan teks yang sudah dipangkas; teks kosong diabaikan.
   void _showEditTextSheet({
     required String title,
     required String label,
@@ -391,8 +404,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  /// Ubah No. WhatsApp / Email. Keduanya dipakai untuk masuk, jadi server
-  /// meminta kata sandi saat ini.
+  /// Lembar bawah untuk mengubah No. WhatsApp ([isPhone] true) atau email. Keduanya dipakai untuk masuk, jadi server
+  /// meminta kata sandi saat ini; galat dari server tampil di dalam lembar.
   void _showContactEditSheet({
     required bool isPhone,
     required String currentVal,
@@ -413,6 +426,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
+            // Validasi lokal dulu (kosong, tidak berubah, sandi belum diisi), baru simpan ke server.
             Future<void> submit() async {
               final newVal = valueCtrl.text.trim();
               if (newVal.isEmpty) return;
@@ -589,6 +603,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             color: AppColors.primary,
             size: 24,
           ),
+          // Kembali dengan nilai true sebagai tanda profil mungkin berubah.
           onPressed: () => Navigator.pop(context, true),
         ),
         title: Text(
@@ -708,6 +723,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
+  /// Foto profil bulat (atau inisial [name] bila [avatarUrl] kosong) dengan lapisan putaran saat [_avatarBusy].
   Widget _buildAvatarCircle(String name, String? avatarUrl) {
     final hasPhoto = avatarUrl != null && avatarUrl.isNotEmpty;
     return Container(
@@ -747,6 +763,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
+  /// Kartu putih membulat yang membungkus beberapa baris isian.
   Widget _buildGroupCard(List<Widget> children) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
@@ -763,6 +780,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
+  /// Garis pemisah antarbaris di dalam kartu grup.
   Widget _buildDivider() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Divider(
@@ -775,6 +793,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
+  /// Satu baris isian ala Shopee: label di kiri, nilai di kanan, panah; diketuk memanggil [onTap].
   Widget _buildShopeeRow({
     required String label,
     required String value,

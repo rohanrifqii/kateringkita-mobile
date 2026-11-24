@@ -1,3 +1,5 @@
+// Avatar profil: foto dari URL server (`avatar_url`, diunggah lewat AuthRepository) atau inisial nama.
+// Dipakai layar profil dan edit profil.
 import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
@@ -13,11 +15,17 @@ class ProfileAvatar extends StatelessWidget {
     this.borderRadius,
   });
 
+  /// Nama pengguna; huruf pertamanya dipakai sebagai inisial ("U" bila kosong).
   final String name;
+
+  /// URL foto dari server; null/kosong menampilkan inisial.
   final String? url;
+
+  /// Lebar dan tinggi avatar.
   final double size;
   final BorderRadius? borderRadius;
 
+  /// Kotak/lingkaran berisi huruf pertama nama.
   Widget _initials() {
     final n = name.trim();
     return Container(

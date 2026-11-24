@@ -1,3 +1,5 @@
+// Model jawaban Asisten AI dari backend (POST /assistant/recommendations): menu terpilih per toko.
+// Dibuat oleh AssistantRepository, disimpan di riwayat (AiSession), dan ditampilkan layar Asisten AI.
 import 'product_model.dart';
 
 /// Satu menu pilihan asisten. [menu] adalah kartu menu katalog (bisa dibuka
@@ -6,6 +8,8 @@ class RecommendedItem {
   final ProductModel menu;
   final int qty;
   final int subtotal;
+
+  /// Alasan pilihan dari AI; null bila kosong.
   final String? reason;
 
   const RecommendedItem({
@@ -70,6 +74,7 @@ class Recommendation {
     this.json = const {},
   });
 
+  /// True bila menu dipilih AI, false bila menu cadangan (`fallback`).
   bool get isAi => source == 'ai';
 
   factory Recommendation.fromJson(Map<String, dynamic> json) => Recommendation(

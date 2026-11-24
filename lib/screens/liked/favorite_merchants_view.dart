@@ -1,3 +1,5 @@
+// Segmen "Toko" (Dapur Favorit) di layar Favorit: daftar toko yang disimpan pengguna, diambil dari backend
+// lewat FavoriteRepository (GET /me/favorite-merchants). Status hati tiap toko dibaca dari FavoritesProvider.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -12,11 +14,11 @@ import '../../providers/favorites_provider.dart';
 import '../../widgets/favorite_button.dart';
 import '../../widgets/menu_image.dart';
 
-/// Segmen "Toko" di layar Favorit: `GET /me/favorite-merchants`.
+/// Segmen "Toko" di layar Favorit: `GET /me/favorite-merchants`, 50 toko per halaman.
 ///
 /// Dimuat saat segmen dibuka, saat login, dan setiap Dapur Favorit berubah
-/// di layar lain. Toko yang baru dihapus langsung hilang dan muncul lagi bila
-/// server menolak. Hanya dipakai saat sudah login.
+/// (termasuk dari layar lain). Toko yang baru dihapus langsung hilang dan
+/// muncul lagi bila server menolak. Hanya dipakai saat sudah login.
 class FavoriteMerchantsView extends StatefulWidget {
   const FavoriteMerchantsView({super.key});
 
@@ -24,6 +26,7 @@ class FavoriteMerchantsView extends StatefulWidget {
   State<FavoriteMerchantsView> createState() => _FavoriteMerchantsViewState();
 }
 
+/// State segmen Toko: daftar toko yang sudah dimuat, halaman terakhir, dan status muat/galat.
 class _FavoriteMerchantsViewState extends State<FavoriteMerchantsView> {
   static const _pageSize = 50;
 
@@ -33,10 +36,12 @@ class _FavoriteMerchantsViewState extends State<FavoriteMerchantsView> {
   bool _loading = true;
   bool _loadingMore = false;
   String? _error;
+  /// Nomor urut permintaan; jawaban yang datang setelah ada permintaan lebih baru atau setelah logout diabaikan.
   int _seq = 0;
   late final AuthProvider _auth;
   late final FavoritesProvider _favorites;
   late bool _wasLoggedIn;
+  /// [FavoritesProvider.merchantRevision] terakhir yang sudah dimuat; bila naik, daftar dimuat ulang.
   late int _seenRevision;
 
   @override
@@ -48,6 +53,7 @@ class _FavoriteMerchantsViewState extends State<FavoriteMerchantsView> {
     _seenRevision = _favorites.merchantRevision;
     _auth.addListener(_onAuthChanged);
     _favorites.addListener(_onFavoritesChanged);
+    // Muat setelah frame pertama agar setState di _load tidak terjadi saat build.
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -58,6 +64,7 @@ class _FavoriteMerchantsViewState extends State<FavoriteMerchantsView> {
     super.dispose();
   }
 
+  /// Login: muat daftar. Logout: batalkan permintaan yang berjalan dan kosongkan daftar.
   void _onAuthChanged() {
     final now = _auth.isLoggedIn;
     if (now == _wasLoggedIn || !mounted) return;
@@ -76,15 +83,19 @@ class _FavoriteMerchantsViewState extends State<FavoriteMerchantsView> {
     }
   }
 
+  /// Muat ulang diam-diam (tanpa pemutar) bila daftar toko favorit di server berubah.
   void _onFavoritesChanged() {
     if (_favorites.merchantRevision == _seenRevision) return;
     _seenRevision = _favorites.merchantRevision;
     if (mounted && _auth.isLoggedIn) _load(silent: true);
   }
 
+  /// Pesan galat untuk pengguna: pesan dari server bila ada, selain itu pesan umum.
   String _msg(Object e) =>
       e is ApiException ? e.message : 'Terjadi kesalahan. Coba lagi.';
 
+  /// Muat halaman pertama dari GET /me/favorite-merchants. [silent] = tanpa pemutar
+  /// dan galat tidak ditampilkan bila daftar lama masih ada (dipakai tarik-untuk-segarkan).
   Future<void> _load({bool silent = false}) async {
     if (!mounted) return;
     if (!_auth.isLoggedIn) {
@@ -118,6 +129,8 @@ class _FavoriteMerchantsViewState extends State<FavoriteMerchantsView> {
     }
   }
 
+  /// Muat halaman berikutnya dan sambungkan ke daftar; toko yang sudah ada tidak digandakan.
+  /// Galat ditampilkan sebagai snackbar.
   Future<void> _loadMore() async {
     if (_loadingMore) return;
     final repo = context.read<FavoriteRepository>();
@@ -145,6 +158,7 @@ class _FavoriteMerchantsViewState extends State<FavoriteMerchantsView> {
   @override
   Widget build(BuildContext context) {
     final favorites = context.watch<FavoritesProvider>();
+    // Toko yang baru dilepas hatinya langsung disembunyikan, dan jumlahnya ikut dikurangi.
     final shown = _items.where(favorites.isFavoriteMerchant).toList();
     final removed = _items.length - shown.length;
     final count = (_total - removed).clamp(0, _total);
@@ -205,6 +219,7 @@ class _FavoriteMerchantsViewState extends State<FavoriteMerchantsView> {
     );
   }
 
+  /// Tampilan pesan di tengah (kosong/galat) dengan ikon, subjudul, dan tombol opsional.
   Widget _message(IconData icon, String title,
           {String? subtitle, Widget? action}) =>
       Padding(
@@ -235,6 +250,7 @@ class _FavoriteMerchantsViewState extends State<FavoriteMerchantsView> {
         ),
       );
 
+  /// Kartu satu toko: logo, jam buka, penilaian, dan tombol hati. Ketuk kartu membuka profil toko.
   Widget _card(MerchantProfile m) {
     final liked = context.watch<FavoritesProvider>().isFavoriteMerchant(m);
     return GestureDetector(

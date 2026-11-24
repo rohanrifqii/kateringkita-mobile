@@ -1,3 +1,5 @@
+// Penggabung ulasan untuk tab Penilaian di profil toko: mengambil ulasan beberapa menu toko lewat
+// CatalogRepository (GET /menus/{id}/reviews) karena backend belum punya endpoint ulasan per toko.
 import '../models/product_model.dart';
 import 'catalog_repository.dart';
 

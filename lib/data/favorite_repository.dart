@@ -1,8 +1,11 @@
+// Repository favorit: daftar, simpan, dan hapus menu favorit serta toko favorit ("Dapur Favorit").
+// Alur: FavoritesProvider / layar Favorit → FavoriteRepository → ApiClient → backend (/me/favorites...).
 import '../api/api_client.dart';
 import '../models/product_model.dart';
 import 'catalog_repository.dart';
 
-/// Satu halaman toko favorit.
+/// Satu halaman toko favorit dari [FavoriteRepository.listMerchants]:
+/// [items] di halaman ini, [total] seluruh toko favorit, [page] mulai 1.
 class MerchantPage {
   final List<MerchantProfile> items;
   final int total;
@@ -21,7 +24,8 @@ class FavoriteRepository {
 
   final ApiClient _api;
 
-  /// Kartu menu yang sama dengan katalog, terbaru disimpan lebih dulu.
+  /// GET /me/favorites: satu halaman menu favorit. Kartu menu sama dengan
+  /// katalog, yang terakhir disimpan tampil lebih dulu.
   /// Toko tutup & menu habis tetap ikut.
   Future<MenuPage> list({int page = 1, int limit = 20}) async {
     final res = await _api.get('/me/favorites',
@@ -37,13 +41,14 @@ class FavoriteRepository {
     );
   }
 
-  /// Idempoten di server (204).
+  /// PUT /me/favorites/{menuId}: simpan menu ke favorit. Idempoten di server (204).
   Future<void> add(int menuId) => _api.put('/me/favorites/$menuId');
 
-  /// Idempoten di server (204), juga bila belum pernah difavoritkan.
+  /// DELETE /me/favorites/{menuId}: hapus menu dari favorit. Idempoten di
+  /// server (204), juga bila belum pernah difavoritkan.
   Future<void> remove(int menuId) => _api.delete('/me/favorites/$menuId');
 
-  /// Toko favorit ("Dapur Favorit"): kartu sama dengan GET /merchants/:slug,
+  /// GET /me/favorite-merchants: toko favorit ("Dapur Favorit"), kartu sama dengan GET /merchants/:slug,
   /// terbaru dulu; toko tutup tetap ikut.
   Future<MerchantPage> listMerchants({int page = 1, int limit = 20}) async {
     final res = await _api.get('/me/favorite-merchants',
@@ -59,11 +64,12 @@ class FavoriteRepository {
     );
   }
 
-  /// Idempoten (204); toko tidak tampil → 404 "Toko tidak ditemukan.".
+  /// PUT /me/favorite-merchants/{merchantId}: simpan toko. Idempoten (204);
+  /// toko tidak tampil → 404 "Toko tidak ditemukan.".
   Future<void> addMerchant(int merchantId) =>
       _api.put('/me/favorite-merchants/$merchantId');
 
-  /// Idempoten (204).
+  /// DELETE /me/favorite-merchants/{merchantId}: hapus toko. Idempoten (204).
   Future<void> removeMerchant(int merchantId) =>
       _api.delete('/me/favorite-merchants/$merchantId');
 }

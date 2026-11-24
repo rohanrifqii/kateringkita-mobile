@@ -1,3 +1,5 @@
+// Tab Favorit (judul "Liked") di navigasi bawah: segmen Menu (GET /me/favorites lewat FavoriteRepository)
+// dan segmen Toko (FavoriteMerchantsView). Tamu melihat ajakan masuk; status hati dibaca dari FavoritesProvider.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -15,9 +17,10 @@ import '../../widgets/favorite_button.dart';
 import '../../widgets/menu_image.dart';
 import 'favorite_merchants_view.dart';
 
-/// Daftar menu favorit pembeli dari `GET /me/favorites`.
+/// Tab Favorit pembeli: segmen Menu dari `GET /me/favorites` (50 per halaman)
+/// dan segmen Toko ([FavoriteMerchantsView]).
 ///
-/// Dimuat saat login dan dimuat ulang setiap favorit berubah di layar lain
+/// Daftar menu dimuat saat login dan dimuat ulang setiap favorit berubah di layar lain
 /// (ditunda sampai tab ini terlihat). Menu yang baru dihapus dari favorit
 /// langsung hilang dari daftar dan muncul lagi bila server menolak.
 class LikedScreen extends StatefulWidget {
@@ -27,6 +30,7 @@ class LikedScreen extends StatefulWidget {
   State<LikedScreen> createState() => _LikedScreenState();
 }
 
+/// State tab Favorit: daftar menu yang sudah dimuat, segmen aktif, dan status muat/galat.
 class _LikedScreenState extends State<LikedScreen> {
   static const _pageSize = 50;
 
@@ -36,15 +40,19 @@ class _LikedScreenState extends State<LikedScreen> {
   bool _loading = true;
   bool _loadingMore = false;
   String? _error;
+  /// Nomor urut permintaan; jawaban yang datang setelah ada permintaan lebih baru atau setelah logout diabaikan.
   int _seq = 0;
 
   /// 0 = Menu, 1 = Toko (Dapur Favorit).
   int _segment = 0;
+  /// Tab ini sedang terlihat (tab aktif di navigasi bawah dan rutenya paling atas).
   bool _visible = true;
+  /// Favorit berubah saat tab tidak terlihat; daftar dimuat ulang begitu tab terlihat lagi.
   bool _dirty = false;
   late final AuthProvider _auth;
   late final FavoritesProvider _favorites;
   late bool _wasLoggedIn;
+  /// [FavoritesProvider.revision] terakhir yang sudah ditangani.
   late int _seenRevision;
 
   @override
@@ -56,6 +64,7 @@ class _LikedScreenState extends State<LikedScreen> {
     _seenRevision = _favorites.revision;
     _auth.addListener(_onAuthChanged);
     _favorites.addListener(_onFavoritesChanged);
+    // Muat setelah frame pertama agar setState di _load tidak terjadi saat build.
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -63,6 +72,7 @@ class _LikedScreenState extends State<LikedScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
     final route = ModalRoute.of(context);
+    // TickerMode mati saat tab lain di navigasi bawah yang aktif.
     _visible =
         TickerMode.valuesOf(context).enabled && (route?.isCurrent ?? true);
     if (_visible && _dirty) _load(silent: true);
@@ -75,6 +85,7 @@ class _LikedScreenState extends State<LikedScreen> {
     super.dispose();
   }
 
+  /// Login: muat daftar. Logout: batalkan permintaan yang berjalan dan kosongkan daftar.
   void _onAuthChanged() {
     final now = _auth.isLoggedIn;
     if (now == _wasLoggedIn || !mounted) return;
@@ -107,6 +118,8 @@ class _LikedScreenState extends State<LikedScreen> {
     }
   }
 
+  /// Muat halaman pertama dari GET /me/favorites. [silent] = tanpa pemutar dan
+  /// galat tidak ditampilkan bila daftar lama masih ada (dipakai tarik-untuk-segarkan).
   Future<void> _load({bool silent = false}) async {
     if (!mounted) return;
     _dirty = false;
@@ -141,6 +154,8 @@ class _LikedScreenState extends State<LikedScreen> {
     }
   }
 
+  /// Muat halaman berikutnya dan sambungkan ke daftar; menu yang sudah ada tidak digandakan.
+  /// Galat ditampilkan sebagai snackbar.
   Future<void> _loadMore() async {
     if (_loadingMore) return;
     final repo = context.read<FavoriteRepository>();
@@ -165,9 +180,11 @@ class _LikedScreenState extends State<LikedScreen> {
     }
   }
 
+  /// Pesan galat untuk pengguna: pesan dari server bila ada, selain itu pesan umum.
   String _msg(Object e) =>
       e is ApiException ? e.message : 'Terjadi kesalahan. Coba lagi.';
 
+  /// Buka layar detail menu.
   void _openDetail(ProductModel product) {
     Navigator.pushNamed(context, AppRoutes.productDetail, arguments: product);
   }
@@ -176,6 +193,7 @@ class _LikedScreenState extends State<LikedScreen> {
   Widget build(BuildContext context) {
     final loggedIn = context.watch<AuthProvider>().isLoggedIn;
     final favorites = context.watch<FavoritesProvider>();
+    // Menu yang baru dilepas hatinya langsung disembunyikan, dan jumlahnya ikut dikurangi.
     final shown = _items.where(favorites.isFavorite).toList();
     final removed = _items.length - shown.length;
     final count = loggedIn ? (_total - removed).clamp(0, _total) : 0;
@@ -223,6 +241,7 @@ class _LikedScreenState extends State<LikedScreen> {
     );
   }
 
+  /// Chip pemilih segmen Menu (0) / Toko (1).
   Widget _segmentChip(String label, int index) {
     final selected = _segment == index;
     return ChoiceChip(
@@ -242,6 +261,7 @@ class _LikedScreenState extends State<LikedScreen> {
     );
   }
 
+  /// Isi segmen Menu: jumlah, lalu pemutar / galat / kosong / daftar menu dengan tombol "Muat lebih banyak".
   Widget _menuList(List<ProductModel> shown, int count) => RefreshIndicator(
           onRefresh: () => _load(silent: true),
           child: ListView(
@@ -287,6 +307,7 @@ class _LikedScreenState extends State<LikedScreen> {
           ),
         );
 
+  /// Ikon bulat merah untuk tampilan tamu dan daftar kosong.
   Widget _statusIcon(IconData icon) => Container(
         width: 70,
         height: 70,
@@ -297,6 +318,7 @@ class _LikedScreenState extends State<LikedScreen> {
         child: Icon(icon, size: 32, color: AppColors.danger),
       );
 
+  /// Ajakan masuk untuk tamu.
   Widget _guestPrompt() => Padding(
         padding: const EdgeInsets.symmetric(vertical: 60),
         child: Column(
@@ -332,6 +354,7 @@ class _LikedScreenState extends State<LikedScreen> {
         ),
       );
 
+  /// Tampilan galat dengan tombol Coba Lagi.
   Widget _errorState() => Padding(
         padding: const EdgeInsets.symmetric(vertical: 60),
         child: Column(
@@ -349,6 +372,7 @@ class _LikedScreenState extends State<LikedScreen> {
         ),
       );
 
+  /// Tampilan bila belum ada menu favorit.
   Widget _emptyState() => Padding(
         padding: const EdgeInsets.symmetric(vertical: 60),
         child: Column(
@@ -371,6 +395,7 @@ class _LikedScreenState extends State<LikedScreen> {
         ),
       );
 
+  /// Kartu satu menu: foto, nama, toko, harga, keterangan tutup/habis, tombol hati, dan tombol Order (membuka detail).
   Widget _item(ProductModel product) {
     final unavailable = !product.merchant.isOpen
         ? 'Toko sedang tutup'

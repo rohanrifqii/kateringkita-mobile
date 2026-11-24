@@ -1,3 +1,5 @@
+// Model notifikasi in-app dari backend (GET /me/notifications), dibaca lewat NotificationRepository
+// dan ditampilkan di layar Notifikasi.
 import 'dart:convert';
 
 /// Notifikasi in-app dari `GET /me/notifications`.
@@ -9,7 +11,10 @@ class AppNotification {
   final String type;
   final String title;
   final String body;
+  /// Data tambahan sesuai [type], mis. `{order_code, status}` untuk `order_status`.
   final Map<String, dynamic> data;
+
+  /// Waktu dibaca; null berarti belum dibaca.
   final DateTime? readAt;
   final DateTime createdAt;
 
@@ -23,11 +28,20 @@ class AppNotification {
     required this.createdAt,
   });
 
+  /// True bila sudah dibaca ([readAt] terisi).
   bool get isRead => readAt != null;
+
+  /// True untuk notifikasi perubahan status pesanan.
   bool get isOrderStatus => type == 'order_status';
+
+  /// Kode pesanan dari [data]; null bila bukan notifikasi pesanan.
   String? get orderCode => data['order_code'] as String?;
+
+  /// Status pesanan dari [data]; null bila bukan notifikasi pesanan.
   String? get orderStatus => data['status'] as String?;
 
+  /// Salinan yang ditandai dibaca pada [at] (hanya di aplikasi, tanpa
+  /// memanggil server); [readAt] lama dipertahankan bila sudah ada.
   AppNotification markedRead(DateTime at) => AppNotification(
         id: id,
         type: type,

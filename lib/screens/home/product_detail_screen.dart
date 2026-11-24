@@ -1,6 +1,6 @@
 // Layar Detail Produk (rute AppRoutes.productDetail), dibuka saat kartu menu diketuk; argumen rute = ProductModel.
 // Detail menu, ulasan, dan profil toko dimuat lewat CatalogRepository dari backend REST KateringKita;
-// status favorit disimpan lokal di LikedStore.
+// status favorit (ikon hati) disimpan ke server lewat FavoriteButton -> FavoritesProvider (PUT/DELETE /me/favorites/{id}).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
@@ -26,6 +26,7 @@ class ProductDetailScreen extends StatefulWidget {
   State<ProductDetailScreen> createState() => _ProductDetailScreenState();
 }
 
+/// State detail menu: produk yang ditampilkan, opsi terpilih, profil toko, dan ulasan.
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late ProductModel _product;
   // true bila tidak ada produk sama sekali; layar langsung ditutup (pop) setelah frame pertama.
@@ -63,7 +64,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     _load();
   }
 
-  /// Memuat detail menu, ulasan, dan profil toko dari backend secara berurutan. Tiap permintaan
+  /// Memuat detail menu (GET /menus/{id}), ulasan (GET /menus/{id}/reviews), dan profil toko
+  /// (GET /merchants/{slug}) secara berurutan. Tiap permintaan
   /// berdiri sendiri: bila gagal, galatnya diabaikan dan layar tetap memakai data yang sudah ada.
   Future<void> _load() async {
     final repo = context.read<CatalogRepository>();
@@ -557,7 +559,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   // Ikon keranjang dengan lencana jumlah item; diketuk membuka Checkout.
                   const CartButton(),
                   const SizedBox(width: 8),
-                  // Favorite Button
+                  // Favorite Button: simpan/hapus menu favorit di server; tamu diminta masuk dulu.
                   Container(
                     width: 42,
                     height: 42,

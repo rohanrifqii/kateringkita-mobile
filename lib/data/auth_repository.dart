@@ -1,3 +1,5 @@
+// Repository akun pelanggan: login, daftar, lupa sandi, profil, titik temu favorit, dan foto profil.
+// Alur: layar → AuthProvider → AuthRepository → ApiClient → backend REST KateringKita.
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -22,6 +24,7 @@ class AuthRepository {
   /// Batas ukuran foto profil, sama dengan server.
   static const int avatarMaxBytes = 5242880;
 
+  /// Ekstensi berkas yang diterima → content type yang dikirim ke server.
   static const _avatarTypes = {
     'jpg': 'image/jpeg',
     'jpeg': 'image/jpeg',
@@ -221,6 +224,7 @@ class AuthRepository {
   /// Hapus foto profil (server menyimpan "" sebagai null).
   Future<ApiUser> removeAvatar() => _setAvatarUrl('');
 
+  /// PATCH /me {avatar_url}; pesan galat kolom avatar_url dipakai bila ada.
   Future<ApiUser> _setAvatarUrl(String url) async =>
       _userFrom(await _withFieldMessage(
         () => _api.patch('/me', body: {'avatar_url': url}),
@@ -268,6 +272,7 @@ class AuthRepository {
     }
   }
 
+  /// Galat validasi lokal berbentuk sama dengan galat 400 dari server.
   static ApiException _invalid(String field, String message) => ApiException(
         status: 400,
         code: 'VALIDATION_ERROR',
@@ -277,6 +282,7 @@ class AuthRepository {
         },
       );
 
+  /// Mengambil objek `user` dari balasan server.
   ApiUser _userFrom(ApiResponse res) => ApiUser.fromJson(
       (res.data as Map<String, dynamic>)['user'] as Map<String, dynamic>);
 }

@@ -1,5 +1,5 @@
-// Titik masuk aplikasi: menyiapkan penyimpanan lokal dan tema, lalu memasang semua provider
-// (tema, keranjang, ApiClient, AuthRepository, AuthProvider, CatalogRepository, OrderRepository) di atas seluruh layar.
+// Titik masuk aplikasi: membaca pilihan tema tersimpan, lalu memasang semua provider (tema, keranjang, ApiClient,
+// auth, katalog, pesanan, favorit, notifikasi, Asisten AI, riwayat AI) di atas seluruh layar.
 // Layar membaca provider ini untuk mengakses data: layar → provider → repository → ApiClient → backend.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -28,8 +28,8 @@ import 'providers/theme_provider.dart';
 
 /// Fungsi pertama yang dijalankan saat aplikasi dibuka.
 ///
-/// Urutannya: memuat daftar menu yang disukai ([LikedStore]), membaca pilihan mode gelap
-/// yang tersimpan, mengatur warna status bar dan bilah navigasi sistem sesuai tema,
+/// Urutannya: membaca pilihan mode gelap yang tersimpan, mengatur warna status bar dan
+/// bilah navigasi sistem sesuai tema,
 /// lalu menjalankan [KateringKitaApp] di dalam [MultiProvider].
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -64,7 +64,8 @@ void main() async {
 ///
 /// Membungkus [child] dengan [MultiProvider]. [client] bisa diisi klien HTTP palsu saat
 /// pengujian; [isDark] adalah mode gelap awal. Di sini juga diatur: penanganan 401 global
-/// (hapus sesi lalu buka layar Login) dan pengosongan keranjang saat pengguna keluar.
+/// (hapus sesi lalu buka layar Login) dan pengosongan keranjang, favorit, serta lencana
+/// notifikasi saat pengguna keluar.
 Widget buildAppProviders({
   required Widget child,
   http.Client? client,

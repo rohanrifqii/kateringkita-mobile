@@ -1,3 +1,6 @@
+// Barrel ekspor layar: mengumpulkan ekspor layar utama agar bisa diimpor sekaligus lewat `screens/screens.dart`.
+// Saat ini belum ada berkas yang mengimpornya; layar lain mengimpor berkas layar secara langsung.
+
 // Auth & Security
 export 'auth/forgot_password_screen.dart';
 export 'auth/login_screen.dart';

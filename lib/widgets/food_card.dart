@@ -1,3 +1,5 @@
+// Kartu menu (FoodGridCard) untuk grid menu di beranda.
+// Data dari ProductModel; tombol hati memakai FavoriteButton (favorit tersimpan di server).
 import 'favorite_button.dart';
 import 'menu_image.dart';
 import 'package:flutter/material.dart';
@@ -7,8 +9,8 @@ import '../core/app_routes.dart';
 import '../core/app_text_styles.dart';
 import '../models/product_model.dart';
 
-/// Kartu satu menu: gambar dengan label status ([ProductModel.badgeText]), nama menu,
-/// nama toko, harga, dan rating.
+/// Kartu satu menu: gambar dengan label status ([ProductModel.badgeText]), tombol hati
+/// favorit ([FavoriteButton]), nama menu, nama toko, harga, dan rating.
 ///
 /// Mengetuk kartu menjalankan [onTap] (biasanya membuka detail menu). Mengetuk baris nama
 /// toko membuka profil toko (rute `AppRoutes.storeProfile`) dengan slug toko sebagai argumen.

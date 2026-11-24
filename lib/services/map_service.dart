@@ -1,3 +1,5 @@
+// Konstanta peta OpenStreetMap untuk peta latar di checkout dan pemilih titik temu; tanpa panggilan backend.
+
 /// Konfigurasi peta latar OpenStreetMap (tanpa API key).
 ///
 /// Titik temu dari backend belum punya koordinat, jadi peta hanya latar area

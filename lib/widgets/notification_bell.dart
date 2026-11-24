@@ -1,3 +1,5 @@
+// Lonceng notifikasi di beranda dengan lencana jumlah belum dibaca; mengetuknya membuka layar Notifikasi.
+// Jumlah dibaca dari NotificationProvider (GET /me/notifications lewat NotificationRepository).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -16,6 +18,7 @@ import '../providers/notification_provider.dart';
 class NotificationBell extends StatefulWidget {
   const NotificationBell({super.key});
 
+  /// Jeda polling jumlah belum dibaca.
   static const pollInterval = Duration(seconds: 30);
 
   @override
@@ -41,6 +44,8 @@ class _NotificationBellState extends State<NotificationBell>
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
   }
 
+  // Lonceng dianggap terlihat bila tab aktif dan rutenya paling atas; saat
+  // kembali terlihat (mis. sepulang dari layar lain) jumlah diambil ulang.
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -52,6 +57,7 @@ class _NotificationBellState extends State<NotificationBell>
     if (becameVisible) _refresh();
   }
 
+  // Di latar belakang polling tidak meminta ke server; ambil ulang saat aplikasi kembali ke depan.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
@@ -66,6 +72,7 @@ class _NotificationBellState extends State<NotificationBell>
     super.dispose();
   }
 
+  // Ambil jumlah begitu pengguna baru login.
   void _onAuthChanged() {
     final now = _auth.isLoggedIn;
     if (now == _wasLoggedIn) return;
@@ -73,11 +80,13 @@ class _NotificationBellState extends State<NotificationBell>
     if (now) _refresh();
   }
 
+  // Hanya meminta ke server bila lonceng terlihat, aplikasi di depan, dan pengguna login.
   void _refresh() {
     if (!mounted || !_visible || !_foreground || !_auth.isLoggedIn) return;
     context.read<NotificationProvider>().refresh();
   }
 
+  // Buka layar Notifikasi, lalu perbarui lencana setelah kembali.
   Future<void> _open() async {
     await Navigator.pushNamed(context, AppRoutes.notifications);
     _refresh();

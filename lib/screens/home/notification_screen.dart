@@ -1,3 +1,6 @@
+// Layar Notifikasi: dibuka dari ikon lonceng di Beranda. Daftarnya diambil dari server lewat NotificationRepository
+// (GET /me/notifications, tandai dibaca lewat POST /me/notifications/read) dan jumlah belum dibaca disinkronkan ke
+// NotificationProvider supaya lencana lonceng ikut berubah. Tamu hanya melihat ajakan masuk.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -12,14 +15,16 @@ import '../../models/app_notification.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
 
-/// Tab daftar Pesanan yang memuat pesanan berstatus [status].
+/// Nama tab layar Pesanan ('active', 'completed', atau 'cancelled') yang memuat pesanan berstatus [status];
+/// status 'expired' ikut tab 'cancelled', status lain atau null jatuh ke 'active'.
 String orderTabForStatus(String? status) => switch (status) {
       'completed' => 'completed',
       'cancelled' || 'expired' => 'cancelled',
       _ => 'active',
     };
 
-/// Notifikasi in-app dari `GET /me/notifications`.
+/// Layar daftar notifikasi in-app milik pengguna yang login, diambil dari `GET /me/notifications` dengan paginasi
+/// 20 per halaman, filter chip per tipe, tandai dibaca satu per satu atau sekaligus, dan tarik-untuk-muat-ulang.
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
 
@@ -27,10 +32,12 @@ class NotificationScreen extends StatefulWidget {
   State<NotificationScreen> createState() => _NotificationScreenState();
 }
 
+/// State layar Notifikasi: memegang daftar yang sudah dimuat, halaman terakhir, dan status muat/galat.
 class _NotificationScreenState extends State<NotificationScreen> {
+  /// Jumlah notifikasi per halaman yang diminta ke server.
   static const _pageSize = 20;
 
-  /// Chip → `type` di server (null = semua tipe).
+  /// Label chip → nilai `type` yang dikirim ke server (null = semua tipe).
   static const _categories = <String, String?>{
     'Semua': null,
     'Pesanan': 'order_status',
@@ -39,16 +46,27 @@ class _NotificationScreenState extends State<NotificationScreen> {
   };
 
   String _selectedCategory = 'Semua';
+
+  /// Nilai `type` untuk chip yang sedang dipilih.
   String? get _type => _categories[_selectedCategory];
   List<AppNotification> _items = const [];
+
+  /// Jumlah total notifikasi menurut server; dipakai untuk menentukan apakah tombol "Muat lebih banyak" tampil.
   int _total = 0;
+
+  /// Halaman terakhir yang sudah dimuat (0 = belum ada).
   int _page = 0;
   bool _loading = true;
   bool _loadingMore = false;
   bool _markingAll = false;
   String? _error;
+
+  /// Nomor urut permintaan: jawaban server yang datang setelah chip diganti atau pengguna keluar (nomornya sudah
+  /// tidak sama) dibuang supaya tidak menimpa daftar yang lebih baru.
   int _seq = 0;
   late final AuthProvider _auth;
+
+  /// Status login terakhir yang diketahui, untuk mendeteksi perubahan masuk/keluar di [_onAuthChanged].
   late bool _wasLoggedIn;
 
   @override
@@ -57,6 +75,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     _auth = context.read<AuthProvider>();
     _wasLoggedIn = _auth.isLoggedIn;
     _auth.addListener(_onAuthChanged);
+    // Muat setelah frame pertama supaya context.read di _load aman dipakai.
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -66,6 +85,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     super.dispose();
   }
 
+  /// Dipanggil AuthProvider: setelah login daftar dimuat; setelah keluar daftar dikosongkan dan permintaan yang
+  /// masih berjalan dibatalkan dengan menaikkan [_seq].
   void _onAuthChanged() {
     final now = _auth.isLoggedIn;
     if (now == _wasLoggedIn || !mounted) return;
@@ -98,9 +119,11 @@ class _NotificationScreenState extends State<NotificationScreen> {
     _load();
   }
 
+  /// Pesan galat untuk pengguna: pesan dari server bila galatnya [ApiException], selain itu pesan umum.
   String _msg(Object e) =>
       e is ApiException ? e.message : 'Terjadi kesalahan. Coba lagi.';
 
+  /// Menampilkan snackbar mengambang, menggantikan snackbar yang sedang tampil.
   void _snack(String text) => ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
@@ -108,6 +131,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
       behavior: SnackBarBehavior.floating,
     ));
 
+  /// Memuat halaman pertama dari `GET /me/notifications` (dengan `type` chip aktif) dan menyamakan lencana belum
+  /// dibaca. [silent] = true dipakai tarik-untuk-muat-ulang: tanpa indikator muat, dan galat hanya ditampilkan bila
+  /// daftar masih kosong. Tamu tidak memanggil server.
   Future<void> _load({bool silent = false}) async {
     if (!mounted) return;
     if (!_auth.isLoggedIn) {
@@ -143,6 +169,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
+  /// Memuat halaman berikutnya lalu menambahkannya ke daftar; notifikasi yang id-nya sudah ada dilewati supaya
+  /// tidak dobel bila ada notifikasi baru yang menggeser halaman. Galat ditampilkan sebagai snackbar.
   Future<void> _loadMore() async {
     if (_loadingMore) return;
     final repo = context.read<NotificationRepository>();
@@ -167,6 +195,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
+  /// Tombol "Tandai Dibaca": `POST /me/notifications/read` dengan `{all: true}`, lencana diisi sisa belum dibaca
+  /// dari server, dan semua item yang sudah dimuat ditandai dibaca di layar.
   Future<void> _markAllAsRead() async {
     if (_markingAll) return;
     final repo = context.read<NotificationRepository>();
@@ -187,15 +217,17 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
+  /// Mengganti item dengan id yang sama di daftar (tidak berbuat apa-apa bila tidak ada).
   void _replace(AppNotification n) {
     final i = _items.indexWhere((e) => e.id == n.id);
     if (i < 0) return;
     setState(() => _items = [..._items]..[i] = n);
   }
 
-  /// Ditandai dibaca langsung (dikembalikan bila server menolak), lalu
-  /// notifikasi pesanan membuka daftar Pesanan di tab & kode yang sesuai.
+  /// Ketuk notifikasi: ditandai dibaca langsung (dikembalikan bila server menolak), lalu notifikasi status pesanan
+  /// membuka layar Pesanan di tab yang sesuai dengan kode pesanan sebagai kata pencarian (`q`).
   Future<void> _open(AppNotification n) async {
+    // Tidak ditunggu: navigasi tidak perlu menunggu jawaban server.
     if (!n.isRead) _markRead(n);
     final code = n.orderCode;
     if (n.isOrderStatus && code != null && code.isNotEmpty) {
@@ -206,6 +238,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
+  /// Menandai satu notifikasi dibaca secara optimistis (tampilan dan lencana langsung berubah), lalu mengirim
+  /// `POST /me/notifications/read` dengan id-nya. Bila gagal, item dan lencana dikembalikan seperti semula.
   Future<void> _markRead(AppNotification n) async {
     final repo = context.read<NotificationRepository>();
     final badge = context.read<NotificationProvider>();
@@ -214,6 +248,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     badge.setUnread(badge.unreadCount - 1);
     try {
       final left = await repo.markRead([n.id]);
+      // Lencana disamakan dengan sisa belum dibaca menurut server.
       if (mounted && seq == _seq) badge.setUnread(left);
     } catch (_) {
       if (!mounted || seq != _seq) return;
@@ -226,6 +261,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   Widget build(BuildContext context) {
     final loggedIn = context.watch<AuthProvider>().isLoggedIn;
     final unread = context.watch<NotificationProvider>().unreadCount;
+    // Tombol "Tandai Dibaca" tampil bila lencana > 0 atau masih ada item belum dibaca di layar.
     final hasUnread = unread > 0 || _items.any((n) => !n.isRead);
 
     return Scaffold(
@@ -266,6 +302,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
+  /// Baris chip kategori yang bisa digeser mendatar; mengetuk chip memanggil [_selectCategory].
   Widget _filterChips() => SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
@@ -305,6 +342,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
       );
 
+  /// Isi daftar: indikator muat, pesan galat dengan "Coba Lagi", pesan kosong, atau kartu notifikasi plus tombol
+  /// "Muat lebih banyak" selama jumlah yang dimuat masih di bawah total server.
   Widget _body() {
     if (_loading && _items.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -356,6 +395,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     );
   }
 
+  /// Pesan di tengah daftar (ikon, judul, subjudul, dan tombol opsional) untuk keadaan kosong atau galat.
   Widget _message({
     required IconData icon,
     required String title,
@@ -394,6 +434,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
       );
 
+  /// Tampilan untuk tamu: ajakan masuk dengan tombol yang membuka alur login.
   Widget _guestPrompt() => Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -433,6 +474,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
       );
 
+  /// Ikon dan warna kartu menurut tipe notifikasi; notifikasi pesanan dibedakan lagi menurut status pesanannya.
   (IconData, Color) _iconOf(AppNotification n) {
     switch (n.type) {
       case 'order_status':
@@ -451,6 +493,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
   }
 
+  /// Kartu satu notifikasi: latar berwarna dan titik penanda bila belum dibaca, waktu relatif (WIB) di bawah isi.
   Widget _tile(AppNotification item) {
     final (icon, color) = _iconOf(item);
     return InkWell(

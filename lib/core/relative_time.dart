@@ -1,13 +1,17 @@
+// Pemformat waktu relatif ("5 menit lalu", "Kemarin · 23:30 WIB") untuk daftar seperti layar Notifikasi.
+// Memakai konversi WIB dari pickup_time.dart; murni lokal, tanpa backend.
 import 'pickup_time.dart';
 
 /// Waktu relatif dalam WIB untuk daftar seperti notifikasi:
 /// "Baru saja", "5 menit lalu", "3 jam lalu", "Kemarin · 23:30 WIB",
 /// "3 hari lalu", lalu tanggal lengkap ("Min, 1 Nov 2026 · 08:05 WIB").
-/// "Kemarin"/hari dihitung dari tanggal kalender WIB.
+/// "Kemarin"/hari dihitung dari tanggal kalender WIB. [now] bisa diisi saat
+/// pengujian; bawaannya jam perangkat.
 String relativeTimeWib(DateTime time, {DateTime? now}) {
   final t = time.toUtc();
   final n = (now ?? DateTime.now()).toUtc();
   final diff = n.difference(t);
+  // Di bawah 1 jam cukup selisih menit; selebihnya dihitung per tanggal kalender WIB.
   if (diff.inMinutes < 1) return 'Baru saja';
   if (diff.inMinutes < 60) return '${diff.inMinutes} menit lalu';
 

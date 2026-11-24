@@ -1,3 +1,5 @@
+// Repository Asisten AI: meminta rekomendasi menu ke backend lalu mengubahnya jadi [Recommendation].
+// Alur: layar Asisten AI → AssistantRepository (disediakan di main.dart) → ApiClient → backend.
 import '../api/api_client.dart';
 import '../models/recommendation.dart';
 
@@ -11,6 +13,8 @@ class AssistantRepository {
   /// [question] 3–500 karakter. [budget] Rp 1.000–100.000.000 dan
   /// [portions] 1–1.000 bila diisi. Server membatasi 10 pertanyaan per 10
   /// menit (429) dan memberi menu cadangan bila AI tidak tersedia.
+  /// [category]/[merchant] berupa slug, [pickupPointId] id titik temu; nilai
+  /// null tidak dikirim. Galat server diteruskan sebagai `ApiException`.
   Future<Recommendation> recommend({
     required String question,
     int? budget,

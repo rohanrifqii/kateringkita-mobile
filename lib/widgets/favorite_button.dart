@@ -1,3 +1,5 @@
+// Tombol hati favorit dan fungsi simpan/hapus favorit menu atau toko, dipakai kartu menu, detail menu,
+// dan profil toko. Alur: widget → FavoritesProvider → FavoriteRepository → backend.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -45,6 +47,8 @@ Future<void> toggleFavoriteMerchant(
   );
 }
 
+/// Logika bersama [toggleFavorite] dan [toggleFavoriteMerchant]: abaikan bila
+/// [busy], minta login untuk tamu, panggil [save], lalu tampilkan SnackBar.
 Future<void> _toggle(
   BuildContext context, {
   required bool busy,
@@ -65,6 +69,7 @@ Future<void> _toggle(
   }
 
   final bool value;
+  // Tamu diminta login dulu; setelah berhasil, menu/toko selalu disimpan (bukan dibalik).
   if (context.read<AuthProvider>().isLoggedIn) {
     value = !current();
   } else {
@@ -96,7 +101,10 @@ class FavoriteButton extends StatelessWidget {
     this.compact = false,
   });
 
+  /// Menu yang status favoritnya ditampilkan.
   final ProductModel menu;
+
+  /// Ukuran ikon hati.
   final double size;
 
   /// Warna hati kosong; bawaan [AppColors.textPrimary].

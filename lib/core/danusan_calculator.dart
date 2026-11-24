@@ -1,3 +1,5 @@
+// Kalkulator danusan (jualan untuk dana kegiatan) di layar Asisten AI: menghitung modal, sisa anggaran,
+// pendapatan, laba, dan ROI dari total rekomendasi server. Murni hitungan lokal, tanpa panggilan backend.
 import 'app_currency.dart';
 
 /// Perkiraan danusan dari rekomendasi server + harga jual isian pembeli.
@@ -16,7 +18,10 @@ class DanusanEstimate {
   /// Harga jual per porsi isian pembeli; null bila kosong/≤ 0.
   final int? hargaJual;
 
+  /// Harga jual × [totalQty]; null bila harga jual kosong.
   final int? pendapatan;
+
+  /// Pendapatan − modal terpakai (negatif berarti rugi); null bila harga jual kosong.
   final int? laba;
 
   /// Laba / modal terpakai dalam persen, 1 desimal. Null bila tanpa harga
@@ -33,9 +38,14 @@ class DanusanEstimate {
     required this.roiPercent,
   });
 
+  /// True bila harga jual diisi sehingga pendapatan, laba, dan ROI bisa
+  /// dihitung (bukan berarti untung; laba bisa negatif).
   bool get hasProfit => pendapatan != null;
 }
 
+/// Menghitung [DanusanEstimate] dari [total] (modal = total harga rekomendasi
+/// server, Rupiah) dan [totalQty] porsi. [budget] opsional untuk sisa modal;
+/// [sellPrice] null atau ≤ 0 dianggap belum diisi. Tidak melempar galat.
 DanusanEstimate estimateDanusan({
   required int total,
   required int totalQty,
@@ -61,7 +71,8 @@ DanusanEstimate estimateDanusan({
   );
 }
 
-/// "+104,5%", "-20%", "0%", atau "–" bila tidak terdefinisi.
+/// Format ROI untuk tampilan: "+104,5%", "-20%", "0%", atau "–" bila
+/// [percent] null. Angka bulat ditulis tanpa desimal, desimal memakai koma.
 String formatRoi(double? percent) {
   if (percent == null) return '–';
   if (percent == 0) return '0%';
@@ -72,7 +83,7 @@ String formatRoi(double? percent) {
   return '${percent > 0 ? '+' : '-'}$text%';
 }
 
-/// "+Rp 460.000", "-Rp 20.000", "Rp 0".
+/// Rupiah bertanda untuk laba/rugi: "+Rp 460.000", "-Rp 20.000", "Rp 0".
 String formatSignedRupiah(int amount) {
   if (amount == 0) return AppCurrency.format(0);
   return '${amount > 0 ? '+' : '-'}${AppCurrency.format(amount.abs())}';

@@ -1,9 +1,12 @@
+// Dialog modal bergaya KateringKita (ikon tanya/centang, judul, pesan, tombol) beserta pintasan untuk
+// kasus umum: keluar akun, konfirmasi bayar, sandi diperbarui, berhasil login, dan pusat bantuan.
 import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
 import '../core/app_currency.dart';
 import '../core/app_text_styles.dart';
 
+/// Jenis ikon modal: [question] tanda tanya, [success] tanda centang.
 enum AppModalType { question, success }
 
 /// Modal popup dialog kustom sesuai desain Figma KateringKita.
@@ -27,7 +30,8 @@ class AppModalDialog extends StatelessWidget {
     this.onSecondaryPressed,
   });
 
-  /// Menampilkan modal dialog secara umum dengan transisi halus
+  /// Menampilkan modal dialog secara umum dengan transisi halus (memperbesar
+  /// dan memudar). Mengembalikan nilai yang diberikan ke `Navigator.pop`.
   static Future<T?> show<T>({
     required BuildContext context,
     required AppModalType type,
@@ -66,7 +70,8 @@ class AppModalDialog extends StatelessWidget {
     );
   }
 
-  /// 1. Modal Konfirmasi Logout
+  /// 1. Modal Konfirmasi Logout. Tombol "Ya, Keluar" menutup modal (hasil
+  /// true) lalu menjalankan [onConfirm]; "Batal" mengembalikan false.
   static Future<bool?> showLogout(
     BuildContext context, {
     required Future<void> Function() onConfirm,
@@ -87,7 +92,8 @@ class AppModalDialog extends StatelessWidget {
     );
   }
 
-  /// 2. Modal Konfirmasi Proses Pembayaran di Checkout
+  /// 2. Modal Konfirmasi Proses Pembayaran di Checkout, menampilkan [total].
+  /// Hasil true lalu [onConfirm] dipanggil bila disetujui, false bila batal.
   static Future<bool?> showPaymentConfirmation(
     BuildContext context, {
     required double total,
@@ -109,7 +115,8 @@ class AppModalDialog extends StatelessWidget {
     );
   }
 
-  /// 3. Modal Password Berhasil Diperbarui
+  /// 3. Modal Password Berhasil Diperbarui; tidak bisa ditutup dengan ketuk
+  /// luar, tombolnya menutup modal lalu memanggil [onConfirm].
   static Future<void> showPasswordResetSuccess(
     BuildContext context, {
     required VoidCallback onConfirm,
@@ -129,7 +136,8 @@ class AppModalDialog extends StatelessWidget {
     );
   }
 
-  /// 4. Modal Berhasil Login
+  /// 4. Modal Berhasil Login; [message] mengganti teks bawaan. Tombol "Ke
+  /// Beranda" menutup modal lalu memanggil [onConfirm].
   static Future<void> showLoginSuccess(
     BuildContext context, {
     required VoidCallback onConfirm,
@@ -150,7 +158,8 @@ class AppModalDialog extends StatelessWidget {
     );
   }
 
-  /// 5. Modal Pusat Bantuan (Customer Service WhatsApp)
+  /// 5. Modal Pusat Bantuan (Customer Service WhatsApp); tombol utama menutup
+  /// modal lalu memanggil [onWhatsAppPressed].
   static Future<void> showCustomerSupport(
     BuildContext context, {
     required VoidCallback onWhatsAppPressed,

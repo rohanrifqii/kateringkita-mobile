@@ -1,3 +1,6 @@
+// Layar Profil & Pengaturan (tab Profil di navigasi bawah). Data akun diambil dari AuthProvider (dimuat saat
+// splash/login lewat GET /me); dari sini pengguna membuka Ubah Profil, mengganti sandi (PUT /me/password), mengatur
+// tema, membaca FAQ/S&K/kebijakan privasi (teks statis), menghubungi CS WhatsApp, dan keluar (POST /auth/logout).
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -16,7 +19,8 @@ import '../../widgets/app_modal_dialog.dart';
 import '../../widgets/profile_avatar.dart';
 import 'edit_profile_screen.dart';
 
-/// Halaman profil & pengaturan. Untuk tamu (tanpa sesi) kartu profil memakai nilai contoh.
+/// Halaman profil & pengaturan. Untuk tamu (tanpa sesi) kartu profil diganti ajakan Masuk/Daftar, dan bagian
+/// Akun & Keamanan serta tombol Keluar disembunyikan.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -24,9 +28,10 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
+/// State layar Profil: lembar bawah tiap menu dan susunan kartu pengaturan.
 class _ProfileScreenState extends State<ProfileScreen> {
-  /// Data profil dari [AuthProvider.user]: dimuat saat splash/login dan
-  /// diperbarui oleh layar Ubah Profil, jadi tidak perlu GET /me sendiri.
+  /// Buka layar Ubah Profil. Layar ini tidak memuat ulang data setelah kembali: [AuthProvider.user] sudah
+  /// diperbarui oleh layar Ubah Profil, dan build() memantaunya lewat context.watch.
   void _openEditProfile() {
     Navigator.push(
       context,
@@ -88,7 +93,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ==================== BOTTOM SHEETS UNTUK TIAP MENU ====================
 
-  /// 1. Sheet Password & Keamanan
+  /// 1. Lembar Password & Keamanan: ubah sandi lewat [AuthRepository.changePassword] (PUT /me/password).
+  /// Aturan sandi baru dan konfirmasinya dicek dulu di perangkat; galat server tampil di dalam lembar.
   void _showPasswordSecuritySheet() {
     final currentPwdCtrl = TextEditingController();
     final newPwdCtrl = TextEditingController();
@@ -223,6 +229,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           return;
                         }
 
+                        // Langsung ke repository: ganti sandi tidak mengubah data user di AuthProvider.
                         final repo = context.read<AuthRepository>();
                         final err = await repo.changePassword(
                           currentPassword: cur,
@@ -256,7 +263,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// 2. Sheet Pusat Bantuan & FAQ
+  /// 2. Lembar Pusat Bantuan & FAQ (teks statis di aplikasi).
   void _showHelpFaqSheet() {
     // Hanya perilaku aplikasi yang nyata (lihat checkout, pembayaran, tab
     // Pesanan, Asisten AI). Jangan tambahkan janji yang tidak ada di server.
@@ -370,7 +377,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// 3. Sheet Syarat & Ketentuan Layanan / Kebijakan Privasi
+  /// 3. Lembar dokumen teks statis (Syarat & Ketentuan / Kebijakan Privasi): [sections] berisi pasangan (judul, isi).
   void _showLegalDocumentSheet({
     required String title,
     required List<(String, String)> sections,
@@ -451,7 +458,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// 4. Sheet Tentang KateringKita
+  /// 4. Lembar Tentang KateringKita, menampilkan versi aplikasi dari [kAppVersion].
   void _showAboutAppSheet() {
     showModalBottomSheet(
       context: context,
@@ -720,6 +727,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     onTap: () {
                       AppModalDialog.showLogout(
                         context,
+                        // Keluar: hapus sesi (server + token lokal), lalu kosongkan tumpukan layar dan buka Login.
                         onConfirm: () async {
                           final nav = Navigator.of(context);
                           await context.read<AuthProvider>().logout();
@@ -902,6 +910,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Kartu profil akun yang masuk: foto/inisial dan nama; diketuk membuka Ubah Profil.
   Widget _buildProfileHeaderCard({required String name, String? avatarUrl}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
@@ -994,6 +1003,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Judul kecil berhuruf kapital di atas tiap kelompok menu.
   Widget _buildSectionHeader(String title) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
@@ -1010,6 +1020,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Kartu yang membungkus beberapa baris menu dalam satu kelompok.
   Widget _buildSectionCard(List<Widget> children) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
@@ -1033,6 +1044,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Garis pemisah antarbaris menu di dalam kartu.
   Widget _buildCardDivider() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Divider(
@@ -1045,6 +1057,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Satu baris menu: ikon berlatar, judul, subjudul opsional, dan panah; diketuk memanggil [onTap].
   Widget _buildSettingTile({
     required IconData icon,
     required Color iconBg,
@@ -1115,6 +1128,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Baris Tema Tampilan dengan pilihan Terang/Gelap; pilihan disimpan lewat [ThemeProvider.setDarkMode].
   Widget _buildThemeToggleTile() {
     final themeProvider = context.watch<ThemeProvider>();
     final isDark = themeProvider.isDarkMode;
@@ -1187,6 +1201,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   selected: !isDark,
                   isDark: isDark,
                   onTap: () async {
+                    // Abaikan bila tema yang dipilih sudah aktif.
                     if (!isDark) return;
                     await themeProvider.setDarkMode(false);
                     _showToast(
@@ -1214,6 +1229,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Satu tombol pilihan tema (Terang/Gelap) di dalam baris Tema Tampilan.
   Widget _buildThemeOptionChip({
     required String label,
     required bool selected,

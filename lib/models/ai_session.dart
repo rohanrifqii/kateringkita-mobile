@@ -1,13 +1,17 @@
+// Model satu sesi Asisten AI (pertanyaan + jawaban server) yang disimpan lokal oleh AiHistoryStore
+// sebagai JSON, lalu ditampilkan di riwayat layar Asisten AI.
 import 'recommendation.dart';
 
 /// Satu sesi Asisten AI yang disimpan di perangkat: pertanyaan, parameter,
 /// dan snapshot jawaban server saat [savedAt]. Harga & stok di snapshot bisa
 /// sudah berubah; layar menawarkan "Perbarui" untuk memanggil ulang API.
 class AiSession {
+  /// Pengenal unik sesi, dibuat oleh aplikasi.
   final String id;
   final String question;
   final int? budget;
   final int? portions;
+  /// Harga jual per porsi isian pembeli untuk kalkulator danusan.
   final int? sellPrice;
   final String? category;
   final Recommendation result;
@@ -24,6 +28,7 @@ class AiSession {
     required this.savedAt,
   });
 
+  /// Salinan sesi dengan harga jual [value] baru; kolom lain tetap.
   AiSession withSellPrice(int? value) => AiSession(
         id: id,
         question: question,
@@ -35,6 +40,8 @@ class AiSession {
         savedAt: savedAt,
       );
 
+  /// Salinan sesi dengan jawaban server baru [value] dan waktu simpan [at]
+  /// (dipakai saat "Perbarui").
   AiSession withResult(Recommendation value, DateTime at) => AiSession(
         id: id,
         question: question,
@@ -46,6 +53,7 @@ class AiSession {
         savedAt: at,
       );
 
+  /// Bentuk JSON untuk disimpan; jawaban disimpan sebagai JSON mentah server.
   Map<String, dynamic> toJson() => {
         'id': id,
         'question': question,
@@ -57,7 +65,7 @@ class AiSession {
         'saved_at': savedAt.toUtc().toIso8601String(),
       };
 
-  /// null bila data rusak/tidak lengkap.
+  /// Membaca sesi dari JSON hasil [toJson]; null bila data rusak/tidak lengkap.
   static AiSession? tryFromJson(Object? raw) {
     if (raw is! Map) return null;
     try {

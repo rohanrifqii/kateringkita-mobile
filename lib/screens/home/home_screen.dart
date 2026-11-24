@@ -1,6 +1,6 @@
-// Layar Beranda (tab pertama MainNavigationScreen): titik temu, pencarian, kategori, banner promo, dan daftar menu.
-// Kategori & menu diambil lewat CatalogRepository dari backend REST KateringKita (/meta/categories, /menus);
-// titik temu disimpan lokal di SettingsStore, sedangkan banner promo masih data statis di berkas ini.
+// Layar Beranda (tab pertama MainNavigationScreen): titik temu favorit, pencarian, kategori, banner info, dan daftar menu.
+// Kategori, menu, dan titik temu diambil lewat CatalogRepository (GET /meta/categories, /menus, /meta/pickup-points);
+// titik temu favorit disimpan ke profil lewat AuthProvider (PATCH /me). Banner info layanan masih data statis di berkas ini.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -19,7 +19,7 @@ import '../../widgets/food_card.dart';
 import '../../widgets/notification_bell.dart';
 import '../orders/pickup_point_picker_screen.dart';
 
-/// Layar Beranda: menampilkan katalog menu dari backend yang bisa difilter per kategori.
+/// Layar Beranda: katalog menu dari backend yang bisa difilter per kategori, plus pemilih titik temu favorit.
 class HomeScreen extends StatefulWidget {
   /// Callback dari MainNavigationScreen untuk berpindah tab bawah (indeks tab).
   final Function(int)? onTabChange;
@@ -30,6 +30,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+/// Tujuan tombol banner: layar cari, tab Pesanan, atau tab Asisten AI.
 enum _BannerAction { search, orders, assistant }
 
 /// Banner informasi layanan. Backend tidak punya promo publik (promo hanya
@@ -54,8 +55,11 @@ class _InfoBanner {
   final _BannerAction? action;
 }
 
+/// State Beranda: kategori terpilih, daftar kategori/menu, banner aktif, dan titik temu.
 class _HomeScreenState extends State<HomeScreen> {
+  /// Nama kategori terpilih untuk ditampilkan ('Semua' bila tanpa filter).
   String _selectedCategory = 'Semua';
+  /// Slug kategori yang dikirim ke GET /menus; null = semua kategori.
   String? _selectedSlug;
 
   List<CategoryModel> _categories = const [];
@@ -68,6 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentBannerIndex = 0;
   final PageController _bannerController = PageController();
 
+  /// Isi banner (statis, tidak dari server).
   static const List<_InfoBanner> _infoBanners = [
     _InfoBanner(
       tag: 'TITIK TEMU',
@@ -97,7 +102,8 @@ class _HomeScreenState extends State<HomeScreen> {
     ),
   ];
 
-  /// Tab di MainNavigationScreen; bila Home dibuka sendiri, rute biasa.
+  /// Jalankan aksi tombol banner. Pesanan (tab 1) dan Asisten AI (tab 2) dibuka sebagai
+  /// tab di MainNavigationScreen; bila Home dibuka sendiri (tanpa [HomeScreen.onTabChange]), lewat rute biasa.
   void _onBannerTap(_BannerAction action) {
     final tab = widget.onTabChange;
     switch (action) {
@@ -123,6 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Daftar titik temu aktif (GET /meta/pickup-points) untuk nama favorit.
   List<PickupPoint> _pickupPoints = const [];
+  /// Sedang menyimpan titik temu favorit; ketukan berikutnya diabaikan.
   bool _savingPickup = false;
 
   @override
@@ -131,6 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _auth = context.read<AuthProvider>();
     _wasLoggedIn = _auth.isLoggedIn;
     _auth.addListener(_onAuthChanged);
+    // Muat setelah frame pertama; daftar titik temu hanya perlu bila sudah ada favorit (untuk namanya).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _load();
       if (_auth.user?.favoritePickupPointId != null) _ensurePickupPoints();
@@ -155,7 +163,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// null bila gagal dimuat.
+  /// Ambil daftar titik temu aktif (GET /meta/pickup-points) sekali saja, lalu pakai ulang.
+  /// Mengembalikan null bila gagal dimuat.
   Future<List<PickupPoint>?> _ensurePickupPoints() async {
     if (_pickupPoints.isNotEmpty) return _pickupPoints;
     final repo = context.read<CatalogRepository>();
@@ -168,12 +177,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Tampilkan snackbar, menggantikan snackbar yang sedang tampil.
   void _snack(String text) => ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(text)));
 
-  /// Titik temu favorit disimpan ke profil (PATCH /me) dan dipilih otomatis
-  /// saat checkout bila dilayani toko. Tamu diminta masuk dulu.
+  /// Buka pemilih titik temu favorit lalu simpan pilihan ke profil (PATCH /me); titik ini dipilih
+  /// otomatis saat checkout bila dilayani toko. Tamu diminta masuk dulu. Galat ditampilkan sebagai snackbar.
   Future<void> _pickPickupPoint() async {
     if (_savingPickup) return;
     if (!_auth.isLoggedIn) {
@@ -200,6 +210,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+    // Batal memilih, atau memilih titik yang sama: tidak ada yang disimpan.
     if (picked == null || !mounted || picked.id == current) return;
     setState(() => _savingPickup = true);
     try {
@@ -214,6 +225,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Teks di bawah judul aplikasi. Bila daftar titik temu belum termuat, nama titik belum diketahui.
   String _pickupLabel(int? favoriteId) {
     if (favoriteId == null) return 'Pilih titik temu favorit';
     for (final p in _pickupPoints) {
@@ -222,6 +234,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return 'Titik temu favorit';
   }
 
+  /// Muat kategori (sekali, GET /meta/categories) dan halaman pertama menu (GET /menus, 20 menu)
+  /// untuk kategori terpilih. Galat disimpan di [_error] dan ditampilkan dengan tombol Coba lagi.
   Future<void> _load() async {
     if (!mounted) return;
     final repo = context.read<CatalogRepository>();
@@ -341,6 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final products = _products;
+    // Titik temu favorit hanya ditampilkan untuk pengguna yang sudah masuk.
     final favoritePickupId = context.select<AuthProvider, int?>(
         (a) => a.isLoggedIn ? a.user?.favoritePickupPointId : null);
 
@@ -492,6 +507,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     return Padding(
                       padding: const EdgeInsets.only(right: 10),
                       child: GestureDetector(
+                        // Mengetuk kategori yang sudah aktif mengembalikan filter ke "Semua".
                         onTap: () {
                           _selectCategory(isSelected ? null : cat);
                         },

@@ -1,3 +1,5 @@
+// Penyimpanan lokal riwayat sesi Asisten AI (SharedPreferences, berupa JSON), dipakai layar Asisten AI.
+// Tidak lewat backend: jawaban server disimpan sebagai snapshot di perangkat, terpisah per akun.
 import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -12,11 +14,14 @@ class AiHistoryStore {
 
   final SharedPreferencesAsync _prefs;
 
+  /// Jumlah sesi terbanyak yang disimpan per akun; sesi terlama dibuang.
   static const maxSessions = 30;
 
+  /// Kunci SharedPreferences untuk riwayat milik pengguna [userId].
   static String keyFor(int userId) => 'ai_history_v1_user_$userId';
 
-  /// Terbaru di atas. Data rusak diabaikan.
+  /// Memuat riwayat milik [userId], terbaru di atas. Data rusak diabaikan
+  /// (entri rusak dilewati; JSON rusak menghasilkan daftar kosong).
   Future<List<AiSession>> load(int userId) async {
     final raw = await _prefs.getString(keyFor(userId));
     if (raw == null || raw.isEmpty) return [];
@@ -43,12 +48,14 @@ class AiHistoryStore {
     return kept;
   }
 
+  /// Menghapus sesi dengan [id] dari riwayat [userId]; mengembalikan sisa riwayat.
   Future<List<AiSession>> remove(int userId, String id) async {
     final list = (await load(userId))..removeWhere((s) => s.id == id);
     await _write(userId, list);
     return list;
   }
 
+  /// Menghapus seluruh riwayat milik [userId].
   Future<void> clear(int userId) => _prefs.remove(keyFor(userId));
 
   Future<void> _write(int userId, List<AiSession> list) => _prefs.setString(
