@@ -1,14 +1,26 @@
+// Model pesanan, pembayaran, dan rincian harga (quote) sebagaimana dikirim backend REST KateringKita.
+// Di cabang ini belum dipakai layar mana pun; disiapkan untuk alur pesan → bayar lewat ApiClient.
+// Semua nominal uang berupa bilangan bulat Rupiah.
 import 'pickup_point.dart';
 import 'product_model.dart';
 
+// Mengubah teks tanggal ISO dari JSON menjadi DateTime; null tetap null.
 DateTime? _dt(dynamic v) => v == null ? null : DateTime.parse(v as String);
 
+/// Satu baris barang di dalam pesanan atau quote: menu, jumlah, harga, dan pilihan tambahannya.
+/// [OrderItem.fromJson] mengubah objek JSON menjadi kelas ini.
 class OrderItem {
   final int menuId;
   final String menuName;
   final int qty;
+
+  /// Harga satuan menu saat dipesan.
   final int unitPrice;
+
+  /// Pilihan tambahan yang dipilih pembeli untuk baris ini.
   final List<MenuOption> options;
+
+  /// Total baris ini sebagaimana dihitung backend.
   final int lineTotal;
 
   const OrderItem({
@@ -32,6 +44,9 @@ class OrderItem {
       );
 }
 
+/// Data virtual account (VA): nomor rekening sementara di [bank] tertentu yang dipakai
+/// pembeli untuk membayar lewat transfer, berlaku sampai [expiresAt].
+/// [OrderVa.fromJson] mengubah objek JSON menjadi kelas ini.
 class OrderVa {
   final String bank;
   final String vaNumber;
@@ -50,11 +65,19 @@ class OrderVa {
       );
 }
 
+/// Rincian pembayaran sebuah pesanan. [OrderPayment.fromJson] mengubah objek JSON menjadi kelas ini.
 class OrderPayment {
+  /// Metode dan status pembayaran, berupa teks apa adanya dari backend.
   final String method;
   final String status;
+
+  /// Jumlah yang harus dibayar.
   final int amount;
+
+  /// Data virtual account bila metode pembayarannya transfer VA; null bila tidak ada.
   final OrderVa? va;
+
+  /// Alamat halaman pembayaran (bila backend menyediakannya); null bila tidak ada.
   final String? paymentUrl;
 
   const OrderPayment({
@@ -76,31 +99,57 @@ class OrderPayment {
       );
 }
 
+/// Satu pesanan lengkap dari backend (berbeda dengan `OrderModel` yang dipakai layar lama).
+///
+/// [OrderApiModel.fromJson] mengubah objek JSON pesanan menjadi kelas ini; data toko diambil
+/// dari objek `merchant` di dalam JSON tersebut.
 class OrderApiModel {
+  /// Kode pesanan dari backend (kolom `code`).
   final String code;
+
+  /// Status pesanan, status/metode pembayaran: teks apa adanya dari backend.
   final String status;
   final String paymentMethod;
   final String paymentStatus;
+
+  /// Batas waktu penahanan pesanan dari backend (`hold_until`); null bila tidak ada.
   final DateTime? holdUntil;
+
+  /// Sisa detik menuju [holdUntil] menurut perhitungan backend (`seconds_left`).
   final int? secondsLeft;
   final PickupPoint pickupPoint;
   final List<OrderItem> items;
+
+  /// Rincian harga: subtotal barang, potongan diskon, biaya layanan, dan total akhir.
   final int subtotal;
   final int discount;
   final int serviceFee;
   final int total;
+
+  /// Catatan dari pembeli untuk penjual.
   final String? note;
+
+  /// Waktu pengambilan pesanan; null bila belum ditentukan.
   final DateTime? pickupAt;
+
+  /// Alasan dan pihak yang membatalkan; null bila pesanan tidak dibatalkan.
   final String? cancelReason;
   final String? cancelledBy;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int merchantId;
   final String merchantName;
+
+  /// Nomor WhatsApp toko; string kosong bila backend tidak mengirimnya.
   final String merchantWa;
+
+  /// Izin aksi yang ditentukan backend: apakah pesanan saat ini boleh dibatalkan,
+  /// ditandai selesai, dan diulas. Bernilai false bila tidak dikirim.
   final bool canCancel;
   final bool canComplete;
   final bool canReview;
+
+  /// Rincian pembayaran; null bila backend tidak mengirimnya.
   final OrderPayment? payment;
 
   const OrderApiModel({
@@ -131,6 +180,7 @@ class OrderApiModel {
     this.payment,
   });
 
+  /// True bila [paymentStatus] bernilai `'paid'` (pesanan sudah dibayar).
   bool get isPaid => paymentStatus == 'paid';
 
   factory OrderApiModel.fromJson(Map<String, dynamic> json) {
@@ -170,10 +220,19 @@ class OrderApiModel {
   }
 }
 
+/// Peringatan dari backend tentang satu menu di dalam [Quote], misalnya stoknya kurang.
+/// [QuoteWarning.fromJson] mengubah objek JSON menjadi kelas ini.
 class QuoteWarning {
+  /// Kode jenis peringatan dari backend.
   final String code;
+
+  /// ID menu yang diberi peringatan.
   final int menuId;
+
+  /// Jumlah yang masih tersedia untuk menu itu; 0 bila backend tidak mengirimnya.
   final int available;
+
+  /// Pesan peringatan yang siap ditampilkan.
   final String message;
 
   const QuoteWarning({
@@ -191,6 +250,9 @@ class QuoteWarning {
       );
 }
 
+/// Quote = perhitungan harga dari backend sebelum pesanan benar-benar dibuat: daftar barang,
+/// subtotal, diskon, biaya layanan, total, dan peringatan (misalnya stok kurang).
+/// [Quote.fromJson] mengubah objek JSON menjadi kelas ini.
 class Quote {
   final List<OrderItem> items;
   final int subtotal;

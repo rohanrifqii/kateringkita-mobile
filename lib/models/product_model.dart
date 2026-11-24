@@ -1,9 +1,16 @@
+// Model menu (ProductModel) beserta toko ringkas dan pilihan tambahannya, sebagaimana dikirim
+// backend REST KateringKita (GET /menus dan GET /menus/{id}). Diambil lewat CatalogRepository,
+// lalu ditampilkan layar katalog dan widget seperti FoodGridCard.
 import 'category_model.dart';
 import 'pickup_point.dart';
 
+/// Pilihan tambahan untuk sebuah menu (misalnya tambah lauk) dan harga tambahannya.
+/// [MenuOption.fromJson] mengubah objek JSON menjadi kelas ini.
 class MenuOption {
   final int id;
   final String name;
+
+  /// Tambahan harga dalam Rupiah bila pilihan ini diambil; 0 bila gratis.
   final int extraPrice;
 
   const MenuOption({
@@ -19,6 +26,9 @@ class MenuOption {
       );
 }
 
+/// Ringkasan toko yang ikut di dalam data menu, cukup untuk kartu menu dan tombol menuju
+/// profil toko. Profil lengkap ada di `MerchantProfile` (catalog_repository.dart).
+/// [MerchantRef.fromJson] mengubah objek JSON menjadi kelas ini.
 class MerchantRef {
   final int id;
   final String slug;
@@ -54,23 +64,41 @@ class MerchantRef {
       );
 }
 
+/// Satu menu makanan dari backend.
+///
+/// Daftar menu (GET /menus) dan detail menu (GET /menus/{id}) sama-sama diubah ke kelas ini
+/// lewat [ProductModel.fromJson]; kolom yang tidak dikirim backend diisi nilai bawaan.
 class ProductModel {
   final int id;
   final String name;
+
+  /// Harga per satuan dalam Rupiah.
   final int price;
+
+  /// Nama satuan harga, bawaan `porsi`.
   final String unitLabel;
   final String? imageUrl;
   final CategoryModel? category;
   final MerchantRef merchant;
+
+  /// Jumlah porsi yang masih bisa dipesan.
   final int available;
   final String badge; // sold_out | preorder | low_stock | available
   final double ratingAvg;
   final int ratingCount;
+
+  /// True bila menu ini disukai pengguna yang sedang login, menurut backend.
   final bool isFavorite;
   final String? description;
   final List<MenuOption> options;
+
+  /// Jumlah pesanan minimal, bawaan 1.
   final int minOrderQty;
+
+  /// Lama persiapan dalam menit.
   final int prepMinutes;
+
+  /// True bila menu harus dipesan beberapa hari sebelumnya; jumlah harinya di [preorderDays].
   final bool isPreorder;
   final int preorderDays;
 
@@ -122,12 +150,24 @@ class ProductModel {
       );
 
   // Getter kompatibilitas untuk layar lama.
+  /// Nama lama untuk [ratingAvg].
   double get rating => ratingAvg;
+
+  /// Nama lama untuk [ratingCount].
   int get reviewCount => ratingCount;
+
+  /// Nama toko penjual menu ini (nama lama dari `merchant.businessName`).
   String get vendor => merchant.businessName;
+
+  /// Nama lama untuk [isFavorite].
   bool get isLiked => isFavorite;
+
+  /// True bila menu boleh dipesan sekarang: toko sedang buka dan [badge] bukan `sold_out`.
   bool get canOrder => merchant.isOpen && badge != 'sold_out';
 
+  /// Teks label kecil di atas gambar menu, diturunkan dari [badge]:
+  /// `Habis`, `Pre-order` / `Pre-order H-<hari>`, `🔥 Sisa <n> Porsi`, atau `Tersedia`.
+  /// Null bila nilai [badge] tidak dikenal.
   String? get badgeText {
     switch (badge) {
       case 'sold_out':
@@ -142,9 +182,13 @@ class ProductModel {
     return null;
   }
 
+  /// Kelompok label untuk menentukan warna: `'quota'` bila stok menipis atau habis,
+  /// selain itu `'available'`.
   String get badgeType =>
       (badge == 'low_stock' || badge == 'sold_out') ? 'quota' : 'available';
 
+  /// Membuat salinan menu ini dengan nilai [isFavorite] baru (misalnya setelah tombol suka
+  /// ditekan); kolom lain tetap sama. Bila [isFavorite] null, nilai lama dipertahankan.
   ProductModel copyWith({bool? isFavorite}) => ProductModel(
         id: id,
         name: name,
@@ -169,8 +213,11 @@ class ProductModel {
 
 /// Shim sementara agar layar yang belum dipindah ke API tetap kompil.
 /// Dihapus setelah pemakai terakhirnya hilang.
+/// Shim = pengganti sementara: kelas ini tidak berisi data apa pun.
 class ProductData {
+  /// Selalu daftar kosong (dulu berisi data contoh).
   static final List<ProductModel> mockProducts = [];
 
+  /// Selalu mengembalikan null; [name] diabaikan.
   static ProductModel? getProductByName(String name) => null;
 }

@@ -1,3 +1,5 @@
+// Layar Pembayaran (rute AppRoutes.payment), dibuka dari CheckoutScreen setelah pesanan dikonfirmasi; argumen rute = Map rincian pesanan.
+// Pembayaran QRIS/VA/COD masih simulasi (tidak ada gateway atau backend); saat dikonfirmasi pesanan disimpan ke database Drift lokal (AppDb.addOrder).
 import '../../widgets/menu_image.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -12,7 +14,7 @@ import '../../data/app_database.dart';
 import '../../models/product_model.dart';
 import '../../widgets/payment_method_tile.dart';
 
-/// Halaman Gateway Pembayaran Mandiri (QRIS, Virtual Account, & COD)
+/// Halaman pembayaran simulasi untuk QRIS, Virtual Account, dan COD; isi layar menyesuaikan metode yang dipilih di checkout.
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({super.key});
 
@@ -43,7 +45,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     'BNI': '9880',
   };
 
-  // State Timer Hitung Mundur (15 menit untuk QRIS, 24 jam untuk VA)
+  // State timer hitung mundur: 1 jam untuk QRIS & VA, tidak ada timer untuk COD.
   late int _remainingSeconds;
   Timer? _countdownTimer;
   bool _isProcessing = false;
@@ -51,6 +53,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Hanya sekali: baca rincian pesanan dari argumen rute dan isi nilai bawaan untuk kunci yang kosong.
+    // Tanpa 'product' layar ditutup (pop); selama itu build menampilkan indikator muat.
     if (!_argsLoaded) {
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>? ??
@@ -88,6 +92,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  /// Mengurangi _remainingSeconds tiap detik sampai 0. Saat habis tidak ada tindakan lain (pesanan tidak dibatalkan).
   void _startTimer() {
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -105,6 +110,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     super.dispose();
   }
 
+  /// Mengubah detik menjadi teks jj:mm:dd.
   String _formatTimer(int sec) {
     final hours = sec ~/ 3600;
     final minutes = (sec % 3600) ~/ 60;
@@ -112,12 +118,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  /// Nomor VA simulasi: kode bank terpilih + digit nomor telepon pemesan.
   String _getVirtualAccountNumber() {
     final prefix = _bankCodes[_selectedBank] ?? '8808';
     final cleanPhone = _phone.replaceAll(RegExp(r'[^0-9]'), '');
     return '$prefix $cleanPhone';
   }
 
+  /// Menyalin teks (mis. nomor VA atau total) ke clipboard dan menampilkan SnackBar.
   void _copyToClipboard(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -142,7 +150,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Future<void> _handleConfirmPayment() async {
     setState(() => _isProcessing = true);
 
-    // Simulasi verifikasi gateway (1.2 detik)
+    // Simulasi verifikasi gateway (1.2 detik); belum ada pengecekan pembayaran sungguhan.
     await Future.delayed(const Duration(milliseconds: 1200));
 
     if (!mounted) return;
@@ -160,7 +168,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
     _showPaymentSuccessSheet();
   }
 
-  // Bottom Sheet Sukses Pembayaran
+  // Bottom Sheet Sukses Pembayaran: lanjut ke WhatsAppGeneratorScreen (menggantikan layar ini)
+  // atau kembali ke navigasi utama.
   void _showPaymentSuccessSheet() {
     showModalBottomSheet(
       context: context,
@@ -452,6 +461,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
+  /// Judul AppBar sesuai metode bayar.
   String _getAppBarTitle() {
     switch (_paymentMethod) {
       case PaymentMethod.qris:
@@ -463,6 +473,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  /// Teks tombol konfirmasi bawah sesuai metode bayar.
   String _getConfirmButtonLabel() {
     switch (_paymentMethod) {
       case PaymentMethod.qris:
@@ -1250,7 +1261,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 }
 
-/// Custom Painter untuk menggambar pola QR Code yang rapi dan presisi
+/// Custom Painter yang menggambar pola hiasan mirip QR. Ini bukan kode QR asli dan tidak bisa dipindai.
 class _QrisPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {

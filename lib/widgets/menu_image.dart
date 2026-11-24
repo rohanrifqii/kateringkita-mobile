@@ -1,6 +1,12 @@
+// Widget gambar menu/toko dari URL yang dikirim backend REST KateringKita (misalnya
+// ProductModel.imageUrl), dipakai kartu dan layar katalog.
 import 'package:flutter/material.dart';
 
 /// Gambar menu dari URL jaringan, dengan gambar pengganti bila kosong/gagal.
+///
+/// - Bila [url] null atau kosong, atau gambar gagal dimuat: tampil logo aplikasi di atas latar abu-abu.
+/// - Selama gambar masih diunduh: tampil kotak abu-abu polos seukuran [width] x [height].
+/// - Bila [borderRadius] diisi, gambar dipotong dengan sudut membulat.
 class MenuImage extends StatelessWidget {
   const MenuImage(
     this.url, {
@@ -17,6 +23,7 @@ class MenuImage extends StatelessWidget {
   final double? height;
   final BorderRadius? borderRadius;
 
+  // Pengganti saat tidak ada gambar atau gambar gagal dimuat: logo aplikasi di latar abu-abu.
   Widget _placeholder() => Container(
         width: width,
         height: height,
@@ -25,6 +32,7 @@ class MenuImage extends StatelessWidget {
         child: Image.asset('assets/images/logo.png', fit: BoxFit.contain),
       );
 
+  // Kotak abu-abu polos yang tampil selama gambar masih diunduh.
   Widget _box() =>
       Container(width: width, height: height, color: Colors.grey.shade200);
 

@@ -1,3 +1,5 @@
+// Layar Orders (tab kedua MainNavigationScreen, juga rute AppRoutes.orders): pesanan dalam tab Active/Completed/Cancelled.
+// Data lokal: dibaca dan diubah di database Drift (SQLite) perangkat lewat AppDb; belum tersinkron ke backend.
 import '../../widgets/menu_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -9,6 +11,7 @@ import '../../core/app_text_styles.dart';
 import '../../data/app_database.dart';
 import '../../models/product_model.dart';
 
+/// Layar daftar pesanan dengan tab status dan kolom cari (nama produk / kode pesanan).
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
 
@@ -17,6 +20,7 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
+  // 0 = Active, 1 = Completed, 2 = Cancelled.
   int _selectedTabIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -40,6 +44,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
           builder: (context, snapshot) {
             final allOrders = snapshot.data ?? [];
 
+            // Pisahkan pesanan per status, lalu ambil daftar milik tab yang aktif.
             final activeOrders = allOrders
                 .where((o) => o.status.toLowerCase() == 'active')
                 .toList();
@@ -59,6 +64,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
               currentList = cancelledOrders;
             }
 
+            // Saring tanpa membedakan huruf besar/kecil berdasarkan nama produk atau kode pesanan.
             if (_searchQuery.isNotEmpty) {
               currentList = currentList
                   .where((o) =>
@@ -247,6 +253,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
+  /// Tampilan kosong sesuai tab aktif, dengan tombol kembali ke navigasi utama untuk menjelajah menu.
   Widget _buildEmptyState() {
     String message;
     if (_selectedTabIndex == 0) {
@@ -313,6 +320,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
+  /// Kartu satu pesanan. Pesanan aktif bisa membuka WhatsApp, dibatalkan, atau diselesaikan
+  /// (status diubah di AppDb); pesanan lain menampilkan tombol "Pesan Lagi".
+  /// Catatan: ProductData.getProductByName masih shim yang selalu null, jadi product di sini null.
   Widget _buildOrderCard(Order order, AppDb db) {
     final product = ProductData.getProductByName(order.productName);
     final isOrderActive = order.status.toLowerCase() == 'active';

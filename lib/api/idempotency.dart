@@ -1,6 +1,14 @@
+// Pembuat kunci idempotensi untuk permintaan ke backend REST KateringKita.
+// Kunci idempotensi = ID unik per aksi (misalnya membuat pesanan) yang dikirim bersama permintaan,
+// agar backend tidak memproses aksi yang sama dua kali bila permintaan terkirim ulang.
 import 'dart:math';
 
-/// UUID v4 huruf kecil dari [Random.secure].
+/// Membuat kunci idempotensi baru berupa UUID versi 4 (ID acak standar 36 karakter
+/// dengan pola `xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx`) dalam huruf kecil.
+///
+/// Angka acaknya berasal dari [Random.secure] agar sulit ditebak. Bit pada byte ke-6 dan
+/// ke-8 diatur supaya hasilnya sah sebagai UUID v4. Kunci ini lazimnya diteruskan lewat
+/// parameter `headers` pada `ApiClient.post`; di cabang ini fungsi ini belum dipanggil.
 String newIdempotencyKey() {
   final r = Random.secure();
   final b = List<int>.generate(16, (_) => r.nextInt(256));

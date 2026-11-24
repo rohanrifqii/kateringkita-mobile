@@ -1,3 +1,5 @@
+// Layar Pencarian menu, dibuka dari kolom/ikon cari di Beranda (AppRoutes.search).
+// Hasil diambil lewat CatalogRepository.menus(q: ...) dari backend REST KateringKita (GET /menus).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -12,6 +14,7 @@ import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 
+/// Layar pencarian menu: mengetik kata kunci lalu menampilkan menu yang cocok dari backend.
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -25,19 +28,23 @@ class _SearchScreenState extends State<SearchScreen> {
   List<ProductModel> _results = const [];
   bool _loading = true;
   String? _error;
+  // Nomor urut permintaan: jawaban pencarian lama yang datang terlambat diabaikan.
   int _seq = 0;
 
   @override
   void initState() {
     super.initState();
+    // Pencarian awal dengan kata kunci kosong (menampilkan semua menu) setelah frame pertama.
     WidgetsBinding.instance.addPostFrameCallback((_) => _search());
   }
 
+  /// Debounce 400 ms: pencarian baru dikirim setelah pengguna berhenti mengetik.
   void _onChanged(String _) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), _search);
   }
 
+  /// Mengirim kata kunci ke backend; ApiException menampilkan pesan server, galat lain pesan umum.
   Future<void> _search() async {
     if (!mounted) return;
     final repo = context.read<CatalogRepository>();

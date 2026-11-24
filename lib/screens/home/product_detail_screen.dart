@@ -1,3 +1,6 @@
+// Layar Detail Produk (rute AppRoutes.productDetail), dibuka saat kartu menu diketuk; argumen rute = ProductModel.
+// Detail menu, ulasan, dan profil toko dimuat lewat CatalogRepository dari backend REST KateringKita;
+// status favorit disimpan lokal di LikedStore.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
@@ -10,7 +13,9 @@ import '../../data/catalog_repository.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/menu_image.dart';
 
+/// Layar detail satu menu: galeri, harga, opsi, info toko, ulasan, dan tombol lanjut ke checkout.
 class ProductDetailScreen extends StatefulWidget {
+  /// Produk cadangan bila argumen rute bukan ProductModel.
   final ProductModel? product;
 
   const ProductDetailScreen({super.key, this.product});
@@ -21,6 +26,7 @@ class ProductDetailScreen extends StatefulWidget {
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late ProductModel _product;
+  // true bila tidak ada produk sama sekali; layar langsung ditutup (pop) setelah frame pertama.
   bool _missing = false;
   bool _initialized = false;
   MenuOption? _selectedOption; // null = tanpa opsi
@@ -29,11 +35,13 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   int _currentImageIndex = 0;
   final PageController _imagePageController = PageController();
 
+  // Galeri saat ini hanya berisi satu gambar utama produk.
   List<String?> get _galleryImages => [_product.imageUrl];
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Hanya sekali: ambil produk dari argumen rute, kalau tidak ada dari widget.product.
     if (_initialized) return;
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is ProductModel) {
@@ -53,6 +61,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     _load();
   }
 
+  /// Memuat detail menu, ulasan, dan profil toko dari backend secara berurutan. Tiap permintaan
+  /// berdiri sendiri: bila gagal, galatnya diabaikan dan layar tetap memakai data yang sudah ada.
   Future<void> _load() async {
     final repo = context.read<CatalogRepository>();
     final card = _product;
@@ -75,6 +85,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     } catch (_) {}
   }
 
+  /// Teks tombol bawah: "Toko sedang tutup", "Habis" (badge sold_out), atau "Add to Orders".
   String get _buttonText {
     if (!_product.merchant.isOpen) return 'Toko sedang tutup';
     if (_product.badge == 'sold_out') return 'Habis';
@@ -590,7 +601,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
           ),
 
-          // Bottom Fixed Button
+          // Bottom Fixed Button: ke checkout dengan argumen _product (opsi terpilih belum ikut dikirim);
+          // nonaktif bila _product.canOrder false.
           Positioned(
             left: 20,
             right: 20,

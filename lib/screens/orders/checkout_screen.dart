@@ -1,3 +1,6 @@
+// Layar Checkout (rute AppRoutes.checkout), dibuka dari tombol pesan di ProductDetailScreen / StoreProfileScreen; argumen rute = ProductModel.
+// Data pemesan diambil lokal (AuthRepository: sesi + database Drift) dan titik temu dari SettingsStore; layar ini tidak memanggil backend,
+// hanya meneruskan rincian pesanan ke PaymentScreen.
 import '../../widgets/menu_image.dart';
 import 'dart:async';
 
@@ -20,7 +23,9 @@ import '../../widgets/payment_method_tile.dart';
 import '../../widgets/primary_button.dart';
 import 'location_picker_screen.dart';
 
+/// Layar checkout satu menu: jumlah porsi, data pemesan, lokasi titik temu, metode bayar, dan ringkasan harga.
 class CheckoutScreen extends StatefulWidget {
+  /// Produk cadangan bila argumen rute bukan ProductModel.
   final ProductModel? product;
 
   const CheckoutScreen({super.key, this.product});
@@ -32,6 +37,7 @@ class CheckoutScreen extends StatefulWidget {
 class _CheckoutScreenState extends State<CheckoutScreen> {
   static const List<FontFeature> _tabular = [FontFeature.tabularFigures()];
 
+  // Pilihan metode bayar yang ditampilkan (daftar tetap di aplikasi).
   static List<PaymentMethodOption> get _paymentOptions => [
     PaymentMethodOption(
       method: PaymentMethod.qris,
@@ -61,6 +67,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   ];
 
   late ProductModel _product;
+  // true bila tidak ada produk; layar langsung ditutup (pop) setelah frame pertama.
   bool _missing = false;
   int _quantity = 1;
   PaymentMethod _selectedPayment = PaymentMethod.qris;
@@ -88,6 +95,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _startTimer();
   }
 
+  /// Hitung mundur "Holding Timer" 5 menit (299 detik). Hanya tampilan: saat habis, timer berhenti
+  /// tanpa membatalkan atau mengunci checkout.
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsLeft.value > 0) {
@@ -101,6 +110,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Ambil produk dari argumen rute, kalau tidak ada dari widget.product; tanpa produk layar ditutup.
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is ProductModel) {
       _product = args;
@@ -115,12 +125,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
       _product = p;
     }
+    // Data pemesan cukup dimuat sekali walau didChangeDependencies terpanggil lagi.
     if (!_userDataLoaded) {
       _loadUserData();
       _userDataLoaded = true;
     }
   }
 
+  /// Mengisi form dari akun yang sedang login (nama & telepon; isian contoh bila belum login)
+  /// dan titik temu tersimpan di SettingsStore, lalu memindahkan peta mini ke koordinat itu.
   Future<void> _loadUserData() async {
     final repo = AuthRepository(context.read<AppDb>());
     final user = await repo.currentUser();
@@ -150,6 +163,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     });
   }
 
+  /// Membuka LocationPickerScreen; lokasi yang dipilih ditampilkan, peta mini dipindah,
+  /// dan lokasi disimpan sebagai titik temu baru di SettingsStore.
   Future<void> _openLocationPicker() async {
     final result = await Navigator.push<DeliveryLocation>(
       context,
@@ -193,6 +208,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     super.dispose();
   }
 
+  /// Mengubah detik menjadi teks mm:ss.
   String _formatTimer(int seconds) {
     final m = (seconds ~/ 60).toString().padLeft(2, '0');
     final s = (seconds % 60).toString().padLeft(2, '0');
@@ -202,6 +218,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String _price(double value) => AppCurrency.format(value);
 
 
+  /// Label metode bayar yang dikirim ke PaymentScreen.
   String _paymentLabel(PaymentMethod method) {
     switch (method) {
       case PaymentMethod.qris:
@@ -213,6 +230,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  /// Menampilkan dialog konfirmasi; bila disetujui, membuat kode pesanan sementara (#KK-tahun-3 digit
+  /// dari waktu sekarang) lalu membuka PaymentScreen dengan seluruh isian form. Isian form belum divalidasi di sini.
   void _confirmOrder(double total) {
     AppModalDialog.showPaymentConfirmation(
       context,
@@ -441,6 +460,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  /// Tombol - / + jumlah porsi (minimal 1).
   Widget _buildStepper() {
     Widget button(String label, Color color, VoidCallback onTap) {
       return InkResponse(
@@ -511,6 +531,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  /// Kartu lokasi titik temu dengan peta mini OSM dan perkiraan waktu tiba (MapService.estimateEta);
+  /// diketuk untuk membuka pemilih lokasi.
   Widget _buildLocationSelectorCard() {
     final title = _locationController.text.trim().isEmpty
         ? 'Pilih Lokasi Pengantaran'

@@ -1,3 +1,6 @@
+// Layar Liked (tab Favorit di MainNavigationScreen, juga rute AppRoutes.liked): daftar menu yang disukai.
+// Data lokal: ID favorit dari LikedStore (SharedPreferences) dicocokkan ke ProductData.mockProducts,
+// yang kini hanya shim kosong, sehingga daftar selalu tampil kosong sampai layar ini disambungkan ke API menu.
 import '../../widgets/menu_image.dart';
 import 'package:flutter/material.dart';
 
@@ -8,6 +11,7 @@ import '../../core/app_text_styles.dart';
 import '../../data/liked_store.dart';
 import '../../models/product_model.dart';
 
+/// Layar daftar menu favorit; otomatis membangun ulang saat LikedStore.likedNotifier berubah.
 class LikedScreen extends StatelessWidget {
   const LikedScreen({super.key});
 
@@ -20,6 +24,7 @@ class LikedScreen extends StatelessWidget {
         child: ValueListenableBuilder<Set<String>>(
           valueListenable: LikedStore.likedNotifier,
           builder: (context, likedIds, child) {
+            // Hanya produk katalog lokal yang ID-nya ada di himpunan favorit yang ditampilkan.
             final likedProducts = ProductData.mockProducts
                 .where((p) => likedIds.contains(p.id.toString()))
                 .toList();
@@ -134,7 +139,7 @@ class LikedScreen extends StatelessWidget {
                                   ],
                                 ),
                               ),
-                              // Heart Icon (can tap to unlike!)
+                              // Ikon hati: ketuk untuk menghapus dari favorit (LikedStore.toggleLike).
                               IconButton(
                                 icon: const Icon(
                                   Icons.favorite_rounded,
@@ -154,7 +159,7 @@ class LikedScreen extends StatelessWidget {
                                 },
                               ),
                               const SizedBox(width: 4),
-                              // + Order Button
+                              // Tombol "+ Order": membuka detail produk untuk memesan.
                               GestureDetector(
                                 onTap: () {
                                   Navigator.pushNamed(

@@ -1,3 +1,5 @@
+// Layar Pembuat Pesan WhatsApp (rute AppRoutes.whatsappGenerator), dibuka dari PaymentScreen, OrdersScreen, atau ActiveOrdersScreen.
+// Teks konfirmasi pesanan disusun dari argumen rute (product, quantity, total, orderCode, dll.); tidak memanggil backend.
 import '../../widgets/menu_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,7 +10,9 @@ import '../../core/app_text_styles.dart';
 import '../../models/product_model.dart';
 import '../../widgets/primary_button.dart';
 
+/// Layar yang menyusun teks konfirmasi pesanan untuk dikirim ke admin lewat WhatsApp.
 class WhatsAppGeneratorScreen extends StatefulWidget {
+  /// Rincian pesanan cadangan bila argumen rute tidak berupa Map.
   final Map<String, dynamic>? orderDetails;
 
   const WhatsAppGeneratorScreen({super.key, this.orderDetails});
@@ -31,6 +35,8 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Hanya sekali: baca rincian pesanan dari argumen rute (atau widget.orderDetails), isi nilai
+    // bawaan untuk kunci yang tidak ada, lalu susun teks pesan WhatsApp ke dalam controller.
     if (!_initialized) {
       final args = ModalRoute.of(context)?.settings.arguments;
       final map = (args is Map<String, dynamic>)
@@ -69,6 +75,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
     super.dispose();
   }
 
+  /// Menyalin teks pesan ke clipboard dan menampilkan SnackBar konfirmasi.
   void _copyMessage() {
     Clipboard.setData(ClipboardData(text: _messageController.text));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -80,7 +87,8 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
   }
 
   void _openWhatsApp() {
-    // Show confirmation dialog then navigate to Active Orders or Orders
+    // Belum benar-benar membuka aplikasi WhatsApp (tidak ada url_launcher di sini): hanya menampilkan
+    // dialog sukses, lalu pengguna memilih ke Pesanan Aktif atau kembali ke navigasi utama.
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -313,7 +321,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       onPressed: () {
-                        // Allow user to edit message
+                        // Tombol Edit: pesan masih ditampilkan sebagai Text biasa (belum bisa diedit); tombol ini hanya menampilkan SnackBar.
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Pesan siap dikustomisasi.')),
                         );

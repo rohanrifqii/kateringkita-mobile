@@ -1,3 +1,6 @@
+// Layar Beranda (tab pertama MainNavigationScreen): titik temu, pencarian, kategori, banner promo, dan daftar menu.
+// Kategori & menu diambil lewat CatalogRepository dari backend REST KateringKita (/meta/categories, /menus);
+// titik temu disimpan lokal di SettingsStore, sedangkan banner promo masih data statis di berkas ini.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -12,7 +15,9 @@ import '../../models/product_model.dart';
 import '../../widgets/food_card.dart';
 import '../orders/location_picker_screen.dart';
 
+/// Layar Beranda: menampilkan katalog menu dari backend yang bisa difilter per kategori.
 class HomeScreen extends StatefulWidget {
+  /// Callback dari MainNavigationScreen untuk berpindah tab bawah (indeks tab).
   final Function(int)? onTabChange;
 
   const HomeScreen({super.key, this.onTabChange});
@@ -29,12 +34,14 @@ class _HomeScreenState extends State<HomeScreen> {
   List<CategoryModel> _categories = const [];
   List<ProductModel> _products = const [];
   bool _loading = true;
+  // Nomor urut permintaan: hasil _load yang sudah usang (kalah cepat dari permintaan baru) diabaikan.
   int _seq = 0;
   String? _error;
 
   int _currentBannerIndex = 0;
   final PageController _bannerController = PageController();
 
+  // Isi banner promo masih data statis lokal (belum dari backend).
   static const List<Map<String, dynamic>> _promoBanners = [
     {
       'tag': 'SPECIAL PROMO',
@@ -63,6 +70,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _loadMeetingPoint();
+    // _load memakai context.read, jadi dijalankan setelah frame pertama selesai dibangun.
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
@@ -72,12 +80,15 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  /// Membaca nama titik temu terakhir yang disimpan lokal di SettingsStore.
   Future<void> _loadMeetingPoint() async {
     final point = await SettingsStore.loadMeetingPoint();
     if (!mounted) return;
     setState(() => _meetingPoint = point);
   }
 
+  /// Membuka LocationPickerScreen mulai dari koordinat tersimpan; bila pengguna memilih
+  /// lokasi, lokasi itu disimpan ke SettingsStore dan nama titik temu di layar diperbarui.
   Future<void> _pickMeetingPoint() async {
     final (lat, lng) = await SettingsStore.loadMeetingCoordinates();
     if (!mounted) return;
@@ -102,6 +113,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Memuat kategori (hanya sekali, lalu dipakai ulang) dan daftar menu sesuai kategori terpilih
+  /// dari backend. ApiException menampilkan pesan dari server; galat lain memakai pesan umum.
   Future<void> _load() async {
     if (!mounted) return;
     final repo = context.read<CatalogRepository>();
@@ -134,6 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Mengganti kategori aktif (null = "Semua") lalu memuat ulang menu.
   void _selectCategory(CategoryModel? c) {
     setState(() {
       _selectedCategory = c?.name ?? 'Semua';
@@ -142,6 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _load();
   }
 
+  /// Menampilkan bottom sheet berisi semua kategori dari backend untuk memilih filter menu.
   void _showCategoryFilterSheet() {
     final filterOptions = <Map<String, dynamic>>[
       {'label': 'Semua Menu', 'cat': null},
