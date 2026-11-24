@@ -27,8 +27,16 @@ class CartProvider extends ChangeNotifier {
 
   /// Idempotency-Key untuk membuat pesanan dari isi keranjang saat ini.
   /// Dibuat saat pertama dibutuhkan dan tetap sama (juga bila layar checkout
-  /// ditutup lalu dibuka lagi) sampai isi keranjang berubah atau dikosongkan.
-  String get idempotencyKey => _idemKey ??= newIdempotencyKey();
+  /// ditutup lalu dibuka lagi, atau halaman web dimuat ulang) sampai isi
+  /// keranjang berubah atau dikosongkan. Kunci baru langsung disimpan bersama keranjang.
+  String get idempotencyKey {
+    final existingKey = _idemKey;
+    if (existingKey != null) return existingKey;
+    final createdKey = _idemKey = newIdempotencyKey();
+    // Keranjang kosong tidak disimpan (dan tidak boleh menghapus data yang belum dipulihkan).
+    if (_items.isNotEmpty) _store?.save(_items, idempotencyKey: createdKey);
+    return createdKey;
+  }
 
   /// Isi keranjang berubah: niat checkout baru, kunci lama tidak berlaku; isi baru disimpan ke perangkat.
   void _changed() {
@@ -43,9 +51,10 @@ class CartProvider extends ChangeNotifier {
   Future<void> restore() async {
     final store = _store;
     if (store == null) return;
-    final savedItems = await store.load();
-    if (_changedSinceStart || savedItems.isEmpty) return;
-    _items.addAll(savedItems);
+    final saved = await store.load();
+    if (_changedSinceStart || saved.items.isEmpty) return;
+    _items.addAll(saved.items);
+    _idemKey = saved.idempotencyKey;
     notifyListeners();
   }
 

@@ -238,6 +238,35 @@ void main() {
       expect((await reloadedCart()).items, isEmpty);
     });
 
+    test('Idempotency-Key ikut tersimpan; berubah bila isi keranjang berubah', () async {
+      final cart = CartProvider(store: CartStore(prefs));
+      cart.add(_menu(1));
+      final key = cart.idempotencyKey;
+      await pumpEventQueue();
+
+      // Muat ulang sebelum mengulang checkout: kunci yang sama dipakai lagi.
+      final reloaded = await reloadedCart();
+      expect(reloaded.idempotencyKey, key);
+
+      // Isi berubah: kunci lama tidak tersimpan lagi, kunci baru dibuat.
+      reloaded.setQty('1:0', 2);
+      await pumpEventQueue();
+      final afterChange = await reloadedCart();
+      expect(afterChange.items.single.qty, 2);
+      final newKey = afterChange.idempotencyKey;
+      expect(newKey, isNot(key));
+      await pumpEventQueue();
+      expect((await reloadedCart()).idempotencyKey, newKey);
+    });
+
+    test('kunci tersimpan yang bukan teks: data dibuang', () async {
+      final raw = CartStore.encode((CartProvider()..add(_menu(1))).items)
+          .replaceFirst('"v":1,', '"v":1,"idem":5,');
+      await prefs.setString(CartStore.storageKey, raw);
+      expect((await reloadedCart()).items, isEmpty);
+      expect(await prefs.getString(CartStore.storageKey), isNull);
+    });
+
     test('perubahan selama data dibaca tidak ditimpa data lama', () async {
       await prefs.setString(
           CartStore.storageKey, CartStore.encode((CartProvider()..add(_menu(1))).items));

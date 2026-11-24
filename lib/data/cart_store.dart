@@ -8,8 +8,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/cart_item.dart';
 import '../models/product_model.dart';
 
-/// Isi keranjang di perangkat dalam bentuk `{"v":1,"items":[{"menu":{...},"option_id":1,"qty":2}]}`.
-/// Menu disimpan lengkap (bentuk JSON API) supaya keranjang bisa dibangun ulang tanpa memanggil backend.
+/// Isi keranjang yang dibaca dari perangkat: barisnya dan Idempotency-Key checkout (null bila belum dibuat).
+typedef SavedCart = ({List<CartItem> items, String? idempotencyKey});
+
+/// Isi keranjang di perangkat dalam bentuk
+/// `{"v":1,"idem":"<kunci>","items":[{"menu":{...},"option_id":1,"qty":2}]}`.
+/// Menu disimpan lengkap (bentuk JSON API) supaya keranjang bisa dibangun ulang tanpa memanggil backend;
+/// `idem` (Idempotency-Key checkout, opsional) disimpan supaya mengulang checkout setelah halaman
+/// dimuat ulang tidak membuat pesanan ganda.
 class CartStore {
   CartStore([SharedPreferencesAsync? prefs])
       : _prefs = prefs ?? SharedPreferencesAsync();
@@ -27,17 +33,18 @@ class CartStore {
   /// Data rusak atau versi lama dihapus dari perangkat supaya tidak dibaca lagi.
   /// Tidak pernah melempar galat.
   ///
-  /// @returns baris keranjang yang tersimpan; daftar kosong bila belum ada data,
-  ///   datanya rusak atau usang, atau penyimpanan tidak bisa dibaca.
-  Future<List<CartItem>> load() async {
+  /// @returns baris keranjang dan kuncinya yang tersimpan; baris kosong tanpa kunci
+  ///   bila belum ada data, datanya rusak atau usang, atau penyimpanan tidak bisa dibaca.
+  Future<SavedCart> load() async {
+    const SavedCart empty = (items: [], idempotencyKey: null);
     try {
       final raw = await _prefs.getString(storageKey);
-      if (raw == null) return [];
-      final items = decode(raw);
-      if (items == null) await _prefs.remove(storageKey);
-      return items ?? [];
+      if (raw == null) return empty;
+      final saved = decode(raw);
+      if (saved == null) await _prefs.remove(storageKey);
+      return saved ?? empty;
     } catch (_) {
-      return [];
+      return empty;
     }
   }
 
@@ -45,12 +52,16 @@ class CartStore {
   /// Galat penyimpanan didiamkan (keranjang di memori tetap benar).
   ///
   /// @param items isi keranjang saat ini.
-  Future<void> save(List<CartItem> items) async {
+  /// @param idempotencyKey Idempotency-Key checkout untuk isi ini, atau null bila belum dibuat.
+  Future<void> save(List<CartItem> items, {String? idempotencyKey}) async {
     try {
       if (items.isEmpty) {
         await _prefs.remove(storageKey);
       } else {
-        await _prefs.setString(storageKey, encode(items));
+        await _prefs.setString(
+          storageKey,
+          encode(items, idempotencyKey: idempotencyKey),
+        );
       }
     } catch (_) {
       // Penyimpanan penuh/diblokir: keranjang hanya hilang bila halaman dimuat ulang.
@@ -60,9 +71,12 @@ class CartStore {
   /// Mengubah [items] menjadi teks JSON berversi.
   ///
   /// @param items isi keranjang.
-  /// @returns teks JSON `{"v":1,"items":[...]}`.
-  static String encode(List<CartItem> items) => jsonEncode({
+  /// @param idempotencyKey Idempotency-Key checkout; tidak ditulis bila null.
+  /// @returns teks JSON `{"v":1,"idem":...,"items":[...]}`.
+  static String encode(List<CartItem> items, {String? idempotencyKey}) =>
+      jsonEncode({
         'v': formatVersion,
+        'idem': ?idempotencyKey,
         'items': [
           for (final item in items)
             {
@@ -76,15 +90,17 @@ class CartStore {
   /// Mengurai teks JSON hasil [encode].
   ///
   /// @param raw teks yang tersimpan di perangkat.
-  /// @returns baris keranjang; null bila teksnya rusak, versinya bukan
-  ///   [formatVersion], ada baris yang tidak sah, atau barisnya dari lebih dari satu toko.
-  static List<CartItem>? decode(String raw) {
+  /// @returns baris keranjang dan kuncinya; null bila teksnya rusak, versinya bukan
+  ///   [formatVersion], ada baris atau kunci yang tidak sah, atau barisnya dari lebih dari satu toko.
+  static SavedCart? decode(String raw) {
     try {
       // 1. Pastikan bentuk luar dan versinya cocok.
       final decoded = jsonDecode(raw);
       if (decoded is! Map || decoded['v'] != formatVersion) return null;
       final lines = decoded['items'];
+      final idempotencyKey = decoded['idem'];
       if (lines is! List) return null;
+      if (idempotencyKey != null && idempotencyKey is! String) return null;
       // 2. Bangun ulang tiap baris; satu baris tidak sah membatalkan semuanya.
       final items = <CartItem>[];
       for (final line in lines) {
@@ -99,7 +115,8 @@ class CartStore {
       }
       // 3. Keranjang hanya boleh berisi menu dari satu toko.
       final merchantIds = items.map((item) => item.menu.merchant.id).toSet();
-      return merchantIds.length > 1 ? null : items;
+      if (merchantIds.length > 1) return null;
+      return (items: items, idempotencyKey: idempotencyKey as String?);
     } catch (_) {
       return null; // JSON rusak, kolom hilang/salah tipe, atau opsi tidak ditemukan.
     }
