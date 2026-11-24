@@ -3,6 +3,20 @@
 Halo tim **KateringKita** (Abdurrahim, Rohan, Diego, Ammar)! 👋  
 Ini adalah *repository* aplikasi **Mobile KateringKita** (Flutter). Supaya waktu kalian *clone* atau *pull* project ini di laptop masing-masing **nggak kena drama error beda versi, gagal build, atau layar merah**, tolong baca panduan santai di bawah ini secara urut ya!
 
+## 📱 Tentang aplikasi
+
+Aplikasi pembeli KateringKita (Android dan web). Semua data dan aturan bisnis lewat [backend REST API](https://github.com/stanlevv/kateringkita-backend); aplikasi tidak menyentuh database, Midtrans, atau penyedia AI secara langsung. Diagram arsitektur seluruh sistem ada di README backend.
+
+| Fitur | Layar |
+|---|---|
+| Daftar, masuk, lupa sandi (OTP email) | `screens/auth/` |
+| Beranda, cari, detail menu, profil toko, banner & pop-up promo | `screens/home/` |
+| Keranjang & checkout (titik temu, voucher toko + platform), bayar tunai / VA / online (Midtrans) | `screens/orders/` |
+| Pesanan aktif & selesai, status langsung, pesan lagi, ulasan, chat WhatsApp ke penjual | `screens/orders/` |
+| Favorit menu & toko, notifikasi | `screens/liked/`, `screens/home/` |
+| Asisten AI & rekomendasi menu | `screens/ai/` |
+| Profil, Voucher Saya, tiket bantuan ke tim KateringKita | `screens/profile/`, `screens/support/` |
+
 ---
 
 ## 🛠️ 1. Spesifikasi Versi yang Dipakai (Wajib Cek Dulu!)
@@ -62,6 +76,18 @@ Ketik perintah ini di terminal:
 flutter run
 ```
 > **💡 Catatan Pertama Kali Run:** Waktu pertama kali banget kamu jalanin `flutter run`, Gradle bakal men-download *dependencies* Android di belakang layar. Kalau internet agak pelan, proses pertama ini bisa makan waktu **3–8 menit**. Jangan panik dan **jangan di-close paksa** terminalnya ya, tunggu aja sampai selesai. Run kedua dan seterusnya bakal ngebut!
+
+### Build APK release (untuk dibagikan)
+ID aplikasi: `id.kateringkita.app`. APK resmi ditandatangani kunci release dari `android/key.properties`:
+1. Minta file keystore (`.jks`) dan `key.properties` ke pemegang kunci rilis. **Jangan pernah di-commit** (sudah di `.gitignore`).
+2. Taruh `key.properties` di folder `android/` (format: lihat `android/key.properties.example`).
+3. Build:
+   ```bash
+   flutter build apk --release --dart-define=API_BASE_URL=https://ketring-45f82aef1ca0.herokuapp.com/api/v1
+   ```
+   Hasilnya di `build/app/outputs/flutter-apk/app-release.apk`.
+
+Tanpa `key.properties`, build release tetap jalan tetapi memakai kunci debug. APK seperti itu tidak bisa memperbarui APK resmi yang sudah terpasang di HP.
 
 ---
 

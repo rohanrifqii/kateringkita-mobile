@@ -87,6 +87,21 @@ void main() {
     expect(m.vouchers.single.code, 'HEMAT10');
   });
 
+  test('profil toko: cover_url dari server; server lama tanpa kolom → null', () {
+    final dasar = {
+      'id': 3,
+      'slug': 'dapur-siti',
+      'business_name': 'Dapur Siti',
+      'merchant_type': {'id': 1, 'name': 'Katering'},
+      'is_open': true,
+      'open_time': '07:00',
+      'close_time': '16:00',
+    };
+    expect(MerchantProfile.fromJson(dasar).coverUrl, isNull);
+    final m = MerchantProfile.fromJson({...dasar, 'cover_url': 'https://x/c.jpg'});
+    expect(m.coverUrl, 'https://x/c.jpg');
+  });
+
   test('quote: potongan toko/platform & voucher terpakai; server lama → 0', () {
     final q = Quote.fromJson({
       'items': [],

@@ -1,0 +1,6 @@
+# Salin menjadi android/key.properties (jangan di-commit) lalu isi.
+# Simpan file .jks di luar repo dan cadangkan: tanpa file ini APK resmi tidak bisa diperbarui lagi.
+storeFile=C:/Users/NAMA/.kateringkita-rilis/kateringkita-rilis.jks
+storePassword=ISI_SANDI_KEYSTORE
+keyAlias=kateringkita
+keyPassword=ISI_SANDI_KEYSTORE

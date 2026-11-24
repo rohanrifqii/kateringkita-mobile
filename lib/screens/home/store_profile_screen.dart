@@ -369,8 +369,10 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Container(color: AppColors.primary),
-                  // Lapisan gelap bergradasi agar tombol atas terlihat jelas
+                  _vendor.coverUrl == null
+                      ? Container(color: AppColors.primary)
+                      : MenuImage(_vendor.coverUrl, fit: BoxFit.cover),
+                  // Dark Gradient Overlay agar tombol atas terlihat jelas
                   Container(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
