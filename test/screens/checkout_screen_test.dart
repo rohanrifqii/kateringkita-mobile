@@ -31,6 +31,10 @@ void _testWidgets(String description, WidgetTesterCallback body) =>
     testWidgets(description, (t) => withoutOsmTileNotice(() => body(t)));
 
 class _FakeAuth extends ChangeNotifier implements AuthProvider {
+  /// Sesi palsu tidak pernah dimuat dari server: selalu siap.
+  @override
+  Future<void> get ready async {}
+
   _FakeAuth(this._u);
   final ApiUser? _u;
 

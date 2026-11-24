@@ -9,9 +9,11 @@ import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/core/app_router.dart';
 import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/data/auth_repository.dart';
+import 'package:kateringkita_pbl/data/cart_store.dart';
 import 'package:kateringkita_pbl/data/catalog_repository.dart';
 import 'package:kateringkita_pbl/data/token_store.dart';
 import 'package:kateringkita_pbl/main.dart';
+import 'package:kateringkita_pbl/models/cart_item.dart';
 import 'package:kateringkita_pbl/models/product_model.dart';
 import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:kateringkita_pbl/providers/cart_provider.dart';
@@ -31,10 +33,18 @@ http.Response _err(int status, String code, String msg) => http.Response(
   headers: {'content-type': 'application/json'},
 );
 
-Future<void> _pump(WidgetTester tester, MockClientHandler h) async {
-  FlutterSecureStorage.setMockInitialValues({});
+/// Memasang aplikasi lengkap. [secureValues] dan [savedPrefs] adalah isi
+/// penyimpanan perangkat sebelum aplikasi dibuka (mis. token dan keranjang
+/// tersimpan, seperti saat halaman web dimuat ulang).
+Future<void> _pump(
+  WidgetTester tester,
+  MockClientHandler h, {
+  Map<String, String> secureValues = const {},
+  Map<String, Object> savedPrefs = const {},
+}) async {
+  FlutterSecureStorage.setMockInitialValues(Map.of(secureValues));
   SharedPreferencesAsyncPlatform.instance =
-      InMemorySharedPreferencesAsync.empty();
+      InMemorySharedPreferencesAsync.withData(Map.of(savedPrefs));
   await tester.pumpWidget(
     buildAppProviders(client: MockClient(h), child: const KateringKitaApp()),
   );
@@ -252,6 +262,89 @@ void main() {
       );
     },
   );
+
+  group('web dimuat ulang di /checkout', () {
+    const user = {
+      'id': 1,
+      'role': 'customer',
+      'full_name': 'Budi',
+      'email': 'a@x.com',
+      'phone': '0812345678901',
+    };
+    final menuJson = {
+      'id': 7,
+      'name': 'Nasi Box',
+      'price': 10000,
+      'merchant': {
+        'id': 1,
+        'slug': 'a',
+        'business_name': 'A',
+        'is_open': true,
+        'pickup_points': [
+          {'id': 2, 'name': 'Perpustakaan'},
+        ],
+      },
+      'options': [],
+    };
+    final savedCart = CartStore.encode([
+      CartItem(menu: ProductModel.fromJson(menuJson)),
+    ]);
+
+    http.Response ok(Object data) => http.Response(
+      jsonEncode({'data': data, 'meta': {'total': 0}}),
+      200,
+      headers: {'content-type': 'application/json'},
+    );
+
+    /// Membuka aplikasi di /checkout dengan token dan keranjang tersimpan;
+    /// GET /me baru menjawab setelah 300 ms ([sessionValid] menentukan isinya).
+    Future<void> reloadCheckout(
+      WidgetTester tester, {
+      required bool sessionValid,
+    }) async {
+      tester.binding.platformDispatcher.defaultRouteNameTestValue =
+          AppRoutes.checkout;
+      addTearDown(
+        tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+      );
+      await _pump(
+        tester,
+        (r) async {
+          final path = r.url.path;
+          if (path.endsWith('/v1/me')) {
+            await Future<void>.delayed(const Duration(milliseconds: 300));
+            return sessionValid
+                ? ok({'user': user})
+                : _err(401, 'UNAUTHORIZED', 'x');
+          }
+          if (path.endsWith('/menus/7')) return ok(menuJson);
+          return ok([]);
+        },
+        secureValues: {'access_token': 'tok', 'session_email': 'a@x.com'},
+        savedPrefs: {CartStore.storageKey: savedCart},
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      // GET /me belum kembali: Login belum boleh dibuka.
+      expect(_currentRoute(), AppRoutes.checkout);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+
+    testWidgets('token sah: checkout tampil tanpa Login', (tester) async {
+      await reloadCheckout(tester, sessionValid: true);
+      expect(_currentRoute(), AppRoutes.checkout);
+      expect(find.text('Checkout'), findsOneWidget);
+      expect(find.text('Nasi Box'), findsWidgets);
+      final ctx = appNavigatorKey.currentContext!;
+      expect(ctx.read<AuthProvider>().isLoggedIn, isTrue);
+    });
+
+    testWidgets('token tidak sah: Login dibuka', (tester) async {
+      await reloadCheckout(tester, sessionValid: false);
+      expect(_currentRoute(), AppRoutes.login);
+    });
+  });
 
   testWidgets('expired token at splash: guest continues to main nav', (
     tester,

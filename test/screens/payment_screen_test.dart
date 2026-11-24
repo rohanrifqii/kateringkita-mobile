@@ -15,6 +15,10 @@ import 'package:kateringkita_pbl/screens/orders/payment_screen.dart';
 import 'package:provider/provider.dart';
 
 class _FakeAuth extends ChangeNotifier implements AuthProvider {
+  /// Sesi palsu tidak pernah dimuat dari server: selalu siap.
+  @override
+  Future<void> get ready async {}
+
   @override
   ApiUser? get user => null;
   @override

@@ -10,8 +10,12 @@ import 'app_routes.dart';
 ///
 /// Layar Login dibuka dengan argumen `{'returnTo': true}` sehingga setelah berhasil ia menutup
 /// diri dengan hasil true. Mengembalikan false bila pengguna kembali tanpa login.
+/// Sesi tersimpan yang masih dimuat (GET /me saat web dimuat ulang) ditunggu dulu.
 Future<bool> requireLogin(BuildContext context) async {
-  if (context.read<AuthProvider>().isLoggedIn) return true;
+  final auth = context.read<AuthProvider>();
+  await auth.ready;
+  if (!context.mounted) return false;
+  if (auth.isLoggedIn) return true;
   final ok = await Navigator.of(context)
       .pushNamed(AppRoutes.login, arguments: {'returnTo': true});
   return ok == true;
