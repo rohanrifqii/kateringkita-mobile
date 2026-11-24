@@ -90,19 +90,16 @@ ID aplikasi: `id.kateringkita.app`. APK resmi ditandatangani kunci release dari 
 Tanpa `key.properties`, build release tetap jalan tetapi memakai kunci debug. APK seperti itu tidak bisa memperbarui APK resmi yang sudah terpasang di HP.
 
 ### Build web release
-1. Build dari akar proyek lewat **PowerShell**:
-   ```powershell
-   flutter build web --release --dart-define=API_BASE_URL=/api/v1
-   ```
-   Kalau terpaksa lewat Git Bash, awali dengan `MSYS_NO_PATHCONV=1`. Tanpa itu Git Bash mengubah `/api/v1` menjadi path Windows (mis. `C:/Program Files/Git/api/v1`) dan aplikasi memanggil alamat yang salah:
-   ```bash
-   MSYS_NO_PATHCONV=1 flutter build web --release --dart-define=API_BASE_URL=/api/v1
-   ```
-2. Buang font shadcn_ui yang tidak terpakai (ikon Lucide dan font Geist/GeistMono, sekitar 3 MB) dari hasil build:
-   ```bash
-   dart run tool/strip_unused_web_fonts.dart
-   ```
-   Aman dijalankan berulang. Hasil akhir ada di `build/web/`.
+Jalankan satu skrip ini dari **PowerShell**:
+```powershell
+powershell -ExecutionPolicy Bypass -File tool\build_web.ps1
+```
+Skrip ini:
+1. menjalankan `flutter build web --release --dart-define=API_BASE_URL=/api/v1`;
+2. membuang font shadcn_ui yang tidak terpakai (ikon Lucide dan font Geist/GeistMono, sekitar 3 MB) lewat `dart run tool/strip_unused_web_fonts.dart`;
+3. memeriksa `build/web/main.dart.js` memuat `/api/v1` dan tidak memuat `Program Files`. Bila salah, skrip gagal.
+
+Hasil akhir ada di `build/web/`. Jangan build web dari Git Bash tanpa `MSYS_NO_PATHCONV=1`: Git Bash mengubah `/api/v1` menjadi path Windows (mis. `C:/Program Files/Git/api/v1`), dan aplikasi memanggil alamat yang salah.
 
 ---
 
