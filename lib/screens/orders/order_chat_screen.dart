@@ -65,6 +65,10 @@ class _OrderChatScreenState extends State<OrderChatScreen>
   Timer? _pollTimer;
 
   List<ChatMessage> _messages = const [];
+
+  /// Id terbesar yang datang dari `fetch`. Pesan hasil kirim sendiri tidak
+  /// dihitung, supaya pesan penjual yang masuk lebih dulu tidak terlewat.
+  int? _lastFetchedId;
   ChatState? _chat;
   String? _errorMessage;
   bool _fetching = false;
@@ -129,17 +133,16 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     });
   }
 
-  /// Mengambil pesan sesudah pesan terakhir yang tampil, lalu menandai pesan
+  /// Mengambil pesan sesudah pesan terakhir hasil cek, lalu menandai pesan
   /// penjual sudah dibaca. Bila gagal, pesan lama tetap tampil.
   Future<void> _load() async {
     _fetching = true;
     final repository = context.read<OrderChatRepository>();
     try {
       // 1. Ambil pesan baru saja (semua pesan pada pemuatan pertama).
-      final lastShownId = _messages.isEmpty ? null : _messages.last.id;
       final result = await repository.fetch(
         widget.orderCode,
-        afterId: lastShownId,
+        afterId: _lastFetchedId,
       );
       if (!mounted) return;
       // 2. Gabungkan tanpa duplikat. Jawaban lama yang masih "terbuka" tidak
@@ -147,14 +150,18 @@ class _OrderChatScreenState extends State<OrderChatScreen>
       final keepLocalState = _isFinallyClosed && result.chat.isOpen;
       setState(() {
         _messages = mergeMessages(_messages, result.messages);
+        for (final message in result.messages) {
+          if (message.id > (_lastFetchedId ?? 0)) _lastFetchedId = message.id;
+        }
         if (!keepLocalState) _chat = result.chat;
         _errorMessage = null;
       });
       if (result.messages.isNotEmpty) _scrollToEnd();
-      // 3. Ada pesan penjual yang belum dibaca: tandai sampai pesan terakhir
-      //    yang tampil, lalu perbarui badge tab Pesanan.
-      if (result.chat.unreadCount > 0 && _messages.isNotEmpty) {
-        await _markRead(repository, _messages.last.id);
+      // 3. Ada pesan penjual yang belum dibaca: tandai hanya sampai pesan
+      //    hasil cek yang sudah tampil, lalu perbarui badge tab Pesanan.
+      final readUpToId = _lastFetchedId;
+      if (result.chat.unreadCount > 0 && readUpToId != null) {
+        await _markRead(repository, readUpToId);
       }
     } catch (error) {
       // 4. Gagal: pesan galat hanya bila belum ada yang bisa ditampilkan.
@@ -286,12 +293,14 @@ class _OrderChatScreenState extends State<OrderChatScreen>
 
   /// Meminta alasan lalu melaporkan chat ke admin.
   Future<void> _report() async {
+    // 1. Minta alasan; dialog sendiri yang memeriksa panjangnya.
     final reason = await showDialog<String>(
       context: context,
       builder: (_) => const _ReportDialog(),
     );
     if (reason == null || !mounted) return;
     try {
+      // 2. Kirim laporan, lalu tombol Laporkan menjadi "Dilaporkan".
       await context.read<OrderChatRepository>().report(
         widget.orderCode,
         reason,
@@ -300,6 +309,8 @@ class _OrderChatScreenState extends State<OrderChatScreen>
       _showSnack('Laporan terkirim. Admin akan meninjau chat ini.');
       setState(() => _chat = _chat?.copyWith(reportedByMe: true));
     } on ApiException catch (error) {
+      // 3. Ditolak: tampilkan pesan server; laporan ganda juga menandai
+      //    chat sudah dilaporkan.
       if (!mounted) return;
       _showSnack(error.message);
       if (error.code == 'ALREADY_REPORTED') {

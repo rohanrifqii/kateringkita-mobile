@@ -27,23 +27,27 @@ ChatState openChat({int? otherPartyLastReadId, int unreadCount = 0}) =>
     );
 
 /// Repository palsu: fetch pertama mengembalikan [initialMessages], fetch
-/// berikutnya kosong. Semua panggilan dicatat untuk diperiksa test.
+/// berikutnya mengembalikan [messagesAfter] untuk `afterId` itu (kosong bila
+/// tidak ada). Semua panggilan dicatat untuk diperiksa test.
 class FakeOrderChatRepository implements OrderChatRepository {
   FakeOrderChatRepository({
     this.initialMessages = const [],
     ChatState? chat,
     this.sendError,
+    this.messagesAfter = const {},
+    this.nextSentId = 100,
   }) : chat = chat ?? openChat();
 
   final List<ChatMessage> initialMessages;
   ChatState chat;
   ApiException? sendError;
+  final Map<int, List<ChatMessage>> messagesAfter;
+  int nextSentId;
 
   final List<int?> fetchAfterIds = [];
   final List<String?> sentBodies = [];
   final List<int?> markReadLastIds = [];
   final List<String> reportReasons = [];
-  int _nextId = 100;
 
   @override
   Future<({List<ChatMessage> messages, ChatState chat})> fetch(
@@ -52,7 +56,9 @@ class FakeOrderChatRepository implements OrderChatRepository {
   }) async {
     fetchAfterIds.add(afterId);
     return (
-      messages: afterId == null ? initialMessages : <ChatMessage>[],
+      messages: afterId == null
+          ? initialMessages
+          : messagesAfter[afterId] ?? <ChatMessage>[],
       chat: chat,
     );
   }
@@ -66,7 +72,7 @@ class FakeOrderChatRepository implements OrderChatRepository {
     final error = sendError;
     if (error != null) throw error;
     sentBodies.add(body);
-    return chatMessage(_nextId++, 'customer', body ?? '');
+    return chatMessage(nextSentId++, 'customer', body ?? '');
   }
 
   @override
@@ -244,4 +250,39 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'pesan penjual yang datang saat pembeli mengirim tidak terlewat',
+    (tester) async {
+      // Layar memuat [1, 2]; penjual mengirim 3; kiriman pembeli dijawab id 4.
+      final repository = FakeOrderChatRepository(
+        initialMessages: [
+          chatMessage(1, 'customer', 'Halo'),
+          chatMessage(2, 'merchant', 'Siap'),
+        ],
+        chat: openChat(unreadCount: 1),
+        nextSentId: 4,
+        messagesAfter: {
+          2: [
+            chatMessage(3, 'merchant', 'Saya di dekat gerbang'),
+            chatMessage(4, 'customer', 'Saya sudah di titik temu'),
+          ],
+        },
+      );
+      await pumpChatScreen(tester, repository);
+      expect(repository.markReadLastIds, [2]);
+
+      await tester.tap(find.text('Saya sudah di titik temu'));
+      await tester.pumpAndSettle();
+      // Sebelum pesan 3 tampil, tanda baca tidak boleh melewati id 2.
+      expect(repository.markReadLastIds, [2]);
+
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump();
+      expect(repository.fetchAfterIds, [null, 2]);
+      expect(find.text('Saya di dekat gerbang'), findsOneWidget);
+      expect(find.text('Saya sudah di titik temu'), findsNWidgets(2));
+      expect(repository.markReadLastIds, [2, 4]);
+    },
+  );
 }
