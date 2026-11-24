@@ -1,3 +1,5 @@
+// Kerangka tampilan bersama layar auth (lupa sandi, verifikasi kode, atur ulang sandi): logo,
+// nama aplikasi, dan slogan di atas, isi form dari layar pemanggil di bawah. Hanya tampilan.
 import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';

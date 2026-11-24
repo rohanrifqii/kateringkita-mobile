@@ -47,6 +47,8 @@ class AppNotification {
     return v is String && v.isNotEmpty ? v : null;
   }
 
+  /// Salinan notifikasi yang ditandai dibaca pada [at]; [readAt] lama dipertahankan
+  /// bila sudah dibaca sebelumnya.
   AppNotification markedRead(DateTime at) => AppNotification(
         id: id,
         type: type,

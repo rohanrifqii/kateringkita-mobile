@@ -1,10 +1,14 @@
+// Versi web dari cadangan salin untuk clipboard_copy.dart, dipakai saat halaman dibuka tanpa
+// HTTPS (mis. lewat IP WiFi) sehingga Clipboard API browser tidak tersedia.
 import 'package:web/web.dart' as web;
 
-// Clipboard API (navigator.clipboard) hanya ada di konteks aman (HTTPS/localhost).
+/// `true` bila halaman bukan konteks aman: Clipboard API (navigator.clipboard)
+/// hanya ada di HTTPS/localhost, jadi [salin] harus dipakai.
 bool get perluCadangan => !web.window.isSecureContext;
 
-/// Salin lewat textarea sementara + execCommand('copy'); sinkron agar masih
-/// dalam aktivasi pengguna dari ketukan.
+/// Salin lewat textarea tersembunyi sementara + execCommand('copy'); sinkron
+/// agar masih dalam aktivasi pengguna dari ketukan. Mengembalikan `true` bila
+/// browser melaporkan salin berhasil; textarea selalu dibuang lagi.
 bool salin(String text) {
   final area = web.HTMLTextAreaElement()
     ..value = text

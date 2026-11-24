@@ -1,10 +1,13 @@
+// Widget kecil yang dipakai bersama oleh layar Bantuan & Tiket (daftar, buat, detail): chip status tiket dan kartu
+// arahan agar urusan pesanan ditanyakan ke penjual lewat WhatsApp. Tidak memanggil server.
 import 'package:flutter/material.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/app_text_styles.dart';
 import '../../models/support_ticket.dart';
 
-/// Chip status tiket: Menunggu admin / Dibalas / Ditutup.
+/// Chip status tiket: Menunggu admin (kuning, `open` atau status lain), Dibalas (hijau, `answered`),
+/// Ditutup (abu-abu, `closed`). [status] adalah nilai status mentah dari server.
 class TicketStatusChip extends StatelessWidget {
   const TicketStatusChip(this.status, {super.key});
 
@@ -30,7 +33,8 @@ class TicketStatusChip extends StatelessWidget {
   }
 }
 
-/// Kartu arahan: urusan pesanan lebih cepat langsung ke penjual.
+/// Kartu arahan hijau berikon toko: urusan pesanan lebih cepat langsung ke penjual. [text] isi arahannya,
+/// [action] widget opsional (mis. tombol) di bawah teks.
 class SellerWhatsAppHint extends StatelessWidget {
   const SellerWhatsAppHint({
     super.key,

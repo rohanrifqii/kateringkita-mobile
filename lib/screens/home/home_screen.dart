@@ -1,6 +1,7 @@
-// Layar Beranda (tab pertama MainNavigationScreen): titik temu favorit, pencarian, kategori, banner info, dan daftar menu.
+// Layar Beranda (tab pertama MainNavigationScreen): titik temu favorit, pencarian, kategori, banner, dan daftar menu.
 // Kategori, menu, dan titik temu diambil lewat CatalogRepository (GET /meta/categories, /menus, /meta/pickup-points);
-// titik temu favorit disimpan ke profil lewat AuthProvider (PATCH /me). Banner info layanan masih data statis di berkas ini.
+// titik temu favorit disimpan ke profil lewat AuthProvider (PATCH /me). Banner dan pop-up promo diambil lewat
+// PromoContentRepository (GET /banners, GET /popup); bila server tidak punya banner, tampil kartu info statis di berkas ini.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -81,6 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Banner dari server (admin & penjual); kosong → kartu informasi bawaan.
   List<PromoBanner> _serverBanners = const [];
 
+  /// Kartu informasi layanan bawaan (statis) yang tampil bila [_serverBanners] kosong.
   static const List<_InfoBanner> _infoBanners = [
     _InfoBanner(
       tag: 'TITIK TEMU',
@@ -161,6 +163,8 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  /// Muat banner dari server (GET /banners) lalu pop-up promo. Galat diabaikan: beranda tetap memakai kartu
+  /// informasi bawaan. Indeks titik banner dikembalikan ke 0 setiap daftar banner berganti.
   Future<void> _loadBanners() async {
     try {
       final banners = await context.read<PromoContentRepository>().banners();
@@ -175,7 +179,8 @@ class _HomeScreenState extends State<HomeScreen> {
     await _loadPopup();
   }
 
-  /// Pop-up promo admin: sekali sehari, tidak tampil bila vouchernya sudah diklaim.
+  /// Pop-up promo admin (GET /popup), ditampilkan lewat [maybeShowPromoPopup]: sekali sehari, tidak tampil bila
+  /// vouchernya sudah diklaim. Dipanggil di akhir [_loadBanners].
   Future<void> _loadPopup() async {
     try {
       final popup = await context.read<PromoContentRepository>().popup();
@@ -186,6 +191,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Ketukan banner server: target toko membuka profil toko (slug toko), target promo membuka lembar voucher;
+  /// banner tanpa target tidak melakukan apa-apa.
   void _onServerBannerTap(PromoBanner b) {
     if (b.target == BannerTarget.merchant && b.merchant != null) {
       Navigator.pushNamed(context, AppRoutes.storeProfile, arguments: b.merchant!.slug);
@@ -194,7 +201,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Lembar voucher dari banner: Klaim ke Voucher Saya (tamu login dulu), atau buka toko pemilik voucher.
+  /// Lembar voucher dari banner: Klaim ke Voucher Saya (tamu login dulu; POST /me/vouchers/:id/claim lewat
+  /// VoucherRepository), atau buka toko pemilik voucher. Klaim berhasil menutup lembar dan menampilkan SnackBar;
+  /// gagal menampilkan pesan galat dan tombol bisa diketuk lagi.
   void _showBannerVoucher(Voucher awal) {
     final messenger = ScaffoldMessenger.of(context);
     showModalBottomSheet<void>(
@@ -257,6 +266,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Satu kartu banner server: gambar penuh, gradasi gelap di bawah, dan judul banner; diketuk → [_onServerBannerTap].
   Widget _buildServerBanner(PromoBanner b) => GestureDetector(
         onTap: () => _onServerBannerTap(b),
         child: Container(
@@ -689,7 +699,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 20),
 
-              // ---------------- BANNER INFO LAYANAN ----------------
+              // ---------------- BANNER: dari server bila ada, selain itu kartu info layanan statis ----------------
               SizedBox(
                 width: double.infinity,
                 height: 172,
@@ -700,6 +710,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     setState(() => _currentBannerIndex = index);
                   },
                   itemBuilder: (context, index) {
+                    // Banner server didahulukan; kode di bawahnya menggambar kartu info statis.
                     if (_serverBanners.isNotEmpty) return _buildServerBanner(_serverBanners[index]);
                     final banner = _infoBanners[index];
                     return Container(

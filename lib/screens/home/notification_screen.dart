@@ -1,6 +1,7 @@
 // Layar Notifikasi: dibuka dari ikon lonceng di Beranda. Daftarnya diambil dari server lewat NotificationRepository
 // (GET /me/notifications, tandai dibaca lewat POST /me/notifications/read) dan jumlah belum dibaca disinkronkan ke
-// NotificationProvider supaya lencana lonceng ikut berubah. Tamu hanya melihat ajakan masuk.
+// NotificationProvider supaya lencana lonceng ikut berubah. Tamu hanya melihat ajakan masuk. Notifikasi diketuk
+// membuka daftar Pesanan (notifikasi pesanan) atau Detail Tiket (notifikasi balasan tiket Bantuan).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -481,7 +482,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
         ),
       );
 
-  /// Ikon dan warna kartu menurut tipe notifikasi; notifikasi pesanan dibedakan lagi menurut status pesanannya.
+  /// Ikon dan warna kartu menurut tipe notifikasi; notifikasi pesanan dibedakan lagi menurut status pesanannya,
+  /// dan notifikasi yang membawa kode tiket memakai ikon CS.
   (IconData, Color) _iconOf(AppNotification n) {
     switch (n.type) {
       case 'order_status':

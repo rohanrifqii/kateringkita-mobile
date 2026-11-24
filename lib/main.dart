@@ -1,5 +1,6 @@
 // Titik masuk aplikasi: membaca pilihan tema tersimpan, lalu memasang semua provider (tema, keranjang, ApiClient,
-// auth, katalog, pesanan, favorit, notifikasi, Asisten AI, riwayat AI) di atas seluruh layar.
+// auth, katalog, pesanan, favorit, voucher, konten promo, notifikasi, tiket Bantuan, Asisten AI, riwayat AI)
+// di atas seluruh layar.
 // Layar membaca provider ini untuk mengakses data: layar → provider → repository → ApiClient → backend.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -69,8 +70,8 @@ void main() async {
 ///
 /// Membungkus [child] dengan [MultiProvider]. [client] bisa diisi klien HTTP palsu saat
 /// pengujian; [isDark] adalah mode gelap awal. Di sini juga diatur: penanganan 401 global
-/// (hapus sesi lalu buka layar Login) dan pengosongan keranjang, favorit, serta lencana
-/// notifikasi saat pengguna keluar.
+/// (hapus sesi lalu buka layar Login) dan pengosongan keranjang, favorit, lencana
+/// notifikasi, serta titik tiket Bantuan belum dibaca saat pengguna keluar.
 Widget buildAppProviders({
   required Widget child,
   http.Client? client,
@@ -154,7 +155,8 @@ Widget buildAppProviders({
 }
 
 /// Widget akar aplikasi: membuat [MaterialApp] dengan tema terang/gelap dari [ThemeProvider]
-/// dan daftar rute dari [AppRouter].
+/// dan daftar rute dari [AppRouter]. Setiap layar dibungkus [PhoneFrame] (di web dengan layar
+/// lebih lebar dari ponsel, aplikasi tampil selebar ponsel di tengah).
 ///
 /// Widget ini dibangun ulang setiap kali tema berubah, dan saat itu juga menyalin status
 /// mode gelap ke `AppColors.isDarkMode` agar warna statis di [AppColors] ikut berganti.

@@ -1,3 +1,7 @@
+// Daftar nama rute (string) seluruh layar aplikasi. Dipakai bersama Navigator.pushNamed
+// dan dipetakan ke layarnya di app_router.dart.
+
+/// Konstanta nama rute; pakai `AppRoutes.xxx` alih-alih menulis string rute langsung.
 class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
@@ -20,8 +24,15 @@ class AppRoutes {
   static const String liked = '/liked';
   static const String profile = '/profile';
   static const String notifications = '/notifications';
+  /// Daftar tiket Bantuan pembeli.
   static const String tickets = '/tickets';
+
+  /// Layar Voucher Saya (voucher yang sudah diklaim pembeli).
   static const String myVouchers = '/my-vouchers';
+
+  /// Form membuat tiket Bantuan baru.
   static const String ticketCreate = '/ticket-create';
+
+  /// Percakapan satu tiket; argumen: kode tiket (String) atau TicketDetail yang baru dibuat.
   static const String ticketDetail = '/ticket-detail';
 }

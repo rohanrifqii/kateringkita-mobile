@@ -9,6 +9,9 @@ class ApiConfig {
   static const String _raw = String.fromEnvironment('API_BASE_URL',
       defaultValue: 'https://ketring-45f82aef1ca0.herokuapp.com/api/v1');
 
+  /// Alamat dasar API yang dipakai ApiClient: [_raw] apa adanya bila sudah
+  /// lengkap (punya skema http/https), atau digabung dengan alamat halaman
+  /// yang sedang dibuka ([Uri.base]) bila relatif.
   static String get baseUrl => resolve(_raw, Uri.base);
 
   /// Alamat lengkap dibiarkan; alamat relatif digabung dengan [page].

@@ -1,3 +1,6 @@
+// Layar Detail Tiket: percakapan satu tiket Bantuan. Dibuka dari daftar tiket, setelah membuat tiket, atau dari
+// notifikasi tiket. Utas dimuat lewat TicketRepository (GET /me/tickets/:code, diulang tiap 5 detik); pembeli bisa
+// membalas (POST /me/tickets/:code/messages) atau menutup tiket (POST /me/tickets/:code/close).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -33,24 +36,31 @@ class TicketDetailScreen extends StatefulWidget {
 /// Jeda muat ulang utas tiket di latar.
 const Duration ticketPollInterval = Duration(seconds: 5);
 
+/// State detail tiket: data tiket, kolom balasan, timer muat ulang berkala, dan status kirim/tutup.
 class _TicketDetailScreenState extends State<TicketDetailScreen> {
   final _reply = TextEditingController();
   final _scroll = ScrollController();
+  /// Timer muat ulang berkala; dihentikan di dispose.
   Timer? _poll;
 
   String _code = '';
   bool _argsLoaded = false;
   TicketDetail? _ticket;
   bool _loading = true;
+  /// Galat memuat saat belum ada data tiket sama sekali (tampil layar penuh).
   String? _error;
+  /// Galat kolom balasan (validasi lokal atau `fields.body` dari server).
   String? _replyError;
   bool _sending = false;
   bool _closing = false;
+  /// Nomor urut pemuatan: hasil GET yang lebih lama dari balasan/penutupan terbaru diabaikan.
   int _seq = 0;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Argumen rute dibaca sekali: TicketDetail langsung ditampilkan, String hanya kodenya; lalu muat dari server
+    // dan mulai timer muat ulang berkala.
     if (_argsLoaded) return;
     _argsLoaded = true;
     final args = ModalRoute.of(context)?.settings.arguments;
@@ -82,9 +92,11 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     super.dispose();
   }
 
+  /// Pesan galat untuk pengguna: pesan server bila [ApiException], selain itu pesan umum.
   String _msg(Object e) =>
       e is ApiException ? e.message : 'Terjadi kesalahan. Coba lagi.';
 
+  /// Tampilkan pesan singkat di SnackBar mengambang.
   void _snack(String text) => ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
@@ -92,6 +104,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
       behavior: SnackBarBehavior.floating,
     ));
 
+  /// Gulir utas ke pesan paling bawah setelah frame berikutnya digambar.
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scroll.hasClients) return;
@@ -99,6 +112,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     });
   }
 
+  /// Muat tiket dari server (GET /me/tickets/:code). Bila jumlah pesan bertambah, utas digulir ke bawah.
   /// [silent]: tanpa indikator layar penuh (tarik-untuk-muat-ulang, atau
   /// data awal sudah ada). [background]: muat ulang berkala; gagal tidak
   /// memunculkan snackbar (dicoba lagi di putaran berikutnya).
@@ -138,6 +152,9 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     }
   }
 
+  /// Kirim balasan (validasi lokal TicketRules.reply, lalu POST /me/tickets/:code/messages). Berhasil: kolom
+  /// dikosongkan dan utas diganti dengan detail terbaru. 409 `TICKET_CLOSED`: tiket dimuat ulang agar status
+  /// tertutup tampil.
   Future<void> _send() async {
     final t = _ticket;
     if (_sending || t == null || t.isClosed) return;
@@ -177,6 +194,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     }
   }
 
+  /// Minta konfirmasi, lalu tutup tiket (POST /me/tickets/:code/close). Galat tampil di SnackBar.
   Future<void> _close() async {
     final t = _ticket;
     if (_closing || t == null || t.isClosed) return;
@@ -248,6 +266,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     );
   }
 
+  /// Tampilan sebelum data tiket ada: spinner saat memuat, atau galat dengan tombol Coba Lagi.
   Widget _placeholder() {
     if (_loading || _error == null) {
       return const Center(child: CircularProgressIndicator());
@@ -274,6 +293,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     );
   }
 
+  /// Utas tiket: kartu info + gelembung pesan (tarik untuk memuat ulang), lalu bilah balasan atau bilah tiket ditutup.
   Widget _thread(TicketDetail t) => Column(
         children: [
           Expanded(
@@ -295,6 +315,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         ],
       );
 
+  /// Kartu info tiket: kode, status, judul, kategori, pesanan terkait, waktu dibuat, dan siapa/kapan ditutup.
   Widget _header(TicketDetail t) {
     final closedBy = switch (t.closedBy) {
       'admin' => 'oleh $kTicketAdminName',
@@ -343,6 +364,7 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     );
   }
 
+  /// Satu baris keterangan kecil berikon: "[label]: [value]".
   Widget _meta(IconData icon, String label, String value) => Padding(
         padding: const EdgeInsets.only(top: 4),
         child: Row(
@@ -363,6 +385,8 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
         ),
       );
 
+  /// Gelembung satu pesan: pesan pembeli di kanan (oranye), balasan admin di kiri dengan nama pengirim; waktu WIB
+  /// di bawahnya.
   Widget _bubble(TicketMessage m) {
     final mine = !m.fromAdmin;
     final maxWidth = MediaQuery.sizeOf(context).width * 0.78;
@@ -432,11 +456,13 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     );
   }
 
+  /// Latar bilah bawah (balasan / tiket ditutup) dengan garis atas.
   BoxDecoration get _barDecoration => BoxDecoration(
         color: AppColors.surface,
         border: Border(top: BorderSide(color: AppColors.cardBorder)),
       );
 
+  /// Bilah balasan: kolom teks dengan penghitung karakter (panjang setelah trim) dan tombol kirim.
   Widget _replyBar() {
     final n = _reply.text.trim().length;
     return SafeArea(
@@ -506,6 +532,8 @@ class _TicketDetailScreenState extends State<TicketDetailScreen> {
     );
   }
 
+  /// Bilah untuk tiket yang sudah ditutup: keterangan, kolom balasan nonaktif, dan tombol "Buat tiket baru" yang
+  /// mengganti layar ini dengan formulir tiket baru.
   Widget _closedBar() => SafeArea(
         top: false,
         child: Container(

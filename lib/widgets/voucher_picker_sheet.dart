@@ -1,3 +1,5 @@
+// Lembar bawah pemilih voucher di Checkout (satu untuk slot toko, satu untuk slot platform).
+// Data dari VoucherRepository: GET /me/vouchers (sesuai keranjang), GET /vouchers/platform, dan klaim.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -59,6 +61,8 @@ class _VoucherPickerState extends State<_VoucherPicker> {
     _load();
   }
 
+  /// Memuat Voucher Saya untuk keranjang ini (hanya slot yang sama dan belum kedaluwarsa)
+  /// dan, untuk slot platform, voucher platform yang belum diklaim dan belum habis.
   Future<void> _load() async {
     final repo = context.read<VoucherRepository>();
     try {
@@ -80,6 +84,8 @@ class _VoucherPickerState extends State<_VoucherPicker> {
     }
   }
 
+  /// Klaim voucher platform lalu langsung tutup lembar dengan voucher hasil klaim;
+  /// bila gagal, pesan galat tampil di atas daftar.
   Future<void> _claimAndUse(Voucher v) async {
     final repo = context.read<VoucherRepository>();
     setState(() => _claiming = v.id);
@@ -137,6 +143,7 @@ class _VoucherPickerState extends State<_VoucherPicker> {
                           child: VoucherCard(
                             voucher: v,
                             width: null,
+                            // "Pakai" hanya aktif bila server menyatakan voucher bisa dipakai untuk keranjang ini.
                             action: _tombol('Pakai', v.usable == true ? () => Navigator.pop(context, v) : null),
                           ),
                         ),

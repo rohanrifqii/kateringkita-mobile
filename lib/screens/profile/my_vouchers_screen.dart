@@ -1,3 +1,6 @@
+// Layar "Voucher Saya": dibuka dari menu Voucher Saya di Profil (hanya untuk akun yang masuk). Data voucher diambil
+// lewat VoucherRepository: voucher platform (GET /vouchers/platform), voucher yang sudah diklaim (GET /me/vouchers),
+// dan klaim voucher platform (POST /me/vouchers/:id/claim). Voucher yang diklaim dipakai nanti di checkout.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -17,12 +20,17 @@ class MyVouchersScreen extends StatefulWidget {
   State<MyVouchersScreen> createState() => _MyVouchersScreenState();
 }
 
+/// State Voucher Saya: daftar voucher platform yang belum diklaim, voucher milik pembeli, tab aktif, dan klaim berjalan.
 class _MyVouchersScreenState extends State<MyVouchersScreen> {
+  /// Voucher platform yang belum diklaim (bisa diklaim di sini).
   List<Voucher> _platform = const [];
+  /// Voucher yang sudah diklaim pembeli (aktif maupun kedaluwarsa).
   List<Voucher> _mine = const [];
   bool _loading = true;
   String? _error;
+  /// true = tab "Kedaluwarsa" yang tampil.
   bool _expiredTab = false;
+  /// id voucher yang sedang diklaim; null bila tidak ada.
   int? _claiming;
 
   @override
@@ -31,6 +39,8 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
+  /// Muat voucher platform dan Voucher Saya bersamaan (GET /vouchers/platform + GET /me/vouchers); voucher platform
+  /// yang sudah diklaim disaring keluar. Galat ditampilkan di atas daftar dengan tombol Coba Lagi.
   Future<void> _load() async {
     final repo = context.read<VoucherRepository>();
     try {
@@ -51,10 +61,13 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
     }
   }
 
+  /// Tampilkan pesan singkat di SnackBar mengambang (menggantikan SnackBar yang sedang tampil).
   void _snack(String text) => ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(text), behavior: SnackBarBehavior.floating));
 
+  /// Klaim voucher platform [v] (POST /me/vouchers/:id/claim), lalu muat ulang kedua daftar. Hanya satu klaim
+  /// berjalan sekaligus; galat tampil di SnackBar.
   Future<void> _claim(Voucher v) async {
     if (_claiming != null) return;
     final repo = context.read<VoucherRepository>();
@@ -70,6 +83,7 @@ class _MyVouchersScreenState extends State<MyVouchersScreen> {
     }
   }
 
+  /// Voucher dianggap kedaluwarsa bila waktu berakhirnya sudah lewat menurut jam perangkat.
   bool _expired(Voucher v) => !v.endsAt.isAfter(DateTime.now());
 
   @override

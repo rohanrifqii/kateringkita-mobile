@@ -1,6 +1,7 @@
 // Layar Profil & Pengaturan (tab Profil di navigasi bawah). Data akun diambil dari AuthProvider (dimuat saat
-// splash/login lewat GET /me); dari sini pengguna membuka Ubah Profil, mengganti sandi (PUT /me/password), mengatur
-// tema, membaca FAQ/S&K/kebijakan privasi (teks statis), menghubungi CS WhatsApp, dan keluar (POST /auth/logout).
+// splash/login lewat GET /me); dari sini pengguna membuka Voucher Saya, Ubah Profil, mengganti sandi
+// (PUT /me/password), mengatur tema, membaca FAQ/S&K/kebijakan privasi (teks statis), membuka Bantuan & Tiket
+// (titik belum dibaca dari TicketUnreadProvider, GET /me/tickets), dan keluar (POST /auth/logout).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -72,6 +73,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Visibility.of berubah saat tab Profil dipilih/ditinggal; jumlah tiket belum dibaca dimuat ulang hanya saat
+    // layar baru saja menjadi terlihat dengan sesi aktif (setelah frame, karena provider memanggil notifyListeners).
     final active =
         Visibility.of(context) && context.read<AuthProvider>().isLoggedIn;
     if (active && !_ticketBadgeActive) {
@@ -82,8 +85,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _ticketBadgeActive = active;
   }
 
-  /// CS lewat tiket dua arah dengan Tim KateringKita (tamu masuk dulu).
-  /// Urusan pesanan tetap ke penjual lewat WhatsApp di Pesanan.
+  /// Buka daftar Bantuan & Tiket: CS lewat tiket dua arah dengan Tim KateringKita (tamu masuk dulu lewat
+  /// requireLogin). Urusan pesanan tetap ke penjual lewat WhatsApp di Pesanan.
   Future<void> _openTickets() async {
     if (!await requireLogin(context) || !mounted) return;
     await Navigator.pushNamed(context, AppRoutes.tickets);
@@ -1071,7 +1074,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// Satu baris menu: ikon berlatar, judul, subjudul opsional, dan panah; diketuk memanggil [onTap].
+  /// Satu baris menu: ikon berlatar, judul, subjudul opsional, titik penanda opsional ([showDot], mis. tiket
+  /// berbalasan belum dibaca), dan panah; diketuk memanggil [onTap].
   Widget _buildSettingTile({
     Key? key,
     required IconData icon,

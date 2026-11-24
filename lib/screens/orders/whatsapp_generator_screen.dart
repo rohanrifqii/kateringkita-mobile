@@ -101,6 +101,8 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
     super.dispose();
   }
 
+  /// Menyalin teks pesan ke clipboard lewat [copyText] (punya cadangan untuk web tanpa HTTPS), lalu SnackBar hijau
+  /// bila berhasil atau merah berisi saran salin manual bila gagal.
   Future<void> _copyMessage() async {
     final ok = await copyText(_messageController.text);
     if (!mounted) return;

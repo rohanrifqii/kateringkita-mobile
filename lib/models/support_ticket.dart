@@ -1,3 +1,6 @@
+// Model tiket Bantuan dari backend (/me/tickets), dibuat oleh TicketRepository dan ditampilkan di
+// layar daftar, buat, dan detail tiket. Juga berisi aturan validasi form tiket.
+
 /// Tiket Bantuan dua arah (pembeli ↔ Tim KateringKita) dari
 /// `/me/tickets`. Urusan pesanan (menu, waktu ambil, pesanan belum siap)
 /// tetap ke penjual lewat WhatsApp di Pesanan.
@@ -13,10 +16,12 @@ const Map<String, String> ticketCategories = {
   'lainnya': 'Lainnya',
 };
 
+/// Label tampilan untuk kode kategori; kode tak dikenal → "Lainnya".
 String ticketCategoryLabel(String category) =>
     ticketCategories[category] ?? 'Lainnya';
 
-/// `open` menunggu admin, `answered` admin sudah membalas, `closed` selesai.
+/// Label tampilan status tiket: `open` menunggu admin, `answered` admin sudah
+/// membalas, `closed` selesai. Status lain ditampilkan apa adanya.
 String ticketStatusLabel(String status) => switch (status) {
       'open' => 'Menunggu admin',
       'answered' => 'Dibalas',
@@ -28,6 +33,7 @@ String ticketStatusLabel(String status) => switch (status) {
 const String kTicketAdminName = 'Tim KateringKita';
 
 /// Validasi klien, identik dengan server (panjang dihitung setelah trim).
+/// Setiap fungsi mengembalikan pesan galat, atau null bila valid.
 class TicketRules {
   TicketRules._();
 
@@ -38,15 +44,19 @@ class TicketRules {
   static const int replyMin = 1;
   static const int replyMax = 2000;
 
+  /// Kategori harus salah satu kunci [ticketCategories].
   static String? category(String? value) =>
       ticketCategories.containsKey(value) ? null : 'Pilih kategori.';
 
+  /// Judul tiket: 3–120 karakter.
   static String? subject(String value) =>
       _len(value, subjectMin, subjectMax) ? null : 'Judul 3–120 karakter.';
 
+  /// Pesan pertama saat membuat tiket: 5–2000 karakter.
   static String? message(String value) =>
       _len(value, messageMin, messageMax) ? null : 'Pesan 5–2000 karakter.';
 
+  /// Balasan di detail tiket: 1–2000 karakter.
   static String? reply(String value) =>
       _len(value, replyMin, replyMax) ? null : 'Pesan 1–2000 karakter.';
 
@@ -56,6 +66,7 @@ class TicketRules {
   }
 }
 
+// Pembantu parsing JSON: tanggal opsional dan string kosong → null.
 DateTime? _dt(Object? v) => v is String ? DateTime.parse(v) : null;
 
 String? _str(Object? v) => v is String && v.isNotEmpty ? v : null;
@@ -121,6 +132,7 @@ class TicketSummary extends _TicketBase {
   }
 }
 
+/// Satu pesan dalam percakapan tiket (dari pembeli atau admin).
 class TicketMessage {
   final int id;
 
@@ -140,8 +152,11 @@ class TicketMessage {
     required this.createdAt,
   });
 
+  /// True bila pesan dikirim admin (Tim KateringKita).
   bool get fromAdmin => senderRole == 'admin';
 
+  /// Nama pengirim untuk ditampilkan: nama dari server, atau "Tim KateringKita"
+  /// (admin) / "Kamu" (pembeli) bila kosong.
   String get displayName =>
       fromAdmin ? (senderName ?? kTicketAdminName) : (senderName ?? 'Kamu');
 
@@ -207,6 +222,8 @@ class TicketDetail extends _TicketBase {
   }
 }
 
+/// Satu halaman hasil `GET /me/tickets` beserta info `meta` (total, halaman,
+/// jumlah belum dibaca).
 class TicketPage {
   final List<TicketSummary> items;
   final int total;

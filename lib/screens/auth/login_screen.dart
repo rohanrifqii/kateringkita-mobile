@@ -1,4 +1,4 @@
-// Layar Login: masuk dengan email atau No. WhatsApp + sandi. Dibuka dari splash/onboarding, setelah daftar,
+// Layar Masuk (Login): masuk dengan email atau No. WhatsApp + sandi. Dibuka dari splash/onboarding, setelah daftar,
 // atau dari requireLogin (mode tamu). Login lewat AuthProvider -> AuthRepository -> POST /auth/login.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -162,13 +162,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 32),
-                      // Login Button
+                      // Tombol Masuk
                       PrimaryButton(
                         text: _loading ? 'Memeriksa...' : 'Masuk',
                         onPressed: _loading ? null : _onLogin,
                       ),
                       const SizedBox(height: 16),
-                      // Forgot Password link
+                      // Tautan "Lupa password?" ke layar Lupa Password
                       Center(
                         child: TextButton(
                           onPressed: () {

@@ -1,3 +1,5 @@
+// Penyimpanan sesi login di perangkat (token akses + email). Diisi/dihapus AuthRepository; main.dart
+// memberi ApiClient fungsi readToken agar token ikut dikirim ke backend.
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -31,8 +33,10 @@ class TokenStore {
     await _write(_sessionEmailKey, email.trim().toLowerCase());
   }
 
+  /// Token akses yang tersimpan, atau null bila belum login.
   static Future<String?> readToken() => _read(_tokenKey);
 
+  /// Email (huruf kecil) pengguna yang sedang login, atau null.
   static Future<String?> readSessionEmail() => _read(_sessionEmailKey);
 
   /// Logout menghapus sesi lokal (token dan email).

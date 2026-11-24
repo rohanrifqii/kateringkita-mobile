@@ -1,4 +1,4 @@
-// Layar Daftar akun pelanggan: nama, email, No. HP, sandi. Dibuka dari Login ("Create New Account").
+// Layar Daftar akun pelanggan: nama, email, nomor WhatsApp, sandi. Dibuka dari tautan "Daftar sekarang" di layar Masuk.
 // Daftar lewat AuthRepository -> POST /auth/customer/register, lalu langsung login lewat AuthProvider (POST /auth/login).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -13,7 +13,7 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/primary_button.dart';
 
-/// Formulir pendaftaran pelanggan. Tombol Sign Up aktif hanya bila kotak syarat & ketentuan dicentang
+/// Formulir pendaftaran pelanggan. Tombol Daftar aktif hanya bila kotak syarat & ketentuan dicentang
 /// (centangnya tidak dikirim ke server). Sukses: masuk MainNav dalam keadaan sudah login.
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -49,7 +49,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  /// Validasi lokal (semua terisi, format email, HP 08 + 10–13 digit, aturan sandi), daftar ke server,
+  /// Validasi lokal (semua terisi, format email, HP 08 + 10–13 digit setelah spasi/tanda hubung dibuang, aturan sandi),
+  /// daftar ke server,
   /// lalu login otomatis. Bila daftar ditolak, galat ditaruh per kolom (atau SnackBar bila bukan galat kolom).
   /// Bila daftar berhasil tetapi login otomatis gagal, pengguna diarahkan ke Login dengan email terisi.
   Future<void> _onSignUp() async {
@@ -194,7 +195,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              // Terms & Conditions Checkbox
+              // Kotak centang Syarat & Ketentuan
               // seluruh baris (kotak + tulisan) bisa diketuk, bukan hanya kotak 22 px
               GestureDetector(
                 behavior: HitTestBehavior.opaque,
@@ -240,13 +241,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
               ),
               const SizedBox(height: 28),
-              // Sign Up Button
+              // Tombol Daftar (nonaktif sampai syarat dicentang)
               PrimaryButton(
                 text: _loading ? 'Menyimpan...' : 'Daftar',
                 onPressed: (_agreeToTerms && !_loading) ? _onSignUp : null,
               ),
               const SizedBox(height: 20),
-              // Back to Login link
+              // Tautan "Sudah punya akun? Masuk"
               Center(
                 child: GestureDetector(
                   onTap: () {

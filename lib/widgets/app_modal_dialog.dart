@@ -1,5 +1,6 @@
 // Dialog modal bergaya KateringKita (ikon tanya/centang, judul, pesan, tombol) beserta pintasan untuk
-// kasus umum: keluar akun, konfirmasi bayar, sandi diperbarui, berhasil login, dan pusat bantuan.
+// kasus umum: keluar akun, konfirmasi bayar, sandi diperbarui, dan berhasil login. (Pusat Bantuan kini
+// berupa layar tiket, bukan modal WhatsApp.)
 import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';

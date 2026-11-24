@@ -1,6 +1,9 @@
+// Konten promo dari backend: banner beranda (GET /banners) dan pop-up promo (GET /popup).
+// Dipanggil HomeScreen lewat Provider; promo di dalamnya berupa model Voucher.
 import '../api/api_client.dart';
 import '../models/voucher.dart';
 
+/// Tujuan saat banner diketuk: voucher promo, profil toko, atau tidak ke mana-mana.
 enum BannerTarget { promo, merchant, none }
 
 /// Banner beranda dari server (`GET /banners`).
@@ -60,11 +63,13 @@ class PromoContentRepository {
 
   final ApiClient _api;
 
+  /// Daftar banner beranda aktif (`GET /banners`); kosong bila server mengirim null.
   Future<List<PromoBanner>> banners() async =>
       (((await _api.get('/banners')).data as List?) ?? const [])
           .map((e) => PromoBanner.fromJson(e as Map<String, dynamic>))
           .toList();
 
+  /// Pop-up promo aktif (`GET /popup`), atau null bila tidak ada.
   Future<PromoPopup?> popup() async {
     final data = (await _api.get('/popup')).data;
     return data == null ? null : PromoPopup.fromJson(data as Map<String, dynamic>);

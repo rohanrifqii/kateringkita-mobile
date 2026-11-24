@@ -1,3 +1,5 @@
+// Kartu voucher yang dipakai di Profil Toko, Voucher Saya, dan pemilih voucher checkout.
+// Hanya tampilan: data Voucher dan aksi klaim/pakai diberikan oleh layar pemanggil.
 import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
@@ -6,7 +8,7 @@ import '../models/voucher.dart';
 
 const _bulan = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
-/// "s.d. 30 Nov" (WIB).
+/// Teks masa berlaku "s.d. 30 Nov" dari waktu [utc], dihitung dalam WIB (UTC+7).
 String sampaiTanggal(DateTime utc) {
   final w = utc.toUtc().add(const Duration(hours: 7));
   return 's.d. ${w.day} ${_bulan[w.month - 1]}';
@@ -14,7 +16,9 @@ String sampaiTanggal(DateTime utc) {
 
 /// Kartu voucher ala tiket: jenis potongan, minimal belanja, masa berlaku,
 /// tombol Klaim / Diklaim / Habis. [action] menggantikan tombol bawaan
-/// (mis. "Pakai" di pemilih checkout).
+/// (mis. "Pakai" di pemilih checkout). Warna aksen biru untuk voucher
+/// platform, warna utama untuk voucher toko; [reason] voucher (bila ada)
+/// tampil merah di bawahnya. [width] null = selebar induknya.
 class VoucherCard extends StatelessWidget {
   const VoucherCard({
     super.key,
@@ -36,6 +40,7 @@ class VoucherCard extends StatelessWidget {
     final v = voucher;
     final platform = v.slot == VoucherSlot.platform;
     final aksen = platform ? AppColors.blue : AppColors.primary;
+    // Tombol bawaan nonaktif bila voucher sudah diklaim, habis, atau sedang diproses.
     final tombol = action ??
         FilledButton(
           onPressed: v.claimed || v.soldOut || busy ? null : onClaim,

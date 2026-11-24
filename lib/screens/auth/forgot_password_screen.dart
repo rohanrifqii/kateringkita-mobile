@@ -1,5 +1,5 @@
 // Layar Lupa Sandi (langkah 1 dari 3): isi email, server mengirim kode OTP 6 digit ke email itu.
-// Dibuka dari tombol "Forgot Password?" di Login; memanggil AuthRepository -> POST /auth/password/forgot.
+// Dibuka dari tombol "Lupa password?" di layar Masuk; memanggil AuthRepository -> POST /auth/password/forgot.
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';

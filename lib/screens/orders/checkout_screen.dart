@@ -1,6 +1,7 @@
 // Layar Checkout: dibuka dari keranjang (CartProvider) untuk memesan semua menu di keranjang dari satu toko.
 // Alur: wajib login → muat titik temu toko (CatalogRepository, GET /menus/{id}) → hitung total di server
 // (OrderRepository.quote, POST /orders/quote) → buat pesanan (POST /orders) → lanjut ke layar Pembayaran.
+// Voucher toko & platform dipilih lewat lembar pemilih voucher (showVoucherPicker) dan ikut dikirim sebagai promo_codes.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -268,7 +269,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   /// Badan permintaan yang sama untuk quote dan buat pesanan. `pickup_at` (UTC, ISO-8601) hanya
-  /// dikirim bila pengguna memilih tanggal-jam; tanpa itu server memakai "secepatnya".
+  /// dikirim bila pengguna memilih tanggal-jam; tanpa itu server memakai "secepatnya". `promo_codes` berisi kode
+  /// voucher toko, voucher platform, dan kode manual (huruf besar), tanpa duplikat; kosong bila tidak ada.
   Map<String, dynamic> _body() {
     final at = _pickupAtUtc;
     return {
@@ -287,7 +289,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   /// Memetakan `fields` galat validasi server ke tampilan: `items.N...` ke baris keranjang ke-N,
-  /// selebihnya ke kolom titik temu, waktu ambil, promo, nama, telepon, atau catatan.
+  /// selebihnya ke kolom titik temu, waktu ambil, voucher (`promo_code`/`promo_codes`), nama, telepon, atau catatan.
   /// Mengembalikan true bila ada yang terpetakan. Galat baris lama selalu diganti.
   bool _applyFieldErrors(ApiException e) {
     final items = _cart.items;
@@ -834,8 +836,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  /// Formulir data pemesan. Mengubah kolom yang sedang bergalat menghapus galatnya dan meminta
-  /// quote ulang; kode promo selalu memicu quote ulang karena memengaruhi total.
+  /// Formulir data pemesan, diakhiri bagian Voucher. Mengubah kolom yang sedang bergalat menghapus galatnya dan
+  /// meminta quote ulang; memilih, melepas, atau mengetik kode voucher selalu memicu quote ulang karena memengaruhi total.
   Widget _buildOrdererForm(CartProvider cart) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -897,7 +899,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  /// Bagian Voucher: baris voucher toko & platform (lembar pemilih) + kode manual.
+  /// Bagian Voucher: baris voucher toko & platform (diketuk membuka lembar pemilih, tombol X melepas voucher),
+  /// tombol "Pakai kode" yang memunculkan kolom kode manual, dan galat voucher dari server.
   Widget _buildVoucherSection(CartProvider cart) {
     Widget baris(VoucherSlot slot, String label, Voucher? v) => InkWell(
           key: ValueKey('voucher-slot-${slot.name}'),
@@ -973,6 +976,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  /// Buka lembar pemilih voucher untuk [slot] (toko/platform) dengan toko, subtotal, dan metode bayar saat ini, lalu
+  /// simpan pilihannya dan minta quote ulang. Tidak melakukan apa-apa bila keranjang belum punya toko atau batal.
   Future<void> _pickVoucher(CartProvider cart, VoucherSlot slot) async {
     final merchantId = cart.merchantId;
     if (merchantId == null) return;
@@ -996,6 +1001,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _scheduleQuote();
   }
 
+  /// Kartu titik temu: peta mini OSM sebagai latar, nama & keterangan titik terpilih, atau status
+  /// memuat/galat. Diketuk untuk membuka pemilih titik temu (atau memuat ulang bila gagal).
   Widget _buildLocationSelectorCard() {
     final point = _point;
     final String title;

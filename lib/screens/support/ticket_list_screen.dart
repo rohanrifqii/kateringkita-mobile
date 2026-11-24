@@ -1,3 +1,6 @@
+// Layar daftar Bantuan & Tiket: dibuka dari menu "Bantuan & Tiket" di Profil. Daftar tiket pembeli diambil lewat
+// TicketRepository (GET /me/tickets, per halaman 20); dari sini pembeli membuat tiket baru atau membuka detailnya.
+// Jumlah tiket belum dibaca diteruskan ke TicketUnreadProvider untuk titik di menu Profil.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -25,16 +28,21 @@ class TicketListScreen extends StatefulWidget {
   State<TicketListScreen> createState() => _TicketListScreenState();
 }
 
+/// State daftar tiket: isi halaman yang sudah dimuat, status memuat, dan pemantau sesi login.
 class _TicketListScreenState extends State<TicketListScreen> {
   static const _pageSize = 20;
 
   List<TicketSummary> _items = const [];
+  /// Total tiket di server; dipakai untuk menentukan tombol "Muat lebih banyak".
   int _total = 0;
+  /// Halaman terakhir yang sudah dimuat (0 = belum ada).
   int _page = 0;
   bool _loading = true;
   bool _loadingMore = false;
   String? _error;
+  /// Nomor urut permintaan: hasil yang sudah usang (mis. setelah logout atau muat ulang) diabaikan.
   int _seq = 0;
+  /// Apakah rute ini paling atas pada pengecekan terakhir; dipakai untuk mendeteksi "kembali terlihat".
   bool _wasCurrent = true;
   late final AuthProvider _auth;
   late bool _wasLoggedIn;
@@ -51,6 +59,7 @@ class _TicketListScreenState extends State<TicketListScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Kembali dari layar di atasnya (detail/buat tiket): muat ulang diam-diam tanpa spinner.
     final current = ModalRoute.isCurrentOf(context) ?? true;
     if (current && !_wasCurrent && !_loading) _load(silent: true);
     _wasCurrent = current;
@@ -62,6 +71,8 @@ class _TicketListScreenState extends State<TicketListScreen> {
     super.dispose();
   }
 
+  /// Pantau masuk/keluar: setelah masuk daftar dimuat; setelah keluar daftar dikosongkan dan permintaan yang masih
+  /// berjalan dibatalkan lewat [_seq].
   void _onAuthChanged() {
     final now = _auth.isLoggedIn;
     if (now == _wasLoggedIn || !mounted) return;
@@ -80,9 +91,11 @@ class _TicketListScreenState extends State<TicketListScreen> {
     }
   }
 
+  /// Pesan galat untuk pengguna: pesan server bila [ApiException], selain itu pesan umum.
   String _msg(Object e) =>
       e is ApiException ? e.message : 'Terjadi kesalahan. Coba lagi.';
 
+  /// Tampilkan pesan singkat di SnackBar mengambang.
   void _snack(String text) => ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
@@ -90,6 +103,8 @@ class _TicketListScreenState extends State<TicketListScreen> {
       behavior: SnackBarBehavior.floating,
     ));
 
+  /// Muat halaman pertama (GET /me/tickets?page=1&limit=20) dan perbarui titik belum dibaca. Tamu tidak memuat apa
+  /// pun. [silent] true: tanpa spinner, dan galat hanya tampil bila daftar masih kosong.
   Future<void> _load({bool silent = false}) async {
     if (!mounted) return;
     if (!_auth.isLoggedIn) {
@@ -125,6 +140,7 @@ class _TicketListScreenState extends State<TicketListScreen> {
     }
   }
 
+  /// Muat halaman berikutnya dan tambahkan ke daftar (tiket berkode sama tidak digandakan); galat tampil di SnackBar.
   Future<void> _loadMore() async {
     if (_loadingMore) return;
     final repo = context.read<TicketRepository>();
@@ -151,9 +167,11 @@ class _TicketListScreenState extends State<TicketListScreen> {
     }
   }
 
+  /// Buka detail tiket dengan kode tiket sebagai argumen rute.
   void _openDetail(TicketSummary t) =>
       Navigator.pushNamed(context, AppRoutes.ticketDetail, arguments: t.code);
 
+  /// Buka layar buat tiket baru.
   void _create() => Navigator.pushNamed(context, AppRoutes.ticketCreate);
 
   @override
@@ -187,6 +205,7 @@ class _TicketListScreenState extends State<TicketListScreen> {
     );
   }
 
+  /// Kartu arahan ke penjual dengan tombol "Buka Pesanan" (urusan pesanan lewat WhatsApp penjual, bukan tiket).
   Widget _sellerHint() => SellerWhatsAppHint(
         key: const ValueKey('ticket-seller-hint'),
         text: 'Pertanyaan soal pesanan? Hubungi penjual lewat tombol '
@@ -210,6 +229,8 @@ class _TicketListScreenState extends State<TicketListScreen> {
         ),
       );
 
+  /// Isi layar untuk akun yang masuk: arahan penjual, lalu spinner / galat / kosong / daftar tiket, dan tombol
+  /// "Muat lebih banyak" selama masih ada halaman berikutnya. Tarik ke bawah untuk memuat ulang.
   Widget _body() {
     final hasMore = _items.length < _total;
     return RefreshIndicator(
@@ -261,6 +282,7 @@ class _TicketListScreenState extends State<TicketListScreen> {
     );
   }
 
+  /// Pesan tengah layar (ikon, judul, subjudul dan tombol opsional) untuk keadaan galat atau kosong.
   Widget _message({
     required IconData icon,
     required String title,
@@ -299,6 +321,7 @@ class _TicketListScreenState extends State<TicketListScreen> {
         ),
       );
 
+  /// Tampilan tamu: ajakan masuk; tombol Masuk memanggil requireLogin.
   Widget _guestPrompt() => Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -330,6 +353,8 @@ class _TicketListScreenState extends State<TicketListScreen> {
         ),
       );
 
+  /// Kartu satu tiket: subjek, kode & kategori, cuplikan pesan terakhir (pengirimnya Tim KateringKita atau "Kamu"),
+  /// chip status, dan waktu relatif. Tiket berbalasan belum dibaca diberi latar oranye muda dan titik.
   Widget _tile(TicketSummary t) {
     final preview = t.lastMessagePreview.isEmpty
         ? null

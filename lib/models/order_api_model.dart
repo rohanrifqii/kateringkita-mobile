@@ -1,5 +1,5 @@
 // Model pesanan, pembayaran, dan rincian harga (quote) sebagaimana dikirim backend REST KateringKita.
-// Di cabang ini belum dipakai layar mana pun; disiapkan untuk alur pesan → bayar lewat ApiClient.
+// Dibuat oleh OrderRepository dan dipakai layar checkout, pembayaran, daftar pesanan, ulasan, dan form tiket.
 // Semua nominal uang berupa bilangan bulat Rupiah.
 import 'pickup_point.dart';
 import 'product_model.dart';
@@ -73,6 +73,8 @@ class OrderQris {
 
   /// Gambar QR dari Midtrans (bisa dibuka/disimpan di browser).
   final String qrUrl;
+
+  /// Batas waktu QR bisa dibayar.
   final DateTime expiresAt;
 
   const OrderQris({
@@ -88,6 +90,8 @@ class OrderQris {
       );
 }
 
+/// Rincian pembayaran sebuah pesanan (objek `payment` di JSON pesanan): metode, status,
+/// jumlah, serta data VA / tautan Snap / QRIS sesuai metode yang dipilih.
 class OrderPayment {
   /// Metode dan status pembayaran, berupa teks apa adanya dari backend.
   final String method;
@@ -101,6 +105,8 @@ class OrderPayment {
 
   /// Alamat halaman pembayaran (bila backend menyediakannya); null bila tidak ada.
   final String? paymentUrl;
+
+  /// Data QRIS bila pembayaran memakai QRIS di aplikasi; null bila tidak ada.
   final OrderQris? qris;
 
   const OrderPayment({
@@ -278,7 +284,7 @@ class QuoteWarning {
 }
 
 /// Quote = perhitungan harga dari backend sebelum pesanan benar-benar dibuat: daftar barang,
-/// subtotal, diskon, biaya layanan, total, dan peringatan (misalnya stok kurang).
+/// subtotal, diskon, potongan voucher, biaya layanan, total, dan peringatan (misalnya stok kurang).
 /// [Quote.fromJson] mengubah objek JSON menjadi kelas ini.
 class Quote {
   final List<OrderItem> items;
@@ -288,6 +294,8 @@ class Quote {
   /// Potongan voucher toko / platform (server lama: 0).
   final int merchantDiscount;
   final int platformDiscount;
+
+  /// Voucher yang benar-benar dipakai server beserta besar potongannya (kosong bila tidak ada).
   final List<AppliedVoucher> vouchersApplied;
   final int serviceFee;
   final int total;

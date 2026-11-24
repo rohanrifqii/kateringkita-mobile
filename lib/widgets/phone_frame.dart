@@ -1,12 +1,15 @@
+// Bingkai selebar ponsel untuk versi web. Dipasang sekali di MaterialApp.builder (main.dart) sehingga
+// membungkus semua layar.
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// Versi web dibuka di laptop/proyektor: aplikasi tetap selebar ponsel di
 /// tengah layar, bukan melebar seperti situs desktop. Di layar ponsel dan di
-/// Android tidak mengubah apa pun.
+/// Android tidak mengubah apa pun. [enabled] bawaannya `true` hanya di web.
 class PhoneFrame extends StatelessWidget {
   const PhoneFrame({super.key, required this.child, this.enabled = kIsWeb});
 
+  /// Lebar bingkai (piksel logis); layar yang lebih sempit tidak dibingkai.
   static const double lebarPonsel = 430;
 
   final Widget child;
@@ -15,6 +18,7 @@ class PhoneFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mq = MediaQuery.of(context);
+    // Nonaktif atau layar sudah selebar ponsel: tampilkan apa adanya.
     if (!enabled || mq.size.width <= lebarPonsel) return child;
     return ColoredBox(
       color: const Color(0xFFECEAE6),

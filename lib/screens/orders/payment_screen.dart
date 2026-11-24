@@ -1,6 +1,7 @@
 // Layar pembayaran pesanan, dibuka dari checkout (setelah POST /orders) atau tombol "Lanjutkan Bayar" di
-// daftar pesanan. Bayar lewat Virtual Account (POST /orders/:code/va) atau Snap Midtrans untuk QRIS/e-wallet
-// (POST /orders/:code/online lalu SnapWebViewScreen). Status bayar selalu dibaca dari server.
+// daftar pesanan. Bayar lewat Virtual Account (POST /orders/:code/va), QRIS yang QR-nya digambar langsung di layar ini
+// (POST /orders/:code/qris), atau cadangan halaman Snap Midtrans (POST /orders/:code/online lalu SnapWebViewScreen).
+// Status bayar selalu dibaca dari server.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -30,6 +31,7 @@ Future<void> _openSnapWebView(BuildContext context, String url) => Navigator.of(
 /// Membuka tautan di luar aplikasi (browser / tab baru). Dapat diganti di test.
 typedef LinkOpener = Future<void> Function(String url);
 
+// Pembuka tautan bawaan: buka di aplikasi/browser luar; StateError bila tautan tidak bisa dibuka.
 Future<void> _openExternal(String url) async {
   if (!await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication)) {
     throw StateError('tautan tidak terbuka');
@@ -40,6 +42,9 @@ Future<void> _openExternal(String url) async {
 /// Status bayar selalu berasal dari server (polling GET /orders/:code).
 /// Pesanan `online`: QRIS dibuat otomatis dan QR-nya digambar di aplikasi;
 /// halaman Snap Midtrans hanya cadangan selama QR belum ada.
+/// Argumen rute yang bukan [OrderApiModel] membuat layar langsung ditutup.
+/// [snapOpener] membuka halaman Snap (bawaannya WebView) dan [linkOpener] membuka gambar QR di luar aplikasi;
+/// keduanya bisa diganti di test.
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({
     super.key,
@@ -118,9 +123,9 @@ class _PaymentScreenState extends State<PaymentScreen>
     });
   }
 
-  /// QRIS dibuat sekali secara otomatis untuk pesanan online yang menunggu
-  /// bayar. Tidak bila halaman Snap sudah pernah dibuka: pembeli mungkin
-  /// sudah memilih metode di sana (order_id Midtrans sudah terpakai).
+  // QRIS dibuat sekali secara otomatis untuk pesanan online yang menunggu
+  // bayar. Tidak bila halaman Snap sudah pernah dibuka: pembeli mungkin
+  // sudah memilih metode di sana (order_id Midtrans sudah terpakai).
   void _autoQris() {
     if (!mounted || _qrisTried || _qris != null) return;
     if (_order.paymentMethod != 'online' || _order.isPaid) return;
@@ -272,6 +277,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     }
   }
 
+  // Minta server membuat transaksi QRIS (POST /orders/:code/qris) lalu terapkan pesanan terbaru yang membawa data QR.
+  // Ditandai sudah dicoba agar pembuatan otomatis tidak diulang; galat tampil lewat [_onApiError].
   Future<void> _createQris() async {
     _qrisTried = true;
     setState(() {
@@ -289,6 +296,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     }
   }
 
+  // Buka gambar QR dari server di luar aplikasi (agar bisa disimpan lalu diunggah ke aplikasi pembayaran);
+  // bila gagal, SnackBar menyarankan screenshot layar.
   Future<void> _openQrImage(String url) async {
     try {
       await widget.linkOpener(url);
@@ -304,6 +313,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     }
   }
 
+  // Cadangan bayar lewat halaman Snap Midtrans: siapkan tautan Snap (POST /orders/:code/online bila belum ada),
+  // buka WebView, lalu cek status ke server setelah ditutup.
   Future<void> _payOnline() async {
     setState(() {
       _busy = true;
@@ -340,6 +351,7 @@ class _PaymentScreenState extends State<PaymentScreen>
     }
   }
 
+  // Salin [text] (mis. nomor VA) lewat [copyText]; SnackBar hijau bila berhasil, merah dengan saran catat manual bila gagal.
   Future<void> _copy(String text, String label) async {
     final ok = await copyText(text);
     if (!mounted) return;
@@ -691,6 +703,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     );
   }
 
+  // Bagian pembayaran online: kartu QR bila QRIS sudah ada; selain itu tombol "Tampilkan QRIS" dan tombol cadangan
+  // halaman Midtrans.
   Widget _onlineSection() {
     final q = _qris;
     if (q != null) return _qrisCard(q);
@@ -743,6 +757,7 @@ class _PaymentScreenState extends State<PaymentScreen>
     );
   }
 
+  // Kartu QRIS: QR digambar dari `qrString` server, petunjuk bayar dari HP yang sama, dan tombol membuka gambar QR.
   Widget _qrisCard(OrderQris q) => Container(
     padding: const EdgeInsets.all(16),
     decoration: _cardDecoration,

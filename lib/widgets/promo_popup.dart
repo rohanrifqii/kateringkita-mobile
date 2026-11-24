@@ -1,3 +1,5 @@
+// Pop-up promo yang muncul di Beranda saat aplikasi dibuka. Datanya dari PromoContentRepository
+// (GET /popup, dipanggil HomeScreen); tombol Klaim memanggil VoucherRepository (POST /me/vouchers/:id/claim).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -10,18 +12,19 @@ import '../data/promo_content_repository.dart';
 import '../data/voucher_repository.dart';
 import 'menu_image.dart';
 
-/// Tanggal WIB "yyyy-MM-dd" untuk aturan sekali sehari.
+/// Tanggal WIB (UTC+7) "yyyy-MM-dd" dari [now], untuk aturan pop-up sekali sehari.
 String tanggalWib(DateTime now) {
   final w = now.toUtc().add(const Duration(hours: 7));
   String dua(int n) => n.toString().padLeft(2, '0');
   return '${w.year}-${dua(w.month)}-${dua(w.day)}';
 }
 
+// Kunci SharedPreferences yang menyimpan tanggal terakhir pop-up [id] tampil.
 String _kunci(int id) => 'popup_seen_$id';
 
 /// Tampilkan pop-up promo bila belum tampil hari ini (WIB) dan vouchernya
 /// belum diklaim. Dicatat saat tampil, jadi menutup atau mengklaim sama-sama
-/// menahan pop-up sampai besok.
+/// menahan pop-up sampai besok. Selesai saat dialog ditutup.
 Future<void> maybeShowPromoPopup(BuildContext context, PromoPopup popup) async {
   if (popup.promo?.claimed ?? false) return;
   final prefs = await SharedPreferences.getInstance();
@@ -38,6 +41,8 @@ Future<void> maybeShowPromoPopup(BuildContext context, PromoPopup popup) async {
 }
 
 /// Pop-up promo: gambar 3:4, judul, tombol Klaim voucher (bila ada), tutup.
+/// [messenger] diambil dari layar pemanggil agar SnackBar hasil klaim tetap
+/// tampil setelah dialog ditutup.
 class PromoPopupDialog extends StatefulWidget {
   const PromoPopupDialog({super.key, required this.popup, required this.messenger});
 
@@ -51,6 +56,8 @@ class PromoPopupDialog extends StatefulWidget {
 class _PromoPopupDialogState extends State<PromoPopupDialog> {
   bool _sibuk = false;
 
+  /// Klaim voucher pop-up: minta login dulu bila tamu, lalu tutup dialog dan beri
+  /// SnackBar; bila gagal, tombol aktif lagi dan pesan galat server ditampilkan.
   Future<void> _klaim() async {
     final v = widget.popup.promo!;
     if (!await requireLogin(context)) return;

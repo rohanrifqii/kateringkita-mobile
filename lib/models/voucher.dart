@@ -1,3 +1,6 @@
+// Model voucher dari backend: voucher toko/platform yang bisa diklaim, Voucher Saya, dan voucher
+// yang terpakai di ringkasan harga checkout. Dibuat oleh VoucherRepository, PromoContentRepository
+// dan model pesanan; ditampilkan lewat VoucherCard dan pemilih voucher.
 import '../core/app_currency.dart';
 
 /// Slot voucher di checkout: maks satu voucher toko + satu voucher platform.
@@ -24,7 +27,8 @@ class VoucherMerchant {
 }
 
 /// Voucher (promo publik yang bisa diklaim). [usable] & [reason] hanya ada
-/// dari Voucher Saya (`GET /me/vouchers`).
+/// dari Voucher Saya (`GET /me/vouchers`); [reason] berisi alasan voucher
+/// tidak bisa dipakai untuk keranjang saat ini.
 class Voucher {
   final int id;
   final String code;
@@ -79,6 +83,7 @@ class Voucher {
         reason: json['reason'] as String?,
       );
 
+  /// Salinan voucher dengan status [claimed] diganti (mis. setelah berhasil klaim).
   Voucher copyWith({bool? claimed}) => Voucher(
         id: id,
         code: code,
@@ -96,7 +101,8 @@ class Voucher {
         reason: reason,
       );
 
-  /// "Diskon 10% s.d. Rp 5.000", "Potongan Rp 3.000", "Gratis biaya layanan".
+  /// Teks besaran potongan: "Diskon 10% s.d. Rp 5.000", "Potongan Rp 3.000",
+  /// atau "Gratis biaya layanan" (untuk tipe selain percent/fixed).
   String get label => switch (type) {
         'percent' => maxDiscount == null
             ? 'Diskon $value%'
@@ -105,12 +111,14 @@ class Voucher {
         _ => 'Gratis biaya layanan',
       };
 
+  /// Teks syarat minimal belanja, mis. "Min. belanja Rp 20.000".
   String get minLabel => minSubtotal > 0
       ? 'Min. belanja ${AppCurrency.format(minSubtotal)}'
       : 'Tanpa minimal belanja';
 }
 
-/// Voucher yang terpakai di quote (`vouchers_applied`).
+/// Voucher yang terpakai di ringkasan harga/quote pesanan (`vouchers_applied`);
+/// [amount] = besar potongan dalam rupiah.
 class AppliedVoucher {
   final int id;
   final String code;

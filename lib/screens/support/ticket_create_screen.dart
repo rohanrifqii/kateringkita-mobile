@@ -1,3 +1,6 @@
+// Layar Buat Tiket: dibuka dari tombol "Buat tiket" di daftar Bantuan & Tiket. Pembeli memilih kategori, pesanan
+// terkait (opsional, dari GET /me/orders), judul, dan pesan; tiket dikirim lewat TicketRepository (POST /me/tickets),
+// lalu layar ini diganti detail tiket yang baru dibuat.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -23,7 +26,9 @@ class TicketCreateScreen extends StatefulWidget {
   State<TicketCreateScreen> createState() => _TicketCreateScreenState();
 }
 
+/// State formulir tiket: isi kolom, kategori & pesanan terpilih, galat per kolom, dan status mengirim.
 class _TicketCreateScreenState extends State<TicketCreateScreen> {
+  /// Nama kolom API yang galatnya bisa ditampilkan di kolom formulir.
   static const _fields = {'category', 'subject', 'message', 'order_code'};
 
   final _subject = TextEditingController();
@@ -41,6 +46,7 @@ class _TicketCreateScreenState extends State<TicketCreateScreen> {
     super.dispose();
   }
 
+  /// Hapus galat kolom [key] dan galat server saat pengguna mulai mengubah kolom itu.
   void _clearError(String key) {
     if (_errors[key] == null && _serverError == null) return;
     setState(() {
@@ -49,6 +55,9 @@ class _TicketCreateScreenState extends State<TicketCreateScreen> {
     });
   }
 
+  /// Validasi lokal (TicketRules: kategori, judul 3–120, pesan 5–2000 karakter), lalu POST /me/tickets. Berhasil:
+  /// ganti layar ini dengan detail tiket (argumen: TicketDetail). Galat kolom dari server tampil di kolomnya; galat
+  /// lain tampil di kotak merah di atas tombol Kirim.
   Future<void> _submit() async {
     if (_submitting) return;
     FocusScope.of(context).unfocus();
@@ -100,6 +109,7 @@ class _TicketCreateScreenState extends State<TicketCreateScreen> {
     }
   }
 
+  /// Buka lembar pemilih pesanan; pesanan yang dipilih disimpan sebagai pesanan terkait (dikirim sebagai `order_code`).
   Future<void> _pickOrder() async {
     final picked = await showModalBottomSheet<OrderApiModel>(
       context: context,
@@ -225,6 +235,7 @@ class _TicketCreateScreenState extends State<TicketCreateScreen> {
     );
   }
 
+  /// Label tebal di atas setiap kolom.
   Widget _label(String text) => Text(
         text,
         style: AppTextStyles.bodyMedium.copyWith(
@@ -233,6 +244,7 @@ class _TicketCreateScreenState extends State<TicketCreateScreen> {
         ),
       );
 
+  /// Teks galat merah di bawah kolom; kosong bila [message] null.
   Widget _error(String? message) => message == null
       ? const SizedBox.shrink()
       : Padding(
@@ -243,6 +255,7 @@ class _TicketCreateScreenState extends State<TicketCreateScreen> {
           ),
         );
 
+  /// Chip satu kategori tiket ([value] kunci API, [label] teks tampil); diketuk memilih kategori itu.
   Widget _chip(String value, String label) {
     final selected = _category == value;
     return InkWell(
@@ -278,6 +291,8 @@ class _TicketCreateScreenState extends State<TicketCreateScreen> {
     );
   }
 
+  /// Kolom pesanan terkait: "Pilih pesanan" atau kode, toko, dan tanggal pesanan terpilih dengan tombol X untuk
+  /// melepasnya. Diketuk membuka lembar pemilih pesanan.
   Widget _orderField() {
     final o = _order;
     return Material(
@@ -345,6 +360,7 @@ class _TicketCreateScreenState extends State<TicketCreateScreen> {
     );
   }
 
+  /// Kolom teks judul/pesan dengan penghitung karakter `n/[max]` (merah bila lewat batas).
   Widget _input({
     required Key key,
     required TextEditingController controller,
@@ -400,7 +416,8 @@ class _TicketCreateScreenState extends State<TicketCreateScreen> {
   }
 }
 
-/// Lembar pemilih pesanan milik pembeli (semua tab, terbaru dulu).
+/// Lembar pemilih pesanan milik pembeli (tab aktif, selesai, dan dibatalkan; terbaru dulu). Ditutup dengan pesanan
+/// yang diketuk sebagai hasil.
 class _OrderPickerSheet extends StatefulWidget {
   const _OrderPickerSheet();
 
@@ -408,6 +425,7 @@ class _OrderPickerSheet extends StatefulWidget {
   State<_OrderPickerSheet> createState() => _OrderPickerSheetState();
 }
 
+/// State lembar pemilih pesanan: daftar pesanan gabungan, status memuat, dan galat.
 class _OrderPickerSheetState extends State<_OrderPickerSheet> {
   static const _tabs = ['active', 'completed', 'cancelled'];
 
@@ -421,6 +439,8 @@ class _OrderPickerSheetState extends State<_OrderPickerSheet> {
     _load();
   }
 
+  /// Muat halaman pertama (20 pesanan) tiap tab sekaligus (GET /me/orders?tab=...), gabungkan tanpa kode ganda, lalu
+  /// urutkan dari yang terbaru. Galat tampil dengan tombol Coba Lagi.
   Future<void> _load() async {
     final repo = context.read<OrderRepository>();
     if (_error != null) {
@@ -485,6 +505,7 @@ class _OrderPickerSheetState extends State<_OrderPickerSheet> {
     );
   }
 
+  /// Isi lembar: spinner, galat + Coba Lagi, "Belum ada pesanan.", atau daftar pesanan yang bisa diketuk.
   Widget _content(ScrollController scroll) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     if (_error != null) {
