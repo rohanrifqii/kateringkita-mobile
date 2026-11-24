@@ -137,6 +137,28 @@ void main() {
     expect(trackingArgs, 'KK-1');
   });
 
+  testWidgets('kartu menampilkan jumlah chat belum dibaca dari chat.unread_count',
+      (tester) async {
+    Map<String, dynamic> withUnread(String code, int unread) => {
+          ..._order(code),
+          'chat': {
+            'available': true,
+            'is_open': true,
+            'closed_reason': null,
+            'unread_count': unread,
+            'other_party_last_read_id': null,
+            'reported_by_me': false,
+          },
+        };
+    await tester.pumpWidget(_wrap((req) async => _json({
+          'data': [withUnread('KK-1', 2), withUnread('KK-2', 0)],
+          'meta': {'total': 2}
+        })));
+    await tester.pumpAndSettle();
+    expect(find.text('2 pesan baru'), findsOneWidget);
+    expect(find.textContaining('pesan baru'), findsOneWidget);
+  });
+
   testWidgets('tab Aktif memuat ?tab=active; tombol sesuai can_cancel/complete',
       (tester) async {
     final seen = <Uri>[];

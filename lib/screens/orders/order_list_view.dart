@@ -420,6 +420,25 @@ class _OrderListViewState extends State<OrderListView>
     );
   }
 
+  /// Penanda jumlah pesan penjual yang belum dibaca di chat pesanan ini.
+  Widget _chatUnreadChip(int unreadCount) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+            color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.chat_bubble_rounded, size: 11, color: Colors.white),
+            const SizedBox(width: 4),
+            Text('$unreadCount pesan baru',
+                style: AppTextStyles.bodySmall.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11)),
+          ],
+        ),
+      );
+
   Widget _card(OrderApiModel o) {
     final first = o.items.isEmpty ? null : o.items.first;
     final more = o.items.length - 1;
@@ -459,6 +478,10 @@ class _OrderListViewState extends State<OrderListView>
                         fontWeight: FontWeight.w700,
                         color: AppColors.textSecondary)),
               ),
+              if ((o.chat?.unreadCount ?? 0) > 0) ...[
+                _chatUnreadChip(o.chat!.unreadCount),
+                const SizedBox(width: 6),
+              ],
               _badge(o),
             ],
           ),
