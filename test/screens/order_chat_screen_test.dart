@@ -285,4 +285,80 @@ void main() {
       expect(repository.markReadLastIds, [2, 4]);
     },
   );
+
+  testWidgets('foto chat: tinggi tetap, didekode selebar gelembung, berlabel', (
+    tester,
+  ) async {
+    final repository = FakeOrderChatRepository(
+      initialMessages: [
+        ChatMessage(
+          id: 1,
+          senderRole: 'merchant',
+          imageUrl: 'https://img.test/a.jpg',
+          createdAt: DateTime.utc(2026, 11, 24, 2),
+        ),
+      ],
+    );
+    await pumpChatScreen(tester, repository);
+
+    final photo = tester.widget<Image>(find.byType(Image));
+    expect(photo.height, chatPhotoHeight);
+    expect(photo.fit, BoxFit.cover);
+    expect(photo.semanticLabel, 'Foto dari penjual');
+    // Lebar gelembung 75% dari 390 px, rasio piksel 1.
+    expect((photo.image as ResizeImage).width, 293);
+  });
+
+  /// 30 pesan penjual, cukup panjang untuk digulir; cek berikutnya membawa
+  /// pesan ke-31.
+  FakeOrderChatRepository longChat() => FakeOrderChatRepository(
+    initialMessages: [
+      for (var id = 1; id <= 30; id++) chatMessage(id, 'merchant', 'Pesan $id'),
+    ],
+    messagesAfter: {
+      30: [chatMessage(31, 'merchant', 'Pesan baru')],
+    },
+  );
+
+  testWidgets('menggulir ke atas: pesan baru dari cek berkala tidak menarik ke '
+      'bawah', (tester) async {
+    await pumpChatScreen(tester, longChat());
+    final listFinder = find
+        .descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    ScrollPosition position() =>
+        tester.state<ScrollableState>(listFinder).position;
+    expect(position().pixels, position().maxScrollExtent);
+
+    await tester.drag(listFinder, const Offset(0, 500));
+    await tester.pumpAndSettle();
+    final readingAt = position().pixels;
+    expect(readingAt, lessThan(position().maxScrollExtent - 100));
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(position().pixels, readingAt);
+  });
+
+  testWidgets('di dasar daftar: pesan baru dari cek berkala ikut digulir', (
+    tester,
+  ) async {
+    await pumpChatScreen(tester, longChat());
+    final listFinder = find
+        .descendant(
+          of: find.byType(ListView),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    ScrollPosition position() =>
+        tester.state<ScrollableState>(listFinder).position;
+
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text('Pesan baru'), findsOneWidget);
+    expect(position().pixels, position().maxScrollExtent);
+  });
 }

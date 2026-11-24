@@ -21,6 +21,13 @@ import '../../providers/notification_provider.dart';
 /// Jeda cek pesan baru di halaman Chat.
 const Duration chatPollInterval = Duration(seconds: 5);
 
+/// Tinggi tetap foto di gelembung chat, supaya daftar tidak melompat saat foto
+/// selesai dimuat dan gulir ke bawah mendarat tepat di pesan terakhir.
+const double chatPhotoHeight = 200;
+
+/// Jarak dari dasar daftar (piksel) yang masih dianggap "sedang di bawah".
+const double _nearBottomDistance = 80;
+
 /// Pesan cepat yang bisa dikirim pembeli dengan sekali ketuk.
 const List<String> customerQuickReplies = [
   'Saya sudah di titik temu',
@@ -126,6 +133,15 @@ class _OrderChatScreenState extends State<OrderChatScreen>
       SnackBar(content: Text(text), behavior: SnackBarBehavior.floating),
     );
 
+  /// Benar bila daftar belum tampil atau pembeli sedang di dekat pesan
+  /// terakhir. Pembeli yang menggulir ke atas membaca riwayat tidak ditarik
+  /// ke bawah oleh cek berkala.
+  bool get _isNearBottom {
+    if (!_scrollController.hasClients) return true;
+    final position = _scrollController.position;
+    return position.maxScrollExtent - position.pixels <= _nearBottomDistance;
+  }
+
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
@@ -146,8 +162,10 @@ class _OrderChatScreenState extends State<OrderChatScreen>
       );
       if (!mounted) return;
       // 2. Gabungkan tanpa duplikat. Jawaban lama yang masih "terbuka" tidak
-      //    boleh membuka lagi chat yang sudah pasti ditutup.
+      //    boleh membuka lagi chat yang sudah pasti ditutup. Posisi gulir
+      //    dicatat sebelum daftar bertambah panjang.
       final keepLocalState = _isFinallyClosed && result.chat.isOpen;
+      final followLatest = _isNearBottom;
       setState(() {
         _messages = mergeMessages(_messages, result.messages);
         for (final message in result.messages) {
@@ -156,7 +174,7 @@ class _OrderChatScreenState extends State<OrderChatScreen>
         if (!keepLocalState) _chat = result.chat;
         _errorMessage = null;
       });
-      if (result.messages.isNotEmpty) _scrollToEnd();
+      if (result.messages.isNotEmpty && followLatest) _scrollToEnd();
       // 3. Ada pesan penjual yang belum dibaca: tandai hanya sampai pesan
       //    hasil cek yang sudah tampil, lalu perbarui badge tab Pesanan.
       final readUpToId = _lastFetchedId;
@@ -278,6 +296,8 @@ class _OrderChatScreenState extends State<OrderChatScreen>
       final publicUrl = await repository.uploadImage(
         widget.orderCode,
         fileName: picked.name.isNotEmpty ? picked.name : picked.path,
+        // Di web, berkas galeri bisa tanpa ekstensi; tipe dari pemilih dipakai.
+        mimeType: picked.mimeType,
         bytes: await picked.readAsBytes(),
       );
       if (!mounted) return;
@@ -409,7 +429,12 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     );
   }
 
+  /// Daftar gelembung pesan untuk [chat], atau ajakan menulis bila kosong.
+  ///
+  /// Tanda "Dibaca" hanya dipasang di pesan terakhir pembeli yang sudah
+  /// dibaca penjual menurut `otherPartyLastReadId`.
   Widget _messageList(ChatState chat) {
+    // 1. Belum ada pesan: ajak pembeli mengabari penjual.
     if (_messages.isEmpty) {
       return Center(
         child: Padding(
@@ -424,7 +449,8 @@ class _OrderChatScreenState extends State<OrderChatScreen>
         ),
       );
     }
-    // "Dibaca" hanya di pesan terakhir pembeli yang sudah dibaca penjual.
+    // 2. Cari pesan terakhir pembeli; tandai "Dibaca" bila penjual sudah
+    //    membaca sampai pesan itu.
     final lastCustomerMessage = _messages.lastWhere(
       (message) => message.isFromCustomer,
       orElse: () => _messages.first,
@@ -436,6 +462,7 @@ class _OrderChatScreenState extends State<OrderChatScreen>
             readUpTo >= lastCustomerMessage.id
         ? lastCustomerMessage.id
         : null;
+    // 3. Gambar semua pesan dari yang terlama ke yang terbaru.
     return ListView.builder(
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -488,15 +515,22 @@ class _OrderChatScreenState extends State<OrderChatScreen>
                       child: Image.network(
                         imageUrl,
                         width: maxWidth,
+                        height: chatPhotoHeight,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, _, _) => SizedBox(
-                          height: 120,
-                          child: Center(
-                            child: Icon(
-                              Icons.broken_image_outlined,
-                              color: mine ? Colors.white : AppColors.textMuted,
-                            ),
-                          ),
+                        // Didekode selebar gelembung, bukan resolusi asli foto.
+                        cacheWidth:
+                            (maxWidth * MediaQuery.devicePixelRatioOf(context))
+                                .round(),
+                        semanticLabel: mine
+                            ? 'Foto dari pembeli'
+                            : 'Foto dari penjual',
+                        loadingBuilder: (_, image, progress) => progress == null
+                            ? image
+                            : _photoPlaceholder(maxWidth, mine: mine),
+                        errorBuilder: (_, _, _) => _photoPlaceholder(
+                          maxWidth,
+                          mine: mine,
+                          failed: true,
                         ),
                       ),
                     ),
@@ -536,6 +570,33 @@ class _OrderChatScreenState extends State<OrderChatScreen>
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Kotak pengganti foto setinggi [chatPhotoHeight] selama foto dimuat, atau
+  /// ikon foto rusak bila [failed].
+  Widget _photoPlaceholder(
+    double width, {
+    required bool mine,
+    bool failed = false,
+  }) {
+    final color = mine ? Colors.white : AppColors.textMuted;
+    return SizedBox(
+      width: width,
+      height: chatPhotoHeight,
+      child: Center(
+        child: failed
+            ? Icon(
+                Icons.broken_image_outlined,
+                color: color,
+                semanticLabel: 'Foto gagal dimuat',
+              )
+            : SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2, color: color),
+              ),
       ),
     );
   }
