@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -10,9 +11,11 @@ import 'package:kateringkita_pbl/core/app_info.dart';
 import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/core/password_rules.dart';
 import 'package:kateringkita_pbl/data/auth_repository.dart';
+import 'package:kateringkita_pbl/data/ticket_repository.dart';
 import 'package:kateringkita_pbl/data/token_store.dart';
 import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:kateringkita_pbl/providers/theme_provider.dart';
+import 'package:kateringkita_pbl/providers/ticket_unread_provider.dart';
 import 'package:kateringkita_pbl/screens/profile/profile_screen.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
@@ -33,12 +36,16 @@ http.Response _json(int status, Object body) => http.Response(
     jsonEncode(body), status,
     headers: {'content-type': 'application/json; charset=utf-8'});
 
-/// [user] null = tamu (tanpa sesi). Selain GET /me, permintaan dicatat di
-/// [seen] dan dijawab [handler] (bawaan 200 kosong).
+/// [user] null = tamu (tanpa sesi). GET /me/tickets (titik "Bantuan & Tiket")
+/// dicatat di [ticketGets] dan menjawab `unread_count` [ticketUnread]. Selain
+/// itu dan GET /me, permintaan dicatat di [seen] dan dijawab [handler]
+/// (bawaan 200 kosong).
 Future<AuthProvider> _pump(
   WidgetTester tester,
   Map<String, dynamic>? user, {
   List<http.Request>? seen,
+  List<http.Request>? ticketGets,
+  int ticketUnread = 0,
   MockClientHandler? handler,
   Map<String, WidgetBuilder> routes = const {},
 }) async {
@@ -53,6 +60,18 @@ Future<AuthProvider> _pump(
       if (r.method == 'GET' && r.url.path.endsWith('/me')) {
         return _json(200, {
           'data': {'user': user, 'merchant': null}
+        });
+      }
+      if (r.method == 'GET' && r.url.path.endsWith('/me/tickets')) {
+        ticketGets?.add(r);
+        return _json(200, {
+          'data': [],
+          'meta': {
+            'page': 1,
+            'limit': 1,
+            'total': ticketUnread,
+            'unread_count': ticketUnread
+          },
         });
       }
       seen?.add(r);
@@ -71,6 +90,8 @@ Future<AuthProvider> _pump(
       ChangeNotifierProvider(create: (_) => ThemeProvider()),
       Provider<AuthRepository>.value(value: repo),
       ChangeNotifierProvider<AuthProvider>.value(value: auth),
+      ChangeNotifierProvider(
+          create: (_) => TicketUnreadProvider(TicketRepository(api))),
     ],
     child: MaterialApp(home: const ProfileScreen(), routes: routes),
   ));
@@ -190,7 +211,96 @@ void main() {
       expect(find.text(gone), findsNothing);
     }
     expect(find.textContaining('2025'), findsNothing);
-    expect(find.text('Hubungi CS WhatsApp'), findsOneWidget);
+    expect(find.text('Bantuan & Tiket'), findsOneWidget);
+  });
+
+  group('Bantuan & Tiket menggantikan CS WhatsApp', () {
+    testWidgets('tanpa tombol/dialog/nomor CS WA; buka daftar tiket',
+        (tester) async {
+      await _pump(tester, _user(), routes: {
+        AppRoutes.tickets: (_) =>
+            const Scaffold(body: Text('HALAMAN TIKET')),
+      });
+      for (final gone in [
+        'Hubungi CS WhatsApp',
+        'Bantuan pesanan lewat WhatsApp',
+      ]) {
+        expect(find.text(gone), findsNothing);
+      }
+      expect(find.textContaining('0858'), findsNothing);
+      expect(find.textContaining('6285852157352'), findsNothing);
+      expect(find.text('Pusat Bantuan & FAQ'), findsOneWidget);
+
+      await tester.tap(find.text('Bantuan & Tiket'));
+      await tester.pumpAndSettle();
+      expect(find.text('Hubungi via WhatsApp'), findsNothing);
+      expect(find.text('Pusat Bantuan'), findsNothing);
+      expect(find.text('HALAMAN TIKET'), findsOneWidget);
+    });
+
+    testWidgets('tamu: masuk dulu, lalu daftar tiket terbuka',
+        (tester) async {
+      Object? loginArgs;
+      final gets = <http.Request>[];
+      await _pump(tester, null, ticketGets: gets, routes: {
+        AppRoutes.login: (c) {
+          loginArgs = ModalRoute.of(c)!.settings.arguments;
+          return Scaffold(
+            body: TextButton(
+              onPressed: () => Navigator.pop(c, true),
+              child: const Text('LOGIN BERHASIL'),
+            ),
+          );
+        },
+        AppRoutes.tickets: (_) =>
+            const Scaffold(body: Text('HALAMAN TIKET')),
+      });
+      // Tamu tidak memicu permintaan tiket.
+      expect(gets, isEmpty);
+      expect(find.byKey(const ValueKey('profile-tickets-unread')),
+          findsNothing);
+
+      await tester.tap(find.text('Bantuan & Tiket'));
+      await tester.pumpAndSettle();
+      expect(loginArgs, {'returnTo': true});
+      expect(find.text('HALAMAN TIKET'), findsNothing);
+
+      await tester.tap(find.text('LOGIN BERHASIL'));
+      await tester.pumpAndSettle();
+      expect(find.text('HALAMAN TIKET'), findsOneWidget);
+    });
+
+    testWidgets('titik belum dibaca dari meta.unread_count', (tester) async {
+      final gets = <http.Request>[];
+      await _pump(tester, _user(), ticketGets: gets, ticketUnread: 2);
+      expect(gets, isNotEmpty);
+      expect(gets.first.url.queryParameters['limit'], '1');
+      expect(find.byKey(const ValueKey('profile-tickets-unread')),
+          findsOneWidget);
+    });
+
+    testWidgets('tanpa balasan belum dibaca: tanpa titik', (tester) async {
+      await _pump(tester, _user(), ticketUnread: 0);
+      expect(find.byKey(const ValueKey('profile-tickets-unread')),
+          findsNothing);
+    });
+
+    test('nomor CS WhatsApp lama tidak ada lagi di lib/', () {
+      final hits = <String>[];
+      for (final f in Directory('lib').listSync(recursive: true)) {
+        if (f is! File || !f.path.endsWith('.dart')) continue;
+        final text = f.readAsStringSync();
+        for (final n in [
+          '6285852157352',
+          '085852157352',
+          '0858-5215-7352',
+          '85852157352',
+        ]) {
+          if (text.contains(n)) hits.add('${f.path}: $n');
+        }
+      }
+      expect(hits, isEmpty);
+    });
   });
 
   testWidgets('FAQ sesuai aplikasi: Midtrans, tanpa tunai/antar/fitur lama',
@@ -214,6 +324,11 @@ void main() {
     final text = allText();
     expect(text, contains('Midtrans'));
     expect(text, contains('titik temu'));
+    // Bantuan: pesanan ke penjual (WA di Pesanan), lainnya lewat tiket.
+    expect(text, contains('penjual lewat tombol WhatsApp di tab Pesanan'));
+    expect(text, contains('Bantuan & Tiket'));
+    expect(text.contains('CS WhatsApp'), isFalse);
+    expect(text.contains('Customer Service'), isFalse);
     for (final claim in [
       'COD',
       'Tunai saat',

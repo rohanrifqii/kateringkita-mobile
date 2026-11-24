@@ -46,6 +46,8 @@ class MenuImage extends StatelessWidget {
             width: width,
             height: height,
             fit: fit,
+            // web: penyimpanan foto tanpa header CORS → tampilkan lewat elemen <img>
+            webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
             errorBuilder: (_, _, _) => _placeholder(),
             loadingBuilder: (_, w, progress) => progress == null ? w : _box(),
           );

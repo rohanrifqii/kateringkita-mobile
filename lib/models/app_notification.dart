@@ -5,7 +5,8 @@ import 'dart:convert';
 /// Notifikasi in-app dari `GET /me/notifications`.
 ///
 /// `type` dari backend: `order_status` (data `{order_code, status}`),
-/// `promo` (promo toko yang menunya difavoritkan) dan `info` (pengumuman).
+/// `promo` (promo toko yang menunya difavoritkan) dan `info` (pengumuman;
+/// balasan/penutupan tiket Bantuan membawa `data {ticket_code}`).
 class AppNotification {
   final int id;
   final String type;
@@ -40,8 +41,12 @@ class AppNotification {
   /// Status pesanan dari [data]; null bila bukan notifikasi pesanan.
   String? get orderStatus => data['status'] as String?;
 
-  /// Salinan yang ditandai dibaca pada [at] (hanya di aplikasi, tanpa
-  /// memanggil server); [readAt] lama dipertahankan bila sudah ada.
+  /// Kode tiket Bantuan (notifikasi balasan / tiket ditutup), atau null.
+  String? get ticketCode {
+    final v = data['ticket_code'];
+    return v is String && v.isNotEmpty ? v : null;
+  }
+
   AppNotification markedRead(DateTime at) => AppNotification(
         id: id,
         type: type,

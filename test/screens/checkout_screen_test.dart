@@ -9,6 +9,7 @@ import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/data/catalog_repository.dart';
 import 'package:kateringkita_pbl/data/order_repository.dart';
+import 'package:kateringkita_pbl/data/voucher_repository.dart';
 import 'package:kateringkita_pbl/models/api_user.dart';
 import 'package:kateringkita_pbl/models/order_api_model.dart';
 import 'package:kateringkita_pbl/models/product_model.dart';
@@ -19,6 +20,7 @@ import 'package:kateringkita_pbl/widgets/primary_button.dart';
 import 'package:provider/provider.dart';
 
 import '../support/quiet_map.dart';
+import '../models/voucher_test.dart' show voucherJson;
 
 /// testWidgets tanpa derau pemberitahuan tile OSM dari flutter_map.
 void _testWidgets(String description, WidgetTesterCallback body) =>
@@ -150,6 +152,9 @@ Future<_Harness> _open(
   Future<http.Response> Function(int n)? onOrder,
   Future<http.Response> Function(int n)? onQuote,
   Future<http.Response> Function(int n)? onMenu,
+  List<Map<String, dynamic>> mine = const [],
+  List<Map<String, dynamic>> platform = const [],
+  Future<http.Response> Function(http.Request req)? onQuoteReq,
 }) async {
   final h = _Harness();
   h.cart = CartProvider();
@@ -167,10 +172,17 @@ Future<_Harness> _open(
       final p = req.url.path;
       if (p.endsWith('/orders/quote')) {
         quoteCalls++;
+        if (onQuoteReq != null) return onQuoteReq(req);
         if (onQuote != null) return onQuote(quoteCalls);
         final n = (jsonDecode(req.body)['items'] as List).length;
         return _json({'data': _quote(n)});
       }
+      if (p.endsWith('/claim')) {
+        final id = int.parse(p.split('/')[5]); // /api/v1/me/vouchers/:id/claim
+        return _json({'data': {...platform.firstWhere((v) => v['id'] == id), 'claimed': true}});
+      }
+      if (p.endsWith('/me/vouchers')) return _json({'data': mine});
+      if (p.endsWith('/vouchers/platform')) return _json({'data': platform});
       if (p.endsWith('/orders')) {
         orderCalls++;
         if (onOrder != null) return onOrder(orderCalls);
@@ -201,6 +213,7 @@ Future<_Harness> _open(
     providers: [
       Provider<CatalogRepository>.value(value: CatalogRepository(api)),
       Provider<OrderRepository>.value(value: OrderRepository(api)),
+      Provider<VoucherRepository>.value(value: VoucherRepository(api)),
       ChangeNotifierProvider<AuthProvider>.value(value: _FakeAuth(user)),
       ChangeNotifierProvider<CartProvider>.value(value: h.cart),
     ],
@@ -241,6 +254,7 @@ Future<void> _pay(WidgetTester tester) async {
 }
 
 void main() {
+  voucherTests();
   _testWidgets('two-line cart: quote called, server total shown',
       (tester) async {
     final h = await _open(tester, lines: [
@@ -563,5 +577,106 @@ void main() {
     await tester.pumpAndSettle();
     expect(h.quotes.length, before + 1);
     expect(find.text('Toko sedang tutup.'), findsOneWidget);
+  });
+}
+
+// ---------------- Voucher (dua slot: toko + platform) ----------------
+Future<http.Response> _quoteVoucher(http.Request req) async {
+  final kode = (jsonDecode(req.body)['promo_codes'] as List?)?.cast<String>() ?? const [];
+  final q = _quote(1);
+  if (kode.contains('GAGAL')) {
+    return _json({
+      'error': {
+        'code': 'PROMO_INVALID',
+        'message': 'Kuota promo sudah habis.',
+        'fields': {'promo_codes': ['Kuota promo sudah habis.'], 'promo_code': ['Kuota promo sudah habis.']},
+      }
+    }, 422);
+  }
+  return _json({
+    'data': {
+      ...q,
+      'merchant_discount': kode.contains('TOKO10') ? 4500 : 0,
+      'platform_discount': kode.contains('HEMAT3K') ? 3000 : 0,
+      'discount': (kode.contains('TOKO10') ? 4500 : 0) + (kode.contains('HEMAT3K') ? 3000 : 0),
+      'vouchers_applied': [
+        if (kode.contains('TOKO10')) {'id': 11, 'code': 'TOKO10', 'slot': 'toko', 'amount': 4500},
+        if (kode.contains('HEMAT3K')) {'id': 21, 'code': 'HEMAT3K', 'slot': 'platform', 'amount': 3000},
+      ],
+    }
+  });
+}
+
+List<String> _lastCodes(_Harness h) =>
+    ((jsonDecode(h.quotes.last.body)['promo_codes'] as List?) ?? const []).cast<String>();
+
+void voucherTests() {
+  final mine = [
+    {...voucherJson(id: 11), 'code': 'TOKO10', 'usable': true, 'reason': null},
+    {...voucherJson(id: 12, type: 'fixed', value: 2000), 'code': 'MINBESAR', 'usable': false, 'reason': 'Minimal belanja Rp 100.000'},
+  ];
+  final platform = [
+    {...voucherJson(id: 21, type: 'fixed', value: 3000, toko: false), 'code': 'HEMAT3K', 'claimed': false},
+  ];
+
+  _testWidgets('voucher: pilih voucher toko + klaim & pakai voucher platform → promo_codes 2 kode, ringkasan per slot',
+      (tester) async {
+    final h = await _open(tester,
+        lines: [(_p(7, 'Nasi Box', 45000), 2)],
+        mine: mine,
+        platform: platform,
+        onQuoteReq: _quoteVoucher);
+    expect(find.text('Voucher toko'), findsOneWidget);
+    expect(find.text('Voucher platform'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('voucher-slot-toko')));
+    await tester.pumpAndSettle();
+    final q = h.requests.lastWhere((r) => r.url.path.endsWith('/me/vouchers')).url.queryParameters;
+    expect(q, {'merchant_id': '1', 'subtotal': '90000', 'payment_method': 'online'});
+    // yang tidak memenuhi syarat tampil dengan alasan & tidak bisa dipilih
+    expect(find.text('Minimal belanja Rp 100.000'), findsOneWidget);
+    final pakai = find.widgetWithText(FilledButton, 'Pakai');
+    expect(tester.widgetList<FilledButton>(pakai).where((b) => b.onPressed == null).length, 1);
+    await tester.tap(pakai.first);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(_lastCodes(h), ['TOKO10']);
+
+    await tester.tap(find.byKey(const ValueKey('voucher-slot-platform')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Klaim & pakai'));
+    await tester.pumpAndSettle(); // klaim async selesai, lembar tertutup
+    await tester.pump(const Duration(milliseconds: 500)); // debounce quote
+    await tester.pumpAndSettle();
+    expect(h.requests.where((r) => r.url.path.endsWith('/me/vouchers/21/claim')), hasLength(1));
+    expect(_lastCodes(h), ['TOKO10', 'HEMAT3K']);
+    expect(find.text('- Rp 4.500'), findsOneWidget);
+    expect(find.text('- Rp 3.000'), findsOneWidget);
+  });
+
+  _testWidgets('quote gagal: pemilih voucher memakai subtotal keranjang, bukan 0', (tester) async {
+    final h = await _open(tester,
+        lines: [(_p(7, 'Nasi Box', 45000), 2)],
+        mine: mine,
+        onQuote: (_) async => _json({
+              'error': {'code': 'VALIDATION_ERROR', 'message': 'Promo tidak bisa dipakai.'}
+            }, 422));
+    await tester.tap(find.byKey(const ValueKey('voucher-slot-toko')));
+    await tester.pumpAndSettle();
+    final q = h.requests.lastWhere((r) => r.url.path.endsWith('/me/vouchers')).url.queryParameters;
+    expect(q['subtotal'], '90000');
+  });
+
+  _testWidgets('galat voucher dari server tampil di bagian voucher; Pakai kode manual tetap ada', (tester) async {
+    final h = await _open(tester,
+        lines: [(_p(7, 'Nasi Box', 45000), 2)],
+        onQuoteReq: _quoteVoucher);
+    await tester.tap(find.text('Pakai kode'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const ValueKey('voucher-manual')), 'gagal');
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    expect(_lastCodes(h), ['GAGAL']);
+    expect(find.text('Kuota promo sudah habis.'), findsOneWidget);
   });
 }

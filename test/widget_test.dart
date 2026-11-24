@@ -17,6 +17,7 @@ import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:kateringkita_pbl/providers/cart_provider.dart';
 import 'package:kateringkita_pbl/providers/favorites_provider.dart';
 import 'package:kateringkita_pbl/providers/notification_provider.dart';
+import 'package:kateringkita_pbl/widgets/phone_frame.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -48,6 +49,13 @@ String? _currentRoute() {
 }
 
 void main() {
+  testWidgets('akar aplikasi dibungkus PhoneFrame (web: selebar ponsel)', (tester) async {
+    await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
+    expect(find.byType(PhoneFrame), findsOneWidget);
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 500));
+  });
+
   testWidgets('guest with no token: splash goes to main nav', (tester) async {
     await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
     expect(find.byType(MaterialApp), findsOneWidget);
@@ -122,7 +130,7 @@ void main() {
     final fields = find.byType(TextFormField);
     await tester.enterText(fields.at(0), 'a@x.com');
     await tester.enterText(fields.at(1), 'salah123');
-    await tester.tap(find.text('Login').last);
+    await tester.tap(find.text('Masuk').last);
     await tester.pumpAndSettle();
     expect(find.text('Email/WA atau password salah.'), findsOneWidget);
     expect(_currentRoute(), AppRoutes.login);

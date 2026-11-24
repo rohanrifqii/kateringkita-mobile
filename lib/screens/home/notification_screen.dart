@@ -224,11 +224,18 @@ class _NotificationScreenState extends State<NotificationScreen> {
     setState(() => _items = [..._items]..[i] = n);
   }
 
-  /// Ketuk notifikasi: ditandai dibaca langsung (dikembalikan bila server menolak), lalu notifikasi status pesanan
-  /// membuka layar Pesanan di tab yang sesuai dengan kode pesanan sebagai kata pencarian (`q`).
+  /// Ditandai dibaca langsung (dikembalikan bila server menolak), lalu
+  /// notifikasi pesanan membuka daftar Pesanan di tab & kode yang sesuai,
+  /// dan notifikasi tiket (`data.ticket_code`) membuka detail tiket itu.
   Future<void> _open(AppNotification n) async {
     // Tidak ditunggu: navigasi tidak perlu menunggu jawaban server.
     if (!n.isRead) _markRead(n);
+    final ticket = n.ticketCode;
+    if (ticket != null) {
+      await Navigator.pushNamed(context, AppRoutes.ticketDetail,
+          arguments: ticket);
+      return;
+    }
     final code = n.orderCode;
     if (n.isOrderStatus && code != null && code.isNotEmpty) {
       await Navigator.pushNamed(context, AppRoutes.orders, arguments: {
@@ -488,6 +495,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
         };
       case 'promo':
         return (Icons.local_offer_outlined, AppColors.primary);
+      case _ when n.ticketCode != null:
+        return (Icons.support_agent_rounded, AppColors.primary);
       default:
         return (Icons.campaign_outlined, AppColors.blue);
     }

@@ -36,3 +36,23 @@ sama saat menjalankan ulang. Logo diunggah ulang tiap jalan (profil diperbarui).
 ## Tes
 
 `flutter test test/tool` (fungsi murni di `tool/seed_lib.dart` + validasi JSON; tanpa jaringan).
+
+# Demo di HP lewat WiFi yang sama
+
+`tool/demo_wifi.mjs` menyajikan aplikasi versi web ke HP yang tersambung ke WiFi yang sama
+dengan laptop. API diteruskan ke backend production dari alamat yang sama, jadi tidak ada
+masalah CORS dan foto menu tetap tampil.
+
+Cara paling mudah: klik dua kali `tool\demo_wifi.bat`. Atau dari terminal:
+
+```
+node tool/demo_wifi.mjs           # build otomatis bila build/web belum ada atau lib/, web/, assets/, pubspec lebih baru, lalu sajikan
+node tool/demo_wifi.mjs --build   # paksa build ulang, lalu sajikan
+```
+
+Terminal mencetak alamat untuk dibuka di HP, mis. `http://192.168.100.218:8080`.
+Build memakai `API_BASE_URL=/api/v1` (relatif), jadi saat IP WiFi berubah cukup jalankan
+ulang skrip tanpa build ulang. Bila HP tidak bisa membuka alamatnya: izinkan Node.js di
+Windows Firewall, atau pakai hotspot HP (sebagian WiFi publik memblokir antar-perangkat).
+
+Beranda hanya menampilkan menu dari toko yang sedang buka (jam buka WIB di Pengaturan toko).

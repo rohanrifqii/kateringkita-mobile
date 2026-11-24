@@ -2,12 +2,12 @@
 // bayar atau tombol "Buka WhatsApp" di daftar pesanan. Teks dan tautan wa.me dibuat server
 // (GET /orders/:code/whatsapp); pengguna boleh mengedit teks sebelum membuka WhatsApp.
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/api_exception.dart';
 import '../../core/app_colors.dart';
+import '../../core/clipboard_copy.dart';
 import '../../core/app_text_styles.dart';
 import '../../data/order_repository.dart';
 import '../../widgets/primary_button.dart';
@@ -101,13 +101,15 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
     super.dispose();
   }
 
-  /// Menyalin teks pesan ke clipboard dan menampilkan SnackBar konfirmasi.
-  void _copyMessage() {
-    Clipboard.setData(ClipboardData(text: _messageController.text));
+  Future<void> _copyMessage() async {
+    final ok = await copyText(_messageController.text);
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Pesan berhasil disalin ke clipboard!'),
-        backgroundColor: AppColors.successDark,
+      SnackBar(
+        content: Text(ok
+            ? 'Pesan berhasil disalin ke clipboard!'
+            : 'Gagal menyalin pesan. Salin manual dari kotak pesan.'),
+        backgroundColor: ok ? AppColors.successDark : AppColors.danger,
       ),
     );
   }

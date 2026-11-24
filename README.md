@@ -98,6 +98,8 @@ Supaya kalian paham cara kerja fitur-fitur yang udah jalan di Mobile saat ini:
 - **Sebelum ngetes pembayaran:** cek dulu di Heroku (Settings → Config Vars) bahwa `MIDTRANS_IS_PRODUCTION` **kosong/`false`** (mode sandbox), supaya tidak ada uang sungguhan yang berpindah.
 - Mau isi toko demo supaya katalog nggak kosong? Jalankan `dart run tool/seed_toko.dart` (detail lengkap ada di `tool/README.md`).
 - **Midtrans sudah terintegrasi.** Alur checkout (buat pesanan) ada di `lib/screens/orders/checkout_screen.dart`, sedangkan halaman pembayaran (VA, QRIS/e-wallet lewat Snap, dan pengecekan status) ada di `lib/screens/orders/payment_screen.dart`.
+- **SOP penyambungan ke backend.** Aplikasi mobile ini jadi **acuan**: backend dan web yang menyesuaikan. Peta setiap fitur mobile ke endpoint dan halaman web penjual/admin, aturan penyambungan, dan cara memastikannya ada di [`docs/SOP-PENYAMBUNGAN-MOBILE.md`](https://github.com/stanlevv/kateringkita-backend/blob/main/docs/SOP-PENYAMBUNGAN-MOBILE.md) (repo backend).
+- **Tes kontrak** (`test/kontrak/`) menjalankan repository & model aplikasi yang asli ke backend sungguhan: `flutter test test/kontrak --dart-define=KONTRAK_API=http://127.0.0.1:5000/api/v1`. Tes ini membuat akun dan pesanan, jadi **arahkan ke backend lokal, jangan production**. Tanpa `KONTRAK_API` tes ini dilewati.
 
 ---
 

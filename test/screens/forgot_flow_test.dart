@@ -101,13 +101,13 @@ void main() {
       return _err(404, 'NOT_FOUND', 'x');
     });
     await tester.enterText(find.byType(TextFormField).first, 'a@x.com');
-    await tester.tap(find.text('Send Reset Code'));
+    await tester.tap(find.text('Kirim Kode'));
     await tester.pumpAndSettle();
     expect(_currentRoute(), AppRoutes.verifyCode);
     expect(find.textContaining('a@x.com', findRichText: true), findsOneWidget);
 
     await _enterCode(tester, '123456');
-    await tester.tap(find.text('Verify & Continue'));
+    await tester.tap(find.text('Verifikasi & Lanjutkan'));
     await tester.pumpAndSettle();
     expect(find.text('Kode salah atau sudah kedaluwarsa.'), findsOneWidget);
     expect(_currentRoute(), AppRoutes.verifyCode);
@@ -129,9 +129,9 @@ void main() {
       return _err(404, 'NOT_FOUND', 'x');
     });
     await tester.enterText(find.byType(TextFormField).first, 'a@x.com');
-    await tester.tap(find.text('Send Reset Code'));
+    await tester.tap(find.text('Kirim Kode'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Resend Code'));
+    await tester.tap(find.text('Kirim Ulang Kode'));
     await tester.pumpAndSettle();
     expect(find.text('Terlalu banyak permintaan.'), findsOneWidget);
     expect(
@@ -153,10 +153,10 @@ void main() {
       return _okForgotVerify(r);
     });
     await tester.enterText(find.byType(TextFormField).first, 'a@x.com');
-    await tester.tap(find.text('Send Reset Code'));
+    await tester.tap(find.text('Kirim Kode'));
     await tester.pumpAndSettle();
     await _enterCode(tester, '123456');
-    await tester.tap(find.text('Verify & Continue'));
+    await tester.tap(find.text('Verifikasi & Lanjutkan'));
     await tester.pumpAndSettle();
     expect(_currentRoute(), AppRoutes.resetPassword);
 
@@ -164,7 +164,7 @@ void main() {
     final fields = find.byType(TextFormField);
     await tester.enterText(fields.at(0), 'abcdefgh');
     await tester.enterText(fields.at(1), 'abcdefgh');
-    await tester.tap(find.text('Save New Password'));
+    await tester.tap(find.text('Simpan Password Baru'));
     await tester.pumpAndSettle();
     expect(
       calls.where((c) => c.url.path.endsWith('/auth/password/reset')),
@@ -173,7 +173,7 @@ void main() {
 
     await tester.enterText(fields.at(0), 'sandi1234');
     await tester.enterText(fields.at(1), 'sandi1234');
-    await tester.tap(find.text('Save New Password'));
+    await tester.tap(find.text('Simpan Password Baru'));
     await tester.pumpAndSettle();
     final reset = calls.singleWhere(
       (c) => c.url.path.endsWith('/auth/password/reset'),
@@ -202,15 +202,15 @@ void main() {
       return _okForgotVerify(r);
     });
     await tester.enterText(find.byType(TextFormField).first, 'a@x.com');
-    await tester.tap(find.text('Send Reset Code'));
+    await tester.tap(find.text('Kirim Kode'));
     await tester.pumpAndSettle();
     await _enterCode(tester, '123456');
-    await tester.tap(find.text('Verify & Continue'));
+    await tester.tap(find.text('Verifikasi & Lanjutkan'));
     await tester.pumpAndSettle();
     final fields = find.byType(TextFormField);
     await tester.enterText(fields.at(0), 'sandi1234');
     await tester.enterText(fields.at(1), 'sandi1234');
-    await tester.tap(find.text('Save New Password'));
+    await tester.tap(find.text('Simpan Password Baru'));
     await tester.pumpAndSettle();
     expect(find.text('Masuk Sekarang'), findsNothing);
     expect(find.text('Kode salah atau sudah kedaluwarsa.'), findsOneWidget);

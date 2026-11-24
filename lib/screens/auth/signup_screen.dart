@@ -55,7 +55,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Future<void> _onSignUp() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
-    final phone = _phoneController.text.trim();
+    // contoh di kolom memakai tanda hubung (08xx-xxxx-xxxx): spasi/tanda hubung dibuang sebelum dicek dan dikirim
+    final phone = _phoneController.text.replaceAll(RegExp(r'[\s-]'), '');
     final password = _passwordController.text;
 
     if (name.isEmpty || email.isEmpty || phone.isEmpty || password.isEmpty) {
@@ -137,7 +138,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 40),
               // Header
               Text(
-                'Create Account',
+                'Buat Akun',
                 style: AppTextStyles.h1.copyWith(
                   fontSize: 28,
                   fontWeight: FontWeight.w800,
@@ -146,7 +147,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 28),
               // Name Field
               CustomTextField(
-                label: 'Full Name',
+                label: 'Nama Lengkap',
                 hint: 'Masukkan nama lengkap',
                 controller: _nameController,
                 errorText: _errors['full_name'],
@@ -154,7 +155,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 16),
               // Email Field
               CustomTextField(
-                label: 'Email Address',
+                label: 'Alamat Email',
                 hint: 'Masukkan email',
                 controller: _emailController,
                 errorText: _errors['email'],
@@ -163,7 +164,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 16),
               // Phone Field
               CustomTextField(
-                label: 'Phone Number',
+                label: 'Nomor WhatsApp',
                 hint: '08xx-xxxx-xxxx',
                 controller: _phoneController,
                 errorText: _errors['phone'],
@@ -194,15 +195,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
               ),
               const SizedBox(height: 20),
               // Terms & Conditions Checkbox
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _agreeToTerms = !_agreeToTerms;
-                      });
-                    },
-                    child: Container(
+              // seluruh baris (kotak + tulisan) bisa diketuk, bukan hanya kotak 22 px
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  setState(() {
+                    _agreeToTerms = !_agreeToTerms;
+                  });
+                },
+                child: Row(
+                  children: [
+                    Container(
                       width: 22,
                       height: 22,
                       decoration: BoxDecoration(
@@ -223,23 +226,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             )
                           : null,
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'I agree to Terms & Conditions',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        fontSize: 13,
-                        color: AppColors.textPrimary,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Saya menyetujui Syarat & Ketentuan',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          fontSize: 13,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 28),
               // Sign Up Button
               PrimaryButton(
-                text: _loading ? 'Menyimpan...' : 'Sign Up',
+                text: _loading ? 'Menyimpan...' : 'Daftar',
                 onPressed: (_agreeToTerms && !_loading) ? _onSignUp : null,
               ),
               const SizedBox(height: 20),
@@ -263,7 +266,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       children: [
                         TextSpan(
-                          text: 'Login',
+                          text: 'Masuk',
                           style: AppTextStyles.bodyMedium.copyWith(
                             color: AppColors.primary,
                             fontWeight: FontWeight.w700,

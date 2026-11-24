@@ -31,6 +31,11 @@ export 'liked/liked_screen.dart';
 export 'profile/edit_profile_screen.dart';
 export 'profile/profile_screen.dart';
 
+// Bantuan & Tiket
+export 'support/ticket_create_screen.dart';
+export 'support/ticket_detail_screen.dart';
+export 'support/ticket_list_screen.dart';
+
 // Navigation & Splash
 export 'navigation/main_navigation_screen.dart';
 export 'splash/splash_screen.dart';
