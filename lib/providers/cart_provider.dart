@@ -46,9 +46,17 @@ class CartProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Selesai saat [restore] selesai (langsung selesai bila [restore] belum dipanggil). Ditunggu
+  /// layar yang membaca isi keranjang saat halaman web dimuat ulang, mis. checkout.
+  Future<void> get restored => _restoring;
+  Future<void> _restoring = Future<void>.value();
+
   /// Mengisi keranjang dengan isi yang tersimpan di perangkat (dipanggil sekali saat aplikasi dibuka).
   /// Tidak melakukan apa-apa bila tidak ada [CartStore] atau keranjang sudah diubah selama data dibaca.
-  Future<void> restore() async {
+  Future<void> restore() => _restoring = _restoreFromStore();
+
+  // Isi [restore]: baca data tersimpan lalu terapkan bila keranjang belum diubah.
+  Future<void> _restoreFromStore() async {
     final store = _store;
     if (store == null) return;
     final saved = await store.load();

@@ -267,6 +267,18 @@ void main() {
       expect(await prefs.getString(CartStore.storageKey), isNull);
     });
 
+    test('restored selesai setelah isi tersimpan diterapkan', () async {
+      await prefs.setString(
+          CartStore.storageKey, CartStore.encode((CartProvider()..add(_menu(1))).items));
+      final cart = CartProvider(store: CartStore(prefs));
+      await cart.restored; // belum dipulihkan: langsung selesai
+      expect(cart.items, isEmpty);
+      cart.restore();
+      expect(cart.items, isEmpty);
+      await cart.restored;
+      expect(cart.items.map((item) => item.key), ['1:0']);
+    });
+
     test('perubahan selama data dibaca tidak ditimpa data lama', () async {
       await prefs.setString(
           CartStore.storageKey, CartStore.encode((CartProvider()..add(_menu(1))).items));

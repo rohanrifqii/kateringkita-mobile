@@ -142,7 +142,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   // ---------- Alur ----------
 
-  /// Pastikan login (tutup layar bila batal), isi nama & nomor dari profil, lalu muat titik temu.
+  /// Pastikan login (tutup layar bila batal), isi nama & nomor dari profil, tunggu keranjang
+  /// selesai dipulihkan, lalu muat titik temu.
   Future<void> _start() async {
     if (!mounted) return;
     final ok = await requireLogin(context);
@@ -155,6 +156,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _nameController.text = user?.fullName ?? '';
     _phoneController.text = user?.phone ?? '';
     setState(() => _authorized = true);
+    // Muat ulang di /checkout: isi keranjang dari perangkat mungkin belum selesai dipulihkan.
+    await _cart.restored;
+    if (!mounted) return;
     await _loadPoints();
   }
 
