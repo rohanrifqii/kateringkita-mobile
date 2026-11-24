@@ -12,13 +12,18 @@ import 'core/app_router.dart';
 import 'core/app_theme.dart';
 import 'api/api_client.dart';
 import 'core/app_routes.dart';
+import 'data/ai_history_store.dart';
+import 'data/assistant_repository.dart';
 import 'data/auth_repository.dart';
 import 'data/catalog_repository.dart';
+import 'data/favorite_repository.dart';
+import 'data/notification_repository.dart';
 import 'data/order_repository.dart';
 import 'data/token_store.dart';
 import 'providers/auth_provider.dart';
-import 'data/liked_store.dart';
 import 'providers/cart_provider.dart';
+import 'providers/favorites_provider.dart';
+import 'providers/notification_provider.dart';
 import 'providers/theme_provider.dart';
 
 /// Fungsi pertama yang dijalankan saat aplikasi dibuka.
@@ -28,7 +33,6 @@ import 'providers/theme_provider.dart';
 /// lalu menjalankan [KateringKitaApp] di dalam [MultiProvider].
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await LikedStore.init();
 
   // Pilihan mode gelap disimpan di SharedPreferences dengan kunci ThemeProvider.prefKey.
   final prefs = SharedPreferencesAsync();
@@ -97,11 +101,20 @@ Widget buildAppProviders({
   final repo = AuthRepository(api, onSessionInvalid: () => auth.clear());
   auth = AuthProvider(repo);
 
-  // Keranjang milik sesi: dikosongkan saat logout / sesi tidak valid.
+  // Keranjang, favorit & lencana notifikasi milik sesi: dikosongkan saat
+  // logout / sesi tidak valid.
   final cart = CartProvider();
+  final favoriteRepo = FavoriteRepository(api);
+  final favorites = FavoritesProvider(favoriteRepo);
+  final notificationRepo = NotificationRepository(api);
+  final notifications = NotificationProvider(notificationRepo);
   var wasLoggedIn = false;
   auth.addListener(() {
-    if (wasLoggedIn && !auth.isLoggedIn) cart.clear();
+    if (wasLoggedIn && !auth.isLoggedIn) {
+      cart.clear();
+      favorites.clear();
+      notifications.clear();
+    }
     wasLoggedIn = auth.isLoggedIn;
   });
 
@@ -114,6 +127,12 @@ Widget buildAppProviders({
       ChangeNotifierProvider<AuthProvider>.value(value: auth),
       Provider<CatalogRepository>.value(value: CatalogRepository(api)),
       Provider<OrderRepository>.value(value: OrderRepository(api)),
+      Provider<FavoriteRepository>.value(value: favoriteRepo),
+      ChangeNotifierProvider<FavoritesProvider>.value(value: favorites),
+      Provider<NotificationRepository>.value(value: notificationRepo),
+      ChangeNotifierProvider<NotificationProvider>.value(value: notifications),
+      Provider<AssistantRepository>.value(value: AssistantRepository(api)),
+      Provider<AiHistoryStore>.value(value: AiHistoryStore()),
     ],
     child: child,
   );

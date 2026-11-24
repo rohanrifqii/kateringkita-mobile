@@ -12,7 +12,12 @@ import 'order_list_view.dart';
 /// kolom cari (nama menu / kode pesanan). Pencarian dikirim ke server sebagai
 /// parameter `q`. Tombol kembali hanya muncul bila layar dibuka sebagai rute.
 class OrdersScreen extends StatefulWidget {
-  const OrdersScreen({super.key});
+  /// [initialTab]: `active` | `completed` | `cancelled`; [initialQuery] mis.
+  /// kode pesanan (dipakai saat dibuka dari notifikasi).
+  const OrdersScreen({super.key, this.initialTab, this.initialQuery = ''});
+
+  final String? initialTab;
+  final String initialQuery;
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
@@ -28,8 +33,18 @@ class _OrdersScreenState extends State<OrdersScreen> {
   String _searchQuery = '';
   Timer? _debounce;
 
-  /// Debounce 400 ms: query baru diteruskan ke OrderListView (yang memuat
-  /// ulang) setelah pengguna berhenti mengetik.
+  @override
+  void initState() {
+    super.initState();
+    final i = _tabKeys.indexOf(widget.initialTab ?? '');
+    if (i >= 0) _selectedTabIndex = i;
+    final q = widget.initialQuery.trim();
+    if (q.isNotEmpty) {
+      _searchController.text = q;
+      _searchQuery = q;
+    }
+  }
+
   void _onSearch(String val) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), () {

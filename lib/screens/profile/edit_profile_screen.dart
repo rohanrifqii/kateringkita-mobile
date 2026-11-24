@@ -1,140 +1,26 @@
-// Layar Ubah Profil (dibuka dari kartu profil atau menu "Kelola Profil" di ProfileScreen). Nama, email, dan No. HP dikirim ke server
-// lewat AuthRepository.updateProfile (PATCH /me); bio, gender, tanggal lahir, foto, dan status verifikasi
-// hanya disimpan lokal di SharedPreferences (UserProfileExtras), bukan di backend.
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/app_text_styles.dart';
 import '../../api/api_exception.dart';
-import '../../models/api_user.dart';
-import '../../data/auth_repository.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../widgets/profile_avatar.dart';
 
-/// Data tambahan profil pengguna yang hanya disimpan lokal di SharedPreferences, terpisah per email
-/// (kunci prof_*_<email>). Backend tidak menyimpan data ini.
-class UserProfileExtras {
-  final String bio;
-  final String gender;
-  final String birthDate;
-  final int avatarIndex; // 0 = foto default, 3 = inisial
-  final String avatarPath; // Path file foto profil hasil upload dari Galeri / Kamera
-  final bool isPhoneVerified;
-  final bool isEmailVerified;
-
-  const UserProfileExtras({
-    this.bio = 'Mahasiswa\nUniversitas Brawijaya',
-    this.gender = 'Pria',
-    this.birthDate = '',
-    this.avatarIndex = 0,
-    this.avatarPath = '',
-    this.isPhoneVerified = true,
-    this.isEmailVerified = false,
-  });
-
-  /// Salinan dengan field yang diberikan diganti; field null tetap memakai nilai lama.
-  UserProfileExtras copyWith({
-    String? bio,
-    String? gender,
-    String? birthDate,
-    int? avatarIndex,
-    String? avatarPath,
-    bool? isPhoneVerified,
-    bool? isEmailVerified,
-  }) {
-    return UserProfileExtras(
-      bio: bio ?? this.bio,
-      gender: gender ?? this.gender,
-      birthDate: birthDate ?? this.birthDate,
-      avatarIndex: avatarIndex ?? this.avatarIndex,
-      avatarPath: avatarPath ?? this.avatarPath,
-      isPhoneVerified: isPhoneVerified ?? this.isPhoneVerified,
-      isEmailVerified: isEmailVerified ?? this.isEmailVerified,
-    );
-  }
-
-  static final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
-
-  // Email diubah jadi akhiran kunci yang aman (huruf kecil, selain a-z0-9 jadi _); kosong = 'default'.
-  static String _scope(String email) {
-    if (email.trim().isEmpty) return 'default';
-    return email.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
-  }
-
-  /// Membaca data tambahan milik [email] dari SharedPreferences; kunci yang belum ada memakai nilai bawaan.
-  static Future<UserProfileExtras> load(String email) async {
-    final s = _scope(email);
-    final bio = await _prefs.getString('prof_bio_$s') ??
-        'Mahasiswa\nUniversitas Brawijaya';
-    final gender = await _prefs.getString('prof_gender_$s') ?? 'Pria';
-    final birthDate = await _prefs.getString('prof_birth_$s') ?? '';
-    final avatarIndex = await _prefs.getInt('prof_avatar_$s') ?? 0;
-    final avatarPath = await _prefs.getString('prof_avatar_path_$s') ?? '';
-    final phoneVer = await _prefs.getBool('prof_phone_ver_$s') ?? true;
-    final emailVer = await _prefs.getBool('prof_email_ver_$s') ?? false;
-
-    return UserProfileExtras(
-      bio: bio,
-      gender: gender,
-      birthDate: birthDate,
-      avatarIndex: avatarIndex,
-      avatarPath: avatarPath,
-      isPhoneVerified: phoneVer,
-      isEmailVerified: emailVer,
-    );
-  }
-
-  /// Menulis seluruh field [data] ke SharedPreferences di bawah kunci milik [email].
-  static Future<void> save(String email, UserProfileExtras data) async {
-    final s = _scope(email);
-    await _prefs.setString('prof_bio_$s', data.bio);
-    await _prefs.setString('prof_gender_$s', data.gender);
-    await _prefs.setString('prof_birth_$s', data.birthDate);
-    await _prefs.setInt('prof_avatar_$s', data.avatarIndex);
-    await _prefs.setString('prof_avatar_path_$s', data.avatarPath);
-    await _prefs.setBool('prof_phone_ver_$s', data.isPhoneVerified);
-    await _prefs.setBool('prof_email_ver_$s', data.isEmailVerified);
-  }
-}
-
-/// Halaman "Ubah Profil" (Kelola Profil) bergaya Shopee dengan tema KateringKita.
-/// [initialUser] dari GET /me (null untuk tamu: nilai contoh yang tampil dan tidak ada yang dikirim ke server);
-/// [initialExtras] dari UserProfileExtras.load.
+/// Halaman "Ubah Profil" (Kelola Profil) bergaya Shopee dengan tema
+/// KateringKita. Data dari [AuthProvider.user]; semua isian (foto, nama,
+/// WhatsApp, email) disimpan ke server lewat [AuthProvider].
 class EditProfileScreen extends StatefulWidget {
-  final ApiUser? initialUser;
-  final UserProfileExtras initialExtras;
-
-  const EditProfileScreen({
-    super.key,
-    required this.initialUser,
-    required this.initialExtras,
-  });
+  const EditProfileScreen({super.key});
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
 }
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
-  late String _name;
-  late String _email;
-  late String _phone;
-  late int? _userId;
-  late UserProfileExtras _extras;
-
-  @override
-  void initState() {
-    super.initState();
-    _userId = widget.initialUser?.id;
-    _name = widget.initialUser?.fullName ?? 'Abdurrahim';
-    _email = widget.initialUser?.email ?? 'abdurrahim.workspace@gmail.com';
-    _phone = widget.initialUser?.phone ?? '085852157352';
-    _extras = widget.initialExtras;
-  }
+  bool _avatarBusy = false;
 
   /// Sensor nomor HP ala Shopee: **********52
   String _maskPhone(String raw) {
@@ -159,30 +45,33 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return '$first************$last@$domain';
   }
 
-  /// Simpan perubahan: bila ada akun (userId), kirim nama/HP/email ke PATCH /me (email hanya dikirim bila
-  /// berbeda dari [oldEmail]); galat server cukup tampil di SnackBar, nilai di layar tidak dikembalikan.
-  /// Setelah itu data tambahan selalu disimpan lokal di bawah email yang sedang tampil.
-  Future<void> _persistChanges({String? oldEmail}) async {
-    final repo = context.read<AuthRepository>();
-    if (_userId != null) {
-      // Catatan: server meminta current_password untuk ganti email/HP, sedangkan layar ini belum punya
-      // kolom sandi; akibatnya perubahan itu ditolak server dan pesannya muncul di SnackBar.
-      try {
-        await repo.updateProfile(
-          userId: _userId!,
-          oldEmail: oldEmail ?? _email,
-          fullName: _name,
-          phone: _phone,
-          newEmail: _email,
-        );
-      } on ApiException catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(e.message)));
-        }
-      }
+  /// PATCH /me lewat [AuthProvider.updateProfile], jadi user di seluruh
+  /// aplikasi (mis. checkout) ikut baru. Return null bila sukses, atau pesan
+  /// galat. Server meminta [currentPassword] bila email/nomor berubah.
+  Future<String?> _saveProfile({
+    String? name,
+    String? phone,
+    String? email,
+    String? currentPassword,
+  }) async {
+    final auth = context.read<AuthProvider>();
+    final u = auth.user;
+    if (u == null) return 'Masuk dulu untuk mengubah profil.';
+    try {
+      await auth.updateProfile(
+        fullName: name ?? u.fullName,
+        phone: phone ?? u.phone,
+        email: email ?? u.email ?? '',
+        currentPassword: currentPassword,
+      );
+      return null;
+    } on ApiException catch (e) {
+      return e.field('current_password') ??
+          e.field('email') ??
+          e.field('phone') ??
+          e.field('full_name') ??
+          e.message;
     }
-    await UserProfileExtras.save(_email, _extras);
   }
 
   /// SnackBar mengambang berikon centang (juga dipakai untuk pesan gagal memilih foto).
@@ -214,47 +103,67 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   // ---------------- MODAL EDIT TIAP FIELD ----------------
 
-  /// Ambil foto dari galeri/kamera, salin ke folder dokumen aplikasi, lalu simpan path-nya sebagai avatar
-  /// (hanya lokal; foto tidak diunggah ke server).
-  Future<void> _pickAndSaveImage(ImageSource source) async {
+  void _showErrorToast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Ambil foto lalu unggah ke server (presign → PUT → PATCH /me).
+  Future<void> _pickAndUploadAvatar(ImageSource source) async {
+    final auth = context.read<AuthProvider>();
+    final XFile? picked;
     try {
-      final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(
+      picked = await ImagePicker().pickImage(
         source: source,
         imageQuality: 85,
-        maxWidth: 800,
-        maxHeight: 800,
+        maxWidth: 1024,
+        maxHeight: 1024,
       );
-      if (pickedFile == null) return;
+    } catch (_) {
+      _showErrorToast('Gagal membuka galeri/kamera. Coba lagi.');
+      return;
+    }
+    if (picked == null || !mounted) return;
 
-      final appDir = await getApplicationDocumentsDirectory();
-      final ext = pickedFile.path.contains('.')
-          ? pickedFile.path.substring(pickedFile.path.lastIndexOf('.'))
-          : '.jpg';
-      final savedPath =
-          '${appDir.path}/avatar_${DateTime.now().millisecondsSinceEpoch}$ext';
-      await File(pickedFile.path).copy(savedPath);
-
-      if (!mounted) return;
-      setState(() {
-        _extras = _extras.copyWith(
-          avatarPath: savedPath,
-          avatarIndex: 0,
-        );
-      });
-      await _persistChanges();
-      _showSuccessToast('Foto profil berhasil diunggah & diperbarui!');
-    } catch (e) {
-      if (!mounted) return;
-      _showSuccessToast(
-        'Gagal membuka galeri/kamera. Pastikan aplikasi sudah di-restart penuh.',
+    setState(() => _avatarBusy = true);
+    try {
+      final bytes = await picked.readAsBytes();
+      await auth.uploadAvatar(
+        fileName: picked.name.isNotEmpty ? picked.name : picked.path,
+        bytes: bytes,
       );
+      _showSuccessToast('Foto profil berhasil diperbarui');
+    } on ApiException catch (e) {
+      _showErrorToast(e.message);
+    } catch (_) {
+      _showErrorToast('Gagal mengunggah foto. Coba lagi.');
+    } finally {
+      if (mounted) setState(() => _avatarBusy = false);
+    }
+  }
+
+  Future<void> _removeAvatar() async {
+    final auth = context.read<AuthProvider>();
+    setState(() => _avatarBusy = true);
+    try {
+      await auth.removeAvatar();
+      _showSuccessToast('Foto profil dihapus');
+    } on ApiException catch (e) {
+      _showErrorToast(e.message);
+    } finally {
+      if (mounted) setState(() => _avatarBusy = false);
     }
   }
 
   void _showAvatarPickerSheet() {
-    final hasCustomPhoto =
-        _extras.avatarPath.isNotEmpty && File(_extras.avatarPath).existsSync();
+    if (_avatarBusy) return;
+    final user = context.read<AuthProvider>().user;
+    if (user == null) {
+      _showErrorToast('Masuk dulu untuk mengubah foto profil.');
+      return;
+    }
+    final hasPhoto = user.avatarUrl?.isNotEmpty ?? false;
 
     showModalBottomSheet(
       context: context,
@@ -322,7 +231,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
-                    _pickAndSaveImage(ImageSource.gallery);
+                    _pickAndUploadAvatar(ImageSource.gallery);
                   },
                 ),
                 Divider(height: 1, color: AppColors.divider),
@@ -357,75 +266,39 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
-                    _pickAndSaveImage(ImageSource.camera);
+                    _pickAndUploadAvatar(ImageSource.camera);
                   },
                 ),
-                Divider(height: 1, color: AppColors.divider),
-                // Opsi 3: Gunakan Inisial Nama
-                ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                  leading: CircleAvatar(
-                    backgroundColor: AppColors.secondaryBg,
-                    child: Icon(
-                      Icons.text_fields_rounded,
-                      color: AppColors.textSecondary,
-                      size: 20,
-                    ),
-                  ),
-                  title: Text(
-                    'Gunakan Avatar Inisial Nama',
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  trailing: (!hasCustomPhoto && _extras.avatarIndex == 3)
-                      ? const Icon(
-                          Icons.check_circle_rounded,
-                          color: AppColors.primary,
-                        )
-                      : null,
-                  onTap: () async {
-                    setState(() {
-                      _extras = _extras.copyWith(
-                        avatarPath: '',
-                        avatarIndex: 3,
-                      );
-                    });
-                    Navigator.pop(ctx);
-                    await _persistChanges();
-                    _showSuccessToast('Avatar diubah ke inisial nama');
-                  },
-                ),
-                if (hasCustomPhoto || _extras.avatarIndex != 0) ...[
+                if (hasPhoto) ...[
                   Divider(height: 1, color: AppColors.divider),
+                  // Opsi 3: Hapus foto, kembali ke inisial nama
                   ListTile(
                     contentPadding: const EdgeInsets.symmetric(horizontal: 4),
                     leading: CircleAvatar(
                       backgroundColor: AppColors.dangerLight,
                       child: const Icon(
-                        Icons.restore_rounded,
+                        Icons.delete_outline_rounded,
                         color: AppColors.danger,
                         size: 20,
                       ),
                     ),
                     title: Text(
-                      'Reset ke Foto Profil Default',
+                      'Hapus Foto Profil',
                       style: AppTextStyles.bodyMedium.copyWith(
                         fontWeight: FontWeight.w600,
                         color: AppColors.danger,
                       ),
                     ),
-                    onTap: () async {
-                      setState(() {
-                        _extras = _extras.copyWith(
-                          avatarPath: '',
-                          avatarIndex: 0,
-                        );
-                      });
+                    subtitle: Text(
+                      'Kembali memakai inisial nama',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                    onTap: () {
                       Navigator.pop(ctx);
-                      await _persistChanges();
-                      _showSuccessToast('Foto profil dikembalikan ke default');
+                      _removeAvatar();
                     },
                   ),
                 ],
@@ -442,7 +315,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     required String label,
     required String initialValue,
     required String hint,
-    int maxLines = 1,
     required Future<void> Function(String newValue) onSave,
   }) {
     final ctrl = TextEditingController(text: initialValue);
@@ -480,7 +352,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               TextField(
                 controller: ctrl,
                 autofocus: true,
-                maxLines: maxLines,
                 decoration: InputDecoration(
                   labelText: label,
                   hintText: hint,
@@ -520,129 +391,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  void _showGenderPickerSheet() {
-    final genders = ['Pria', 'Wanita'];
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Pilih Jenis Kelamin',
-                      style: AppTextStyles.h3.copyWith(fontSize: 17),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 20),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ...genders.map((g) {
-                  final selected = _extras.gender == g;
-                  return ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
-                    title: Text(
-                      g,
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        fontWeight:
-                            selected ? FontWeight.w700 : FontWeight.w500,
-                        color:
-                            selected ? AppColors.primary : AppColors.textPrimary,
-                      ),
-                    ),
-                    trailing: selected
-                        ? const Icon(Icons.check_circle_rounded,
-                            color: AppColors.primary)
-                        : null,
-                    onTap: () async {
-                      setState(() {
-                        _extras = _extras.copyWith(gender: g);
-                      });
-                      Navigator.pop(ctx);
-                      await _persistChanges();
-                      _showSuccessToast('Jenis kelamin diperbarui ke $g');
-                    },
-                  );
-                }),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// Pilih tanggal lahir (minimal berumur 10 tahun), simpan sebagai teks "dd Bulan yyyy" di data lokal.
-  Future<void> _pickBirthDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: DateTime(2005, 5, 15),
-      firstDate: DateTime(1970),
-      lastDate: DateTime(now.year - 10, 12, 31),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.fromSeed(
-              seedColor: AppColors.primary,
-              primary: AppColors.primary,
-              brightness: Theme.of(context).brightness == Brightness.dark
-                  ? Brightness.dark
-                  : Brightness.light,
-            ),
-          ),
-          child: child!,
-        );
-      },
-    );
-
-    if (picked != null) {
-      const months = [
-        'Januari',
-        'Februari',
-        'Maret',
-        'April',
-        'Mei',
-        'Juni',
-        'Juli',
-        'Agustus',
-        'September',
-        'Oktober',
-        'November',
-        'Desember'
-      ];
-      final formatted =
-          '${picked.day.toString().padLeft(2, '0')} ${months[picked.month - 1]} ${picked.year}';
-      setState(() {
-        _extras = _extras.copyWith(birthDate: formatted);
-      });
-      await _persistChanges();
-      _showSuccessToast('Tanggal lahir disimpan: $formatted');
-    }
-  }
-
-  /// Sheet ubah & verifikasi No. WhatsApp / email. OTP di sini hanya simulasi (tidak ada panggilan server);
-  /// menekan simpan menandai kontak terverifikasi secara lokal lalu memanggil _persistChanges.
-  void _showContactVerificationSheet({required bool isPhone}) {
-    final currentVal = isPhone ? _phone : _email;
-    final isVerified =
-        isPhone ? _extras.isPhoneVerified : _extras.isEmailVerified;
+  /// Ubah No. WhatsApp / Email. Keduanya dipakai untuk masuk, jadi server
+  /// meminta kata sandi saat ini.
+  void _showContactEditSheet({
+    required bool isPhone,
+    required String currentVal,
+  }) {
     final valueCtrl = TextEditingController(text: currentVal);
-    final otpCtrl = TextEditingController();
-    bool otpSent = false;
+    final passwordCtrl = TextEditingController();
+    var obscure = true;
+    var saving = false;
+    String? errorMsg;
 
     showModalBottomSheet(
       context: context,
@@ -654,6 +413,41 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
+            Future<void> submit() async {
+              final newVal = valueCtrl.text.trim();
+              if (newVal.isEmpty) return;
+              if (newVal == currentVal) {
+                Navigator.pop(ctx);
+                return;
+              }
+              if (passwordCtrl.text.isEmpty) {
+                setSheetState(() => errorMsg =
+                    'Masukkan kata sandi saat ini untuk mengubah email atau nomor.');
+                return;
+              }
+              setSheetState(() {
+                saving = true;
+                errorMsg = null;
+              });
+              final err = await _saveProfile(
+                phone: isPhone ? newVal : null,
+                email: isPhone ? null : newVal,
+                currentPassword: passwordCtrl.text,
+              );
+              if (!ctx.mounted) return;
+              if (err != null) {
+                setSheetState(() {
+                  saving = false;
+                  errorMsg = err;
+                });
+                return;
+              }
+              Navigator.pop(ctx);
+              _showSuccessToast(isPhone
+                  ? 'Nomor WhatsApp berhasil diperbarui'
+                  : 'Email berhasil diperbarui');
+            }
+
             return Padding(
               padding: EdgeInsets.only(
                 left: 20,
@@ -670,9 +464,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     children: [
                       Expanded(
                         child: Text(
-                          isPhone
-                              ? 'No. Handphone & WhatsApp'
-                              : 'Alamat Email & Verifikasi',
+                          isPhone ? 'Ubah No. WhatsApp' : 'Ubah Email',
                           style: AppTextStyles.h3.copyWith(fontSize: 17),
                         ),
                       ),
@@ -682,51 +474,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isVerified
-                              ? const Color(0xFFDCFCE7)
-                              : const Color(0xFFFFF1E8),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isVerified
-                                  ? Icons.verified_rounded
-                                  : Icons.info_outline_rounded,
-                              size: 14,
-                              color: isVerified
-                                  ? const Color(0xFF16A34A)
-                                  : AppColors.primary,
-                            ),
-                            const SizedBox(width: 5),
-                            Text(
-                              isVerified
-                                  ? 'Status: Terverifikasi'
-                                  : 'Status: Belum Diverifikasi',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w700,
-                                color: isVerified
-                                    ? const Color(0xFF16A34A)
-                                    : AppColors.primary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   TextField(
                     controller: valueCtrl,
                     keyboardType: isPhone
@@ -736,105 +484,71 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       labelText:
                           isPhone ? 'Nomor WhatsApp Aktif' : 'Alamat Email',
                       hintText: isPhone
-                          ? 'Cth: 085852157352'
+                          ? 'Cth: 081234567890'
                           : 'Cth: nama@student.ub.ac.id',
                     ),
                   ),
-                  if (otpSent) ...[
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: otpCtrl,
-                      keyboardType: TextInputType.number,
-                      maxLength: 4,
-                      decoration: InputDecoration(
-                        labelText: 'Kode Verifikasi OTP (4 Digit)',
-                        hintText: 'Masukkan kode (cth: 1234)',
-                        counterText: '',
-                        helperText: isPhone
-                            ? 'Kode simulasi OTP dikirim ke WhatsApp kamu (ketik 4 angka bebas)'
-                            : 'Kode simulasi OTP dikirim ke Email kamu (ketik 4 angka bebas)',
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: passwordCtrl,
+                    obscureText: obscure,
+                    decoration: InputDecoration(
+                      labelText: 'Kata Sandi Saat Ini',
+                      helperText:
+                          'Wajib diisi untuk mengubah email atau nomor WhatsApp.',
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscure
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          size: 18,
+                        ),
+                        onPressed: () =>
+                            setSheetState(() => obscure = !obscure),
+                      ),
+                    ),
+                  ),
+                  if (errorMsg != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      errorMsg!,
+                      style: const TextStyle(
+                        color: AppColors.danger,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
                   const SizedBox(height: 20),
-                  Row(
-                    children: [
-                      if (!isVerified || valueCtrl.text.trim() != currentVal)
-                        Expanded(
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppColors.primary,
-                              side: const BorderSide(color: AppColors.primary),
-                              padding: const EdgeInsets.symmetric(vertical: 13),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            onPressed: () {
-                              setSheetState(() {
-                                otpSent = true;
-                                if (otpCtrl.text.isEmpty) {
-                                  otpCtrl.text = '8842';
-                                }
-                              });
-                            },
-                            child: Text(
-                              otpSent ? 'Kirim Ulang OTP' : 'Kirim Kode OTP',
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ),
-                      if (!isVerified || valueCtrl.text.trim() != currentVal)
-                        const SizedBox(width: 10),
-                      Expanded(
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.primary,
-                            padding: const EdgeInsets.symmetric(vertical: 13),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          onPressed: () async {
-                            final newVal = valueCtrl.text.trim();
-                            if (newVal.isEmpty) return;
-                            final prevEmail = _email;
-
-                            setState(() {
-                              if (isPhone) {
-                                _phone = newVal;
-                                _extras = _extras.copyWith(
-                                  isPhoneVerified: true,
-                                );
-                              } else {
-                                _email = newVal;
-                                _extras = _extras.copyWith(
-                                  isEmailVerified: true,
-                                );
-                              }
-                            });
-                            Navigator.pop(ctx);
-                            await _persistChanges(oldEmail: prevEmail);
-                            _showSuccessToast(
-                              isPhone
-                                  ? 'Nomor WhatsApp berhasil disimpan & diverifikasi!'
-                                  : 'Alamat Email berhasil disimpan & diverifikasi!',
-                            );
-                          },
-                          child: Text(
-                            otpSent ? 'Verifikasi & Simpan' : 'Simpan & Verifikasi',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
-                            ),
-                          ),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
-                    ],
+                      onPressed: saving ? null : submit,
+                      child: saving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Text(
+                              'Simpan',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 14,
+                              ),
+                            ),
+                    ),
                   ),
                 ],
               ),
@@ -851,7 +565,17 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget build(BuildContext context) {
     final isDark = context.watch<ThemeProvider>().isDarkMode;
     AppColors.isDarkMode = isDark;
-    final cleanBioSingleLine = _extras.bio.replaceAll('\n', ' • ').trim();
+    final user = context.watch<AuthProvider>().user;
+    if (user == null) {
+      // Sesi berakhir saat layar terbuka: jangan tampilkan data siapa pun.
+      return Scaffold(
+        appBar: AppBar(title: const Text('Ubah Profil')),
+        body: const Center(child: Text('Masuk dulu untuk mengubah profil.')),
+      );
+    }
+    final name = user.fullName;
+    final phone = user.phone;
+    final email = user.email ?? '';
 
     return Scaffold(
       backgroundColor: isDark ? AppColors.darkBackground : AppColors.background,
@@ -907,7 +631,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ),
                   child: Column(
                     children: [
-                      _buildAvatarCircle(),
+                      _buildAvatarCircle(name, user.avatarUrl),
                       const SizedBox(height: 12),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -921,7 +645,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'Ubah',
+                            _avatarBusy ? 'Menyimpan foto...' : 'Ubah',
                             style: AppTextStyles.bodyMedium.copyWith(
                               color: isDark
                                   ? AppColors.darkTextSecondary
@@ -938,86 +662,43 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               const SizedBox(height: 14),
 
-              // 2. Kartu Grup: Nama & Bio
+              // 2. Kartu Grup: Nama
               _buildGroupCard([
                 _buildShopeeRow(
                   label: 'Nama',
-                  value: _name,
+                  value: name,
                   onTap: () => _showEditTextSheet(
                     title: 'Ubah Nama',
                     label: 'Nama Lengkap',
-                    initialValue: _name,
+                    initialValue: name,
                     hint: 'Masukkan nama lengkapmu',
                     onSave: (val) async {
-                      setState(() => _name = val);
-                      await _persistChanges();
+                      final err = await _saveProfile(name: val);
+                      if (err != null) {
+                        _showErrorToast(err);
+                        return;
+                      }
                       _showSuccessToast('Nama berhasil diperbarui');
                     },
                   ),
                 ),
-                _buildDivider(),
-                _buildShopeeRow(
-                  label: 'Bio',
-                  value: cleanBioSingleLine.isEmpty
-                      ? 'Atur Sekarang'
-                      : cleanBioSingleLine,
-                  isPlaceholder: cleanBioSingleLine.isEmpty,
-                  onTap: () => _showEditTextSheet(
-                    title: 'Ubah Bio Profil',
-                    label: 'Bio / Status Kampus',
-                    initialValue: _extras.bio,
-                    hint: 'Cth: Mahasiswa\nUniversitas Brawijaya',
-                    maxLines: 2,
-                    onSave: (val) async {
-                      setState(() => _extras = _extras.copyWith(bio: val));
-                      await _persistChanges();
-                      _showSuccessToast('Bio berhasil diperbarui');
-                    },
-                  ),
-                ),
               ]),
               const SizedBox(height: 14),
 
-              // 3. Kartu Grup: Jenis Kelamin & Tanggal Lahir
-              _buildGroupCard([
-                _buildShopeeRow(
-                  label: 'Jenis Kelamin',
-                  value: _extras.gender.isEmpty
-                      ? 'Atur Sekarang'
-                      : _extras.gender,
-                  isPlaceholder: _extras.gender.isEmpty,
-                  onTap: _showGenderPickerSheet,
-                ),
-                _buildDivider(),
-                _buildShopeeRow(
-                  label: 'Tanggal Lahir',
-                  value: _extras.birthDate.isEmpty
-                      ? 'Atur Sekarang'
-                      : _extras.birthDate,
-                  isAccentAction: _extras.birthDate.isEmpty,
-                  onTap: _pickBirthDate,
-                ),
-              ]),
-              const SizedBox(height: 14),
-
-              // 4. Kartu Grup: No. Handphone (WhatsApp) & Email beserta Verifikasi
+              // 3. Kartu Grup: No. Handphone (WhatsApp) & Email
               _buildGroupCard([
                 _buildShopeeRow(
                   label: 'No. Handphone',
-                  value: _maskPhone(_phone),
-                  badgeText:
-                      _extras.isPhoneVerified ? 'Terverifikasi' : 'Verifikasi',
-                  badgeVerified: _extras.isPhoneVerified,
-                  onTap: () => _showContactVerificationSheet(isPhone: true),
+                  value: _maskPhone(phone),
+                  onTap: () => _showContactEditSheet(
+                      isPhone: true, currentVal: phone),
                 ),
                 _buildDivider(),
                 _buildShopeeRow(
                   label: 'Email',
-                  value: _maskEmail(_email),
-                  badgeText:
-                      _extras.isEmailVerified ? 'Terverifikasi' : 'Verifikasi',
-                  badgeVerified: _extras.isEmailVerified,
-                  onTap: () => _showContactVerificationSheet(isPhone: false),
+                  value: _maskEmail(email),
+                  onTap: () => _showContactEditSheet(
+                      isPhone: false, currentVal: email),
                 ),
               ]),
             ],
@@ -1027,76 +708,41 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
-  Widget _buildAvatarCircle() {
-    if (_extras.avatarPath.isNotEmpty) {
-      final file = File(_extras.avatarPath);
-      if (file.existsSync()) {
-        return Container(
-          width: 82,
-          height: 82,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: AppColors.primary, width: 2),
-          ),
-          child: ClipOval(
-            child: Image.file(
-              file,
-              width: 82,
-              height: 82,
-              fit: BoxFit.cover,
-            ),
-          ),
-        );
-      }
-    }
-
-    if (_extras.avatarIndex == 0) {
-      return Container(
-        width: 82,
-        height: 82,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.cardBorder, width: 1.5),
-        ),
-        child: ClipOval(
-          child: Image.asset(
-            'assets/images/avatar_abdurrahim.png',
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) => Container(
-              color: AppColors.primarySoft,
-              child: const Icon(
-                Icons.person_rounded,
-                size: 46,
-                color: AppColors.primary,
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    final initial =
-        _name.trim().isNotEmpty ? _name.trim()[0].toUpperCase() : 'U';
+  Widget _buildAvatarCircle(String name, String? avatarUrl) {
+    final hasPhoto = avatarUrl != null && avatarUrl.isNotEmpty;
     return Container(
       width: 82,
       height: 82,
       decoration: BoxDecoration(
-        color: AppColors.primarySoft,
         shape: BoxShape.circle,
         border: Border.all(
-          color: AppColors.primary.withValues(alpha: 0.3),
-          width: 1.5,
+          color: hasPhoto
+              ? AppColors.primary
+              : AppColors.primary.withValues(alpha: 0.3),
+          width: hasPhoto ? 2 : 1.5,
         ),
       ),
-      child: Center(
-        child: Text(
-          initial,
-          style: const TextStyle(
-            fontSize: 30,
-            fontWeight: FontWeight.w800,
-            color: AppColors.primary,
-          ),
-        ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ProfileAvatar(name: name, url: avatarUrl, size: 82),
+          if (_avatarBusy)
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.black.withValues(alpha: 0.35),
+              ),
+              alignment: Alignment.center,
+              child: const SizedBox(
+                width: 26,
+                height: 26,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -1132,10 +778,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Widget _buildShopeeRow({
     required String label,
     required String value,
-    bool isPlaceholder = false,
-    bool isAccentAction = false,
-    String? badgeText,
-    bool badgeVerified = false,
     required VoidCallback onTap,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1157,68 +799,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Flexible(
-                    child: Text(
-                      value,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.right,
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        fontSize: 13.5,
-                        fontWeight: isAccentAction
-                            ? FontWeight.w600
-                            : FontWeight.w500,
-                        color: isAccentAction
-                            ? AppColors.primary
-                            : (isPlaceholder
-                                ? (isDark
-                                    ? AppColors.darkTextMuted
-                                    : AppColors.textMuted)
-                                : (isDark
-                                    ? AppColors.darkTextPrimary
-                                    : AppColors.textPrimary)),
-                      ),
-                    ),
-                  ),
-                  if (badgeText != null) ...[
-                    const SizedBox(width: 8),
-                    if (badgeVerified)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2.5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF143823)
-                              : const Color(0xFFDCFCE7),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          badgeText,
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: isDark
-                                ? const Color(0xFF4ADE80)
-                                : const Color(0xFF16A34A),
-                          ),
-                        ),
-                      )
-                    else
-                      Text(
-                        badgeText,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                  ],
-                ],
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.right,
+                style: AppTextStyles.bodyMedium.copyWith(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                  color: isDark
+                      ? AppColors.darkTextPrimary
+                      : AppColors.textPrimary,
+                ),
               ),
             ),
             const SizedBox(width: 4),
@@ -1233,4 +825,3 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 }
-

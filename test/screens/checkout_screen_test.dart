@@ -267,6 +267,22 @@ void main() {
     expect(btn.onPressed, isNotNull);
   });
 
+  _testWidgets('titik temu favorit tidak dilayani toko: pakai titik pertama',
+      (tester) async {
+    final h = await _open(tester,
+        lines: [(_p(7, 'Nasi Box', 20000), 1)],
+        user: const ApiUser(
+          id: 1,
+          role: 'customer',
+          fullName: 'Budi',
+          phone: '0812345678901',
+          favoritePickupPointId: 9,
+        ));
+    final body = jsonDecode(h.quotes.last.body) as Map<String, dynamic>;
+    expect(body['pickup_point_id'], 1);
+    expect(find.text('Gerbang Barat'), findsWidgets);
+  });
+
   _testWidgets('pre-order: Secepatnya disabled, pay disabled until date picked',
       (tester) async {
     final h = await _open(tester, lines: [

@@ -1,5 +1,4 @@
-// Kartu menu untuk tampilan grid katalog. Layar mengambil data menu lewat CatalogRepository
-// (backend REST KateringKita) lalu menggambar tiap ProductModel dengan widget di berkas ini.
+import 'favorite_button.dart';
 import 'menu_image.dart';
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
@@ -87,6 +86,32 @@ class FoodGridCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      width: 30,
+                      height: 30,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: FavoriteButton(
+                        menu: product,
+                        size: 17,
+                        compact: true,
+                        // Lingkaran selalu putih, jadi hati kosong tetap gelap.
+                        color: AppColors.lightTextPrimary,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

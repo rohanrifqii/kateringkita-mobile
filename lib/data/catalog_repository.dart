@@ -72,6 +72,10 @@ class MerchantProfile {
   /// Titik ambil pesanan yang dilayani toko ini.
   final List<PickupPoint> pickupPoints;
 
+  /// Toko favorit pembeli ("Dapur Favorit"); false untuk tamu, peran lain,
+  /// dan server yang belum memuat kolom ini.
+  final bool isFavorite;
+
   const MerchantProfile({
     required this.id,
     required this.slug,
@@ -85,6 +89,7 @@ class MerchantProfile {
     required this.ratingAvg,
     required this.ratingCount,
     this.pickupPoints = const [],
+    this.isFavorite = false,
   });
 
   factory MerchantProfile.fromJson(Map<String, dynamic> json) =>
@@ -104,6 +109,7 @@ class MerchantProfile {
         pickupPoints: ((json['pickup_points'] as List?) ?? const [])
             .map((e) => PickupPoint.fromJson(e as Map<String, dynamic>))
             .toList(),
+        isFavorite: (json['is_favorite'] as bool?) ?? false,
       );
 }
 
@@ -189,10 +195,13 @@ class CatalogRepository {
     return ProductModel.fromJson(res.data as Map<String, dynamic>);
   }
 
-  /// Mengambil ulasan menu [menuId] dari GET /menus/{menuId}/reviews, halaman [page] (mulai 1).
-  Future<List<MenuReview>> reviews(int menuId, {int page = 1}) async {
-    final res =
-        await _api.get('/menus/$menuId/reviews', query: {'page': '$page'});
+  /// Ulasan terbaru dulu. [limit] bawaan server 20, maks 100.
+  Future<List<MenuReview>> reviews(int menuId,
+      {int page = 1, int? limit}) async {
+    final res = await _api.get('/menus/$menuId/reviews', query: {
+      'page': '$page',
+      if (limit != null) 'limit': '$limit',
+    });
     return (res.data as List)
         .map((e) => MenuReview.fromJson(e as Map<String, dynamic>))
         .toList();

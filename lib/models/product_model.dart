@@ -145,7 +145,9 @@ class ProductModel {
             .toList(),
         minOrderQty: (json['min_order_qty'] as num?)?.toInt() ?? 1,
         prepMinutes: (json['prep_minutes'] as num?)?.toInt() ?? 0,
-        isPreorder: (json['is_preorder'] as bool?) ?? false,
+        // Kartu katalog tidak memuat is_preorder; badge 'preorder' jadi penanda (detail menu memuatnya eksplisit)
+        isPreorder:
+            (json['is_preorder'] as bool?) ?? json['badge'] == 'preorder',
         preorderDays: (json['preorder_days'] as num?)?.toInt() ?? 0,
       );
 
@@ -209,15 +211,4 @@ class ProductModel {
         isPreorder: isPreorder,
         preorderDays: preorderDays,
       );
-}
-
-/// Shim sementara agar layar yang belum dipindah ke API tetap kompil.
-/// Dihapus setelah pemakai terakhirnya hilang.
-/// Shim = pengganti sementara: kelas ini tidak berisi data apa pun.
-class ProductData {
-  /// Selalu daftar kosong (dulu berisi data contoh).
-  static final List<ProductModel> mockProducts = [];
-
-  /// Selalu mengembalikan null; [name] diabaikan.
-  static ProductModel? getProductByName(String name) => null;
 }

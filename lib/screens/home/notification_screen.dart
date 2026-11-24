@@ -1,31 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../../api/api_exception.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
+import '../../core/relative_time.dart';
+import '../../core/require_login.dart';
+import '../../data/notification_repository.dart';
+import '../../models/app_notification.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/notification_provider.dart';
 
-class NotificationItem {
-  final String id;
-  final String title;
-  final String message;
-  final String time;
-  final String category; // 'Pesanan', 'Promo', 'Info'
-  final IconData icon;
-  final Color iconColor;
-  bool isRead;
+/// Tab daftar Pesanan yang memuat pesanan berstatus [status].
+String orderTabForStatus(String? status) => switch (status) {
+      'completed' => 'completed',
+      'cancelled' || 'expired' => 'cancelled',
+      _ => 'active',
+    };
 
-  NotificationItem({
-    required this.id,
-    required this.title,
-    required this.message,
-    required this.time,
-    required this.category,
-    required this.icon,
-    required this.iconColor,
-    this.isRead = false,
-  });
-}
-
+/// Notifikasi in-app dari `GET /me/notifications`.
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
 
@@ -34,89 +28,205 @@ class NotificationScreen extends StatefulWidget {
 }
 
 class _NotificationScreenState extends State<NotificationScreen> {
+  static const _pageSize = 20;
+
+  /// Chip → `type` di server (null = semua tipe).
+  static const _categories = <String, String?>{
+    'Semua': null,
+    'Pesanan': 'order_status',
+    'Promo': 'promo',
+    'Info': 'info',
+  };
+
   String _selectedCategory = 'Semua';
+  String? get _type => _categories[_selectedCategory];
+  List<AppNotification> _items = const [];
+  int _total = 0;
+  int _page = 0;
+  bool _loading = true;
+  bool _loadingMore = false;
+  bool _markingAll = false;
+  String? _error;
+  int _seq = 0;
+  late final AuthProvider _auth;
+  late bool _wasLoggedIn;
 
-  final List<NotificationItem> _notifications = [
-    NotificationItem(
-      id: '1',
-      title: 'Pesanan #KK-2026-686 Siap Diambil!',
-      message:
-          'Pesanan Nasi Kuning Slamet kamu sudah tiba di Booth Vokasi UB. Tunjukkan kode pesanan ke petugas.',
-      time: '5 menit lalu',
-      category: 'Pesanan',
-      icon: Icons.check_circle_outline_rounded,
-      iconColor: AppColors.success,
-      isRead: false,
-    ),
-    NotificationItem(
-      id: '2',
-      title: 'Diskon Mahasiswa Baru 20%!',
-      message:
-          'Nikmati potongan spesial katering makan siang di seluruh area kampus UB. Berlaku minggu ini.',
-      time: '1 jam lalu',
-      category: 'Promo',
-      icon: Icons.local_offer_outlined,
-      iconColor: AppColors.primary,
-      isRead: false,
-    ),
-    NotificationItem(
-      id: '3',
-      title: 'Menu Baru: Risoles Bu Tima',
-      message:
-          'Camilan gurih renyah isi ragout ayam kini hadir untuk danusan dan rapat organisasi kamu.',
-      time: '3 jam lalu',
-      category: 'Info',
-      icon: Icons.restaurant_rounded,
-      iconColor: AppColors.blue,
-      isRead: false,
-    ),
-    NotificationItem(
-      id: '4',
-      title: 'Sisa 5 Porsi Nasi Kuning Slamet!',
-      message:
-          'Kuota menu makan siang hari ini hampir habis di booth vokasi. Pesan sebelum jam istirahat!',
-      time: 'Kemarin',
-      category: 'Promo',
-      icon: Icons.access_time_rounded,
-      iconColor: AppColors.warning,
-      isRead: true,
-    ),
-    NotificationItem(
-      id: '5',
-      title: 'Gateway QRIS & Virtual Account Aktif',
-      message:
-          'Pembayaran instan QRIS dan VA Bank (BCA, Mandiri, BRI, BNI) dengan durasi 1 jam kini tersedia.',
-      time: '2 hari lalu',
-      category: 'Info',
-      icon: Icons.payment_rounded,
-      iconColor: AppColors.primaryDark,
-      isRead: true,
-    ),
-  ];
-
-  List<NotificationItem> get _filteredNotifications {
-    if (_selectedCategory == 'Semua') return _notifications;
-    return _notifications.where((n) => n.category == _selectedCategory).toList();
+  @override
+  void initState() {
+    super.initState();
+    _auth = context.read<AuthProvider>();
+    _wasLoggedIn = _auth.isLoggedIn;
+    _auth.addListener(_onAuthChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  void _markAllAsRead() {
+  @override
+  void dispose() {
+    _auth.removeListener(_onAuthChanged);
+    super.dispose();
+  }
+
+  void _onAuthChanged() {
+    final now = _auth.isLoggedIn;
+    if (now == _wasLoggedIn || !mounted) return;
+    _wasLoggedIn = now;
+    if (now) {
+      _load();
+    } else {
+      _seq++;
+      setState(() {
+        _items = const [];
+        _total = 0;
+        _page = 0;
+        _error = null;
+        _loading = false;
+      });
+    }
+  }
+
+  /// Ganti chip: muat ulang dari server dengan `type` chip itu (paginasi
+  /// mulai lagi dari halaman 1).
+  void _selectCategory(String category) {
+    if (category == _selectedCategory) return;
     setState(() {
-      for (final n in _notifications) {
-        n.isRead = true;
-      }
+      _selectedCategory = category;
+      _items = const [];
+      _total = 0;
+      _page = 0;
+      _error = null;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Semua notifikasi telah ditandai sudah dibaca'),
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+    _load();
+  }
+
+  String _msg(Object e) =>
+      e is ApiException ? e.message : 'Terjadi kesalahan. Coba lagi.';
+
+  void _snack(String text) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(
+      content: Text(text),
+      behavior: SnackBarBehavior.floating,
+    ));
+
+  Future<void> _load({bool silent = false}) async {
+    if (!mounted) return;
+    if (!_auth.isLoggedIn) {
+      if (_loading) setState(() => _loading = false);
+      return;
+    }
+    final repo = context.read<NotificationRepository>();
+    final badge = context.read<NotificationProvider>();
+    final seq = ++_seq;
+    if (!silent) {
+      setState(() {
+        _loading = true;
+        _error = null;
+      });
+    }
+    try {
+      final page = await repo.list(limit: _pageSize, type: _type);
+      if (!mounted || seq != _seq) return;
+      badge.setUnread(page.unreadCount);
+      setState(() {
+        _items = page.items;
+        _total = page.total;
+        _page = 1;
+        _error = null;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted || seq != _seq) return;
+      setState(() {
+        if (!silent || _items.isEmpty) _error = _msg(e);
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore) return;
+    final repo = context.read<NotificationRepository>();
+    final badge = context.read<NotificationProvider>();
+    final seq = _seq;
+    setState(() => _loadingMore = true);
+    try {
+      final page =
+          await repo.list(page: _page + 1, limit: _pageSize, type: _type);
+      if (!mounted || seq != _seq) return;
+      badge.setUnread(page.unreadCount);
+      final ids = _items.map((e) => e.id).toSet();
+      setState(() {
+        _items = [..._items, ...page.items.where((e) => !ids.contains(e.id))];
+        _total = page.total;
+        _page++;
+      });
+    } catch (e) {
+      if (mounted && seq == _seq) _snack(_msg(e));
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
+  }
+
+  Future<void> _markAllAsRead() async {
+    if (_markingAll) return;
+    final repo = context.read<NotificationRepository>();
+    final badge = context.read<NotificationProvider>();
+    final seq = _seq;
+    setState(() => _markingAll = true);
+    try {
+      final left = await repo.markAllRead();
+      if (!mounted || seq != _seq) return;
+      badge.setUnread(left);
+      final now = DateTime.now().toUtc();
+      setState(() => _items = [for (final n in _items) n.markedRead(now)]);
+      _snack('Semua notifikasi telah ditandai sudah dibaca');
+    } catch (e) {
+      if (mounted && seq == _seq) _snack(_msg(e));
+    } finally {
+      if (mounted) setState(() => _markingAll = false);
+    }
+  }
+
+  void _replace(AppNotification n) {
+    final i = _items.indexWhere((e) => e.id == n.id);
+    if (i < 0) return;
+    setState(() => _items = [..._items]..[i] = n);
+  }
+
+  /// Ditandai dibaca langsung (dikembalikan bila server menolak), lalu
+  /// notifikasi pesanan membuka daftar Pesanan di tab & kode yang sesuai.
+  Future<void> _open(AppNotification n) async {
+    if (!n.isRead) _markRead(n);
+    final code = n.orderCode;
+    if (n.isOrderStatus && code != null && code.isNotEmpty) {
+      await Navigator.pushNamed(context, AppRoutes.orders, arguments: {
+        'tab': orderTabForStatus(n.orderStatus),
+        'q': code,
+      });
+    }
+  }
+
+  Future<void> _markRead(AppNotification n) async {
+    final repo = context.read<NotificationRepository>();
+    final badge = context.read<NotificationProvider>();
+    final seq = _seq;
+    _replace(n.markedRead(DateTime.now().toUtc()));
+    badge.setUnread(badge.unreadCount - 1);
+    try {
+      final left = await repo.markRead([n.id]);
+      if (mounted && seq == _seq) badge.setUnread(left);
+    } catch (_) {
+      if (!mounted || seq != _seq) return;
+      _replace(n);
+      badge.setUnread(badge.unreadCount + 1);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final list = _filteredNotifications;
-    final unreadCount = _notifications.where((n) => !n.isRead).length;
+    final loggedIn = context.watch<AuthProvider>().isLoggedIn;
+    final unread = context.watch<NotificationProvider>().unreadCount;
+    final hasUnread = unread > 0 || _items.any((n) => !n.isRead);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -130,9 +240,9 @@ class _NotificationScreenState extends State<NotificationScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          if (unreadCount > 0)
+          if (loggedIn && hasUnread)
             TextButton(
-              onPressed: _markAllAsRead,
+              onPressed: _markingAll ? null : _markAllAsRead,
               child: const Text(
                 'Tandai Dibaca',
                 style: TextStyle(
@@ -145,193 +255,291 @@ class _NotificationScreenState extends State<NotificationScreen> {
           const SizedBox(width: 8),
         ],
       ),
-      body: Column(
-        children: [
-          // Filter Chips
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            child: Row(
-              children: ['Semua', 'Pesanan', 'Promo', 'Info'].map((cat) {
-                final isSelected = _selectedCategory == cat;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: InkWell(
-                    onTap: () => setState(() => _selectedCategory = cat),
-                    borderRadius: BorderRadius.circular(20),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 180),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      decoration: BoxDecoration(
-                        color:
-                            isSelected ? AppColors.primary : AppColors.surface,
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: isSelected
-                              ? AppColors.primary
-                              : AppColors.cardBorder,
-                        ),
-                      ),
-                      child: Text(
-                        cat,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight:
-                              isSelected ? FontWeight.w700 : FontWeight.w500,
-                          color: isSelected
-                              ? Colors.white
-                              : AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
+      body: !loggedIn
+          ? _guestPrompt()
+          : Column(
+              children: [
+                _filterChips(),
+                Expanded(child: _body()),
+              ],
             ),
-          ),
+    );
+  }
 
-          // List Notifikasi
-          Expanded(
-            child: list.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.notifications_none_rounded,
-                          size: 56,
-                          color: AppColors.textMuted,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Tidak ada notifikasi',
-                          style: AppTextStyles.h4.copyWith(
-                            color: AppColors.textSecondary,
-                            fontSize: 15,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Kategori "$_selectedCategory" saat ini kosong.',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ],
+  Widget _filterChips() => SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        child: Row(
+          children: _categories.keys.map((cat) {
+            final isSelected = _selectedCategory == cat;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: InkWell(
+                onTap: () => _selectCategory(cat),
+                borderRadius: BorderRadius.circular(20),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 180),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: isSelected ? AppColors.primary : AppColors.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color:
+                          isSelected ? AppColors.primary : AppColors.cardBorder,
                     ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-                    itemCount: list.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final item = list[index];
-                      return InkWell(
-                        onTap: () {
-                          setState(() => item.isRead = true);
-                          if (item.category == 'Pesanan') {
-                            Navigator.pushNamed(context, AppRoutes.orders);
-                          }
-                        },
-                        borderRadius: BorderRadius.circular(16),
-                        child: Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: item.isRead
-                                ? AppColors.surface
-                                : const Color(0xFFFFF9F5),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: item.isRead
-                                  ? AppColors.cardBorder
-                                  : AppColors.primary.withValues(alpha: 0.35),
-                              width: item.isRead ? 1 : 1.2,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.02),
-                                blurRadius: 6,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: item.iconColor.withValues(alpha: 0.12),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  item.icon,
-                                  color: item.iconColor,
-                                  size: 22,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            item.title,
-                                            style: AppTextStyles.bodyMedium
-                                                .copyWith(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 13.5,
-                                              color: AppColors.textPrimary,
-                                            ),
-                                          ),
-                                        ),
-                                        if (!item.isRead)
-                                          Container(
-                                            width: 8,
-                                            height: 8,
-                                            margin:
-                                                const EdgeInsets.only(left: 6),
-                                            decoration: const BoxDecoration(
-                                              color: AppColors.primary,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      item.message,
-                                      style: AppTextStyles.bodySmall.copyWith(
-                                        color: AppColors.textSecondary,
-                                        fontSize: 12,
-                                        height: 1.35,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      item.time,
-                                      style: AppTextStyles.bodySmall.copyWith(
-                                        color: AppColors.textMuted,
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+                  ),
+                  child: Text(
+                    cat,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
+                      color: isSelected ? Colors.white : AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      );
+
+  Widget _body() {
+    if (_loading && _items.isEmpty) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    // Sudah difilter server sesuai chip (type).
+    final list = _items;
+    final hasMore = _items.length < _total;
+
+    return RefreshIndicator(
+      onRefresh: () => _load(silent: true),
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        children: [
+          if (_error != null && _items.isEmpty)
+            _message(
+              icon: Icons.cloud_off_rounded,
+              title: _error!,
+              action: OutlinedButton(
+                  onPressed: _load, child: const Text('Coba Lagi')),
+            )
+          else if (list.isEmpty)
+            _message(
+              icon: Icons.notifications_none_rounded,
+              title: 'Tidak ada notifikasi',
+              subtitle: _selectedCategory == 'Semua'
+                  ? 'Kabar pesanan, promo, dan info akan muncul di sini.'
+                  : 'Kategori "$_selectedCategory" saat ini kosong.',
+            )
+          else
+            for (final item in list) ...[
+              _tile(item),
+              const SizedBox(height: 10),
+            ],
+          if (hasMore && _error == null)
+            Center(
+              child: _loadingMore
+                  ? const Padding(
+                      padding: EdgeInsets.all(8),
+                      child: CircularProgressIndicator(),
+                    )
+                  : TextButton(
+                      onPressed: _loadMore,
+                      child: const Text('Muat lebih banyak'),
+                    ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _message({
+    required IconData icon,
+    required String title,
+    String? subtitle,
+    Widget? action,
+  }) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 80),
+        child: Column(
+          children: [
+            Icon(icon, size: 56, color: AppColors.textMuted),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.h4.copyWith(
+                color: AppColors.textSecondary,
+                fontSize: 15,
+              ),
+            ),
+            if (subtitle != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textMuted,
+                ),
+              ),
+            ],
+            if (action != null) ...[
+              const SizedBox(height: 12),
+              action,
+            ],
+          ],
+        ),
+      );
+
+  Widget _guestPrompt() => Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.notifications_none_rounded,
+                  size: 56, color: AppColors.textMuted),
+              const SizedBox(height: 12),
+              Text(
+                'Masuk untuk melihat notifikasi',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.h3.copyWith(fontSize: 16),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Kabar status pesananmu akan muncul di sini.',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+                // Daftar dimuat oleh listener AuthProvider setelah login.
+                onPressed: () => requireLogin(context),
+                child: const Text('Masuk'),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  (IconData, Color) _iconOf(AppNotification n) {
+    switch (n.type) {
+      case 'order_status':
+        return switch (n.orderStatus) {
+          'ready' => (Icons.check_circle_outline_rounded, AppColors.success),
+          'cooking' => (Icons.soup_kitchen_outlined, AppColors.warning),
+          'cancelled' ||
+          'expired' =>
+            (Icons.cancel_outlined, AppColors.danger),
+          _ => (Icons.receipt_long_rounded, AppColors.primary),
+        };
+      case 'promo':
+        return (Icons.local_offer_outlined, AppColors.primary);
+      default:
+        return (Icons.campaign_outlined, AppColors.blue);
+    }
+  }
+
+  Widget _tile(AppNotification item) {
+    final (icon, color) = _iconOf(item);
+    return InkWell(
+      onTap: () => _open(item),
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: item.isRead ? AppColors.surface : AppColors.primarySoft,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: item.isRead
+                ? AppColors.cardBorder
+                : AppColors.primary.withValues(alpha: 0.35),
+            width: item.isRead ? 1 : 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.02),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.title,
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13.5,
+                            color: AppColors.textPrimary,
                           ),
                         ),
-                      );
-                    },
+                      ),
+                      if (!item.isRead)
+                        Container(
+                          key: ValueKey('unread-${item.id}'),
+                          width: 8,
+                          height: 8,
+                          margin: const EdgeInsets.only(left: 6),
+                          decoration: const BoxDecoration(
+                            color: AppColors.primary,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                    ],
                   ),
-          ),
-        ],
+                  const SizedBox(height: 4),
+                  Text(
+                    item.body,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                      height: 1.35,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    relativeTimeWib(item.createdAt),
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textMuted,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -9,11 +9,14 @@ import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/core/app_router.dart';
 import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/data/auth_repository.dart';
+import 'package:kateringkita_pbl/data/catalog_repository.dart';
 import 'package:kateringkita_pbl/data/token_store.dart';
 import 'package:kateringkita_pbl/main.dart';
 import 'package:kateringkita_pbl/models/product_model.dart';
 import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:kateringkita_pbl/providers/cart_provider.dart';
+import 'package:kateringkita_pbl/providers/favorites_provider.dart';
+import 'package:kateringkita_pbl/providers/notification_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -241,6 +244,40 @@ void main() {
       await tester.pumpAndSettle();
       expect(ctx.read<CartProvider>().items, isEmpty);
       expect(ctx.read<AuthProvider>().isLoggedIn, isFalse);
+    });
+
+    testWidgets('logout mengosongkan status favorit sesi', (tester) async {
+      final ctx = await loggedIn(tester);
+      final favorites = ctx.read<FavoritesProvider>();
+      const store = MerchantProfile(
+        id: 1,
+        slug: 'a',
+        businessName: 'A',
+        merchantTypeName: 'Katering',
+        isOpen: true,
+        openTime: '08:00',
+        closeTime: '17:00',
+        ratingAvg: 0,
+        ratingCount: 0,
+      );
+      await favorites.setFavorite(menu, true);
+      await favorites.setFavoriteMerchant(store, true);
+      expect(favorites.isFavorite(menu), isTrue);
+      expect(favorites.isFavoriteMerchant(store), isTrue);
+
+      await ctx.read<AuthProvider>().logout();
+      await tester.pumpAndSettle();
+      expect(favorites.isFavorite(menu), isFalse);
+      expect(favorites.isFavoriteMerchant(store), isFalse);
+    });
+
+    testWidgets('logout mengosongkan lencana notifikasi', (tester) async {
+      final ctx = await loggedIn(tester);
+      final notifications = ctx.read<NotificationProvider>();
+      notifications.setUnread(3);
+      await ctx.read<AuthProvider>().logout();
+      await tester.pumpAndSettle();
+      expect(notifications.unreadCount, 0);
     });
   });
 }

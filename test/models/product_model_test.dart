@@ -86,6 +86,19 @@ void main() {
     expect(p.merchant.pickupPoints.single.name, 'Gazebo');
   });
 
+  // Kartu katalog (GET /menus, favorit, rekomendasi AI) tidak memuat is_preorder,
+  // hanya badge; tanpa ini menu pre-order dari kartu masuk keranjang sebagai menu harian.
+  test('kartu tanpa is_preorder: badge preorder menandai menu pre-order', () {
+    expect(ProductModel.fromJson(card(badge: 'preorder')).isPreorder, true);
+    expect(ProductModel.fromJson(card(badge: 'available')).isPreorder, false);
+    expect(ProductModel.fromJson(card(badge: 'low_stock')).isPreorder, false);
+    // detail menu: is_preorder eksplisit menang atas badge
+    final detail = card(badge: 'sold_out')..['is_preorder'] = true;
+    expect(ProductModel.fromJson(detail).isPreorder, true);
+    final harian = card(badge: 'preorder')..['is_preorder'] = false;
+    expect(ProductModel.fromJson(harian).isPreorder, false);
+  });
+
   test('badgeText and badgeType', () {
     ProductModel b(String badge, {int po = 0}) {
       final j = card(badge: badge, available: 5)..['preorder_days'] = po;

@@ -1,7 +1,10 @@
-// Layar Profil Toko/Dapur (rute AppRoutes.storeProfile), dibuka dari kartu toko di ProductDetailScreen; argumen rute = slug merchant.
-// Profil toko dan daftar menunya dimuat lewat CatalogRepository dari backend REST KateringKita (/merchants/{slug}, /menus?merchant=).
-// Status "suka toko" hanya disimpan di state layar (hilang saat layar ditutup).
+import '../../api/api_exception.dart';
+import '../../core/relative_time.dart';
 import '../../data/catalog_repository.dart';
+import '../../data/store_reviews.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/favorites_provider.dart';
+import '../../widgets/favorite_button.dart';
 import '../../widgets/menu_image.dart';
 import '../../widgets/add_to_cart.dart';
 import '../../widgets/primary_button.dart';
@@ -35,16 +38,51 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   List<ProductModel> _menus = const [];
   bool _loading = true;
   bool _failed = false;
-  bool _isStoreLiked = false;
   bool _isSearching = false;
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
-  int _selectedTabIndex = 0; // 0: Menu, 1: Untukmu, 2: Informasi
+  int _selectedTabIndex = 0; // 0: Menu, 1: Galeri, 2: Penilaian, 3: Informasi
+  static const _topRatedFilter = 'Rating 4.8+';
   String _selectedMenuCategory = 'Semua';
 
-  // Hanya dipakai setelah _merchant terisi (build menampilkan layar muat/gagal lebih dulu).
+  // Tab Penilaian: dimuat saat tab pertama kali dibuka.
+  StoreReviews? _reviews;
+  bool _reviewsLoading = false;
+  String? _reviewsError;
+  int _reviewsSeq = 0;
+
   MerchantProfile get _vendor => _merchant!;
+
+  void _selectTab(int index) {
+    setState(() => _selectedTabIndex = index);
+    if (index == 2 && _reviews == null && !_reviewsLoading) _loadReviews();
+  }
+
+  Future<void> _loadReviews() async {
+    final repo = context.read<CatalogRepository>();
+    final seq = ++_reviewsSeq;
+    setState(() {
+      _reviewsLoading = true;
+      _reviewsError = null;
+    });
+    try {
+      final r = await loadStoreReviews(repo, _menus);
+      if (!mounted || seq != _reviewsSeq) return;
+      setState(() {
+        _reviews = r;
+        _reviewsLoading = false;
+      });
+    } catch (e) {
+      if (!mounted || seq != _reviewsSeq) return;
+      setState(() {
+        _reviewsLoading = false;
+        _reviewsError = e is ApiException
+            ? e.message
+            : 'Ulasan gagal dimuat. Coba lagi.';
+      });
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -81,7 +119,11 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
         _merchant = merchant;
         _menus = page.items;
         _loading = false;
+        // Menu bisa berubah: ulasan dimuat ulang saat tab Penilaian dibuka.
+        _reviews = null;
+        _reviewsError = null;
       });
+      if (_selectedTabIndex == 2) _loadReviews();
     } catch (_) {
       if (!mounted) return;
       setState(() {
@@ -141,12 +183,9 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               (m.description ?? '').toLowerCase().contains(q))
           .toList();
     }
-    if (_selectedMenuCategory == 'Terlaris') {
-      return list
-          .where((m) =>
-              (m.badgeText ?? '').toLowerCase().contains('terlaris') ||
-              m.rating >= 4.8)
-          .toList();
+    if (_selectedMenuCategory == _topRatedFilter) {
+      // Berdasar rating_avg server; tidak ada data penjualan per toko.
+      return list.where((m) => m.rating >= 4.8).toList();
     } else if (_selectedMenuCategory == 'Paket & Katering') {
       return list.where((m) => m.category?.slug == 'katering').toList();
     } else if (_selectedMenuCategory == 'Danusan & Snack') {
@@ -216,7 +255,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
             child: _buildPromoVouchersRow(isDark),
           ),
 
-          // 3. Tab Bar Navigasi: Menu | Untukmu | Informasi
+          // 3. Tab Bar Navigasi: Menu | Galeri | Penilaian | Informasi
           SliverToBoxAdapter(
             child: _buildNavigationTabs(isDark),
           ),
@@ -303,21 +342,29 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                   },
                 ),
                 const SizedBox(width: 8),
-                _buildCircleTopButton(
-                  icon: _isStoreLiked
-                      ? Icons.favorite_rounded
-                      : Icons.favorite_border_rounded,
-                  iconColor:
-                      _isStoreLiked ? AppColors.danger : AppColors.textPrimary,
-                  onTap: () {
-                    setState(() => _isStoreLiked = !_isStoreLiked);
-                    _showToast(
-                      _isStoreLiked
-                          ? '${_vendor.businessName} disimpan ke Dapur Favorit'
-                          : '${_vendor.businessName} dihapus dari Dapur Favorit',
-                    );
-                  },
-                ),
+                Builder(builder: (context) {
+                  // Dapur Favorit dari server; tamu selalu melihat hati kosong.
+                  final liked =
+                      context.select<AuthProvider, bool>((a) => a.isLoggedIn) &&
+                          context
+                              .watch<FavoritesProvider>()
+                              .isFavoriteMerchant(_vendor);
+                  return Semantics(
+                    button: true,
+                    label: liked
+                        ? 'Hapus dari Dapur Favorit'
+                        : 'Simpan ke Dapur Favorit',
+                    child: _buildCircleTopButton(
+                      key: const ValueKey('store-favorite'),
+                      icon: liked
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      iconColor:
+                          liked ? AppColors.danger : AppColors.textPrimary,
+                      onTap: () => toggleFavoriteMerchant(context, _vendor),
+                    ),
+                  );
+                }),
                 const SizedBox(width: 8),
                 _buildCircleTopButton(
                   icon: Icons.share_outlined,
@@ -328,7 +375,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                             'Cek menu ${_vendor.businessName} di KateringKita! Rating ⭐ ${_vendor.ratingAvg}',
                       ),
                     );
-                    _showToast('Tautan profil dapur berhasil disalin!');
+                    _showToast('Info dapur disalin ke clipboard.');
                   },
                 ),
               ],
@@ -416,9 +463,9 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                           const SizedBox(height: 6),
                           // Baris rating toko; ketukannya belum melakukan apa pun karena tab Penilaian belum ada
                           GestureDetector(
-                            onTap: () {
-                              // Penilaian toko belum tersedia.
-                            },
+                            key: const ValueKey('store-rating'),
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _selectTab(2),
                             child: Row(
                               children: [
                                 const Icon(
@@ -482,11 +529,13 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
   /// Tombol bulat kecil di atas gambar sampul (kembali, cari, suka, bagikan).
   Widget _buildCircleTopButton({
+    Key? key,
     required IconData icon,
     Color? iconColor,
     required VoidCallback onTap,
   }) {
     return GestureDetector(
+      key: key,
       onTap: onTap,
       child: Container(
         width: 38,
@@ -572,7 +621,8 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   Widget _buildNavigationTabs(bool isDark) {
     final tabs = [
       'Menu (${_menus.length})',
-      'Untukmu',
+      'Galeri',
+      'Penilaian',
       'Informasi',
     ];
 
@@ -589,7 +639,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
           final isSelected = _selectedTabIndex == index;
           return Expanded(
             child: InkWell(
-              onTap: () => setState(() => _selectedTabIndex = index),
+              onTap: () => _selectTab(index),
               child: Container(
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 decoration: BoxDecoration(
@@ -633,17 +683,207 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       case 1:
         return _buildForYouGridTab(isDark);
       case 2:
+        return _buildReviewsTab();
+      case 3:
         return _buildStoreInfoTab(isDark);
       default:
         return _buildMenuTab(isDark);
     }
   }
 
-  /// TAB 0: daftar menu toko dengan chip kategori (hasil _filteredMenus).
+  /// TAB 2: Penilaian. Ringkasan dari rating toko (server) + ulasan terbaru
+  /// dari menu-menu toko (lihat [loadStoreReviews]).
+  Widget _buildReviewsTab() {
+    final reviews = _reviews;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _reviewSummary(),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Ulasan terbaru dari menu toko ini',
+                  style: AppTextStyles.h4.copyWith(fontSize: 14),
+                ),
+              ),
+              if (!_reviewsLoading)
+                TextButton.icon(
+                  onPressed: _loadReviews,
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  label: const Text('Muat ulang'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          if (_reviewsLoading && reviews == null)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 32),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          else if (_reviewsError != null && reviews == null)
+            _reviewsMessage(
+              _reviewsError!,
+              action: OutlinedButton(
+                  onPressed: _loadReviews, child: const Text('Coba Lagi')),
+            )
+          else if (reviews == null || reviews.reviews.isEmpty)
+            _reviewsMessage('Belum ada ulasan untuk menu toko ini.')
+          else ...[
+            if (reviews.failed > 0)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Sebagian ulasan gagal dimuat.',
+                  style: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.textMuted, fontSize: 11.5),
+                ),
+              ),
+            for (final r in reviews.reviews) _reviewTile(r),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _stars(double value, {double size = 16}) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: List.generate(
+          5,
+          (i) => Icon(
+            Icons.star_rounded,
+            size: size,
+            color: i < value.round()
+                ? const Color(0xFFF59E0B)
+                : AppColors.cardBorder,
+          ),
+        ),
+      );
+
+  Widget _reviewSummary() => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: Row(
+          children: [
+            Text(
+              _vendor.ratingCount == 0
+                  ? '–'
+                  : _vendor.ratingAvg.toStringAsFixed(1),
+              key: const ValueKey('store-rating-avg'),
+              style: AppTextStyles.h1.copyWith(fontSize: 34),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _stars(_vendor.ratingAvg, size: 18),
+                  const SizedBox(height: 4),
+                  Text(
+                    _vendor.ratingCount == 0
+                        ? 'Belum ada penilaian'
+                        : 'Dari ${_vendor.ratingCount} penilaian',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _reviewsMessage(String text, {Widget? action}) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 28),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.rate_review_outlined,
+                  size: 40, color: AppColors.textMuted),
+              const SizedBox(height: 10),
+              Text(
+                text,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodyMedium
+                    .copyWith(color: AppColors.textSecondary),
+              ),
+              if (action != null) ...[
+                const SizedBox(height: 10),
+                action,
+              ],
+            ],
+          ),
+        ),
+      );
+
+  Widget _reviewTile(StoreReview r) => Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    r.review.customerName,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12.5,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                Text(
+                  relativeTimeWib(r.review.createdAt),
+                  style: AppTextStyles.bodySmall
+                      .copyWith(color: AppColors.textMuted, fontSize: 11),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            _stars(r.review.rating.toDouble(), size: 14),
+            if ((r.review.comment ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: 6),
+              Text(
+                r.review.comment!,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                  fontSize: 12.5,
+                ),
+              ),
+            ],
+            const SizedBox(height: 6),
+            Text(
+              'Menu: ${r.menuName}',
+              style: AppTextStyles.bodySmall
+                  .copyWith(color: AppColors.textMuted, fontSize: 11),
+            ),
+          ],
+        ),
+      );
+
+  /// TAB 0: Daftar Menu Lengkap (Gaya ShopeeFood & GoFood dengan tombol + dan harga coret)
   Widget _buildMenuTab(bool isDark) {
     final categories = [
       'Semua',
-      'Terlaris',
+      _topRatedFilter,
       'Danusan & Snack',
       'Paket & Katering',
     ];
@@ -772,7 +1012,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Foto menu dengan pita badge (badgeText, bawaan "Terlaris")
+                        // Foto Menu dengan pita status stok dari server (badge)
                         Stack(
                           children: [
                             ClipRRect(
@@ -783,31 +1023,32 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                 fit: BoxFit.cover,
                               ),
                             ),
-                            Positioned(
-                              bottom: 0,
-                              left: 0,
-                              right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: menu.badgeType == 'quota'
-                                      ? AppColors.success
-                                      : AppColors.primary,
-                                  borderRadius: const BorderRadius.vertical(
-                                    bottom: Radius.circular(14),
+                            if (menu.badgeText != null)
+                              Positioned(
+                                bottom: 0,
+                                left: 0,
+                                right: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: menu.badgeType == 'quota'
+                                        ? AppColors.success
+                                        : AppColors.primary,
+                                    borderRadius: const BorderRadius.vertical(
+                                      bottom: Radius.circular(14),
+                                    ),
                                   ),
-                                ),
-                                alignment: Alignment.center,
-                                child: Text(
-                                  menu.badgeText ?? 'Terlaris',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w800,
+                                  alignment: Alignment.center,
+                                  child: Text(
+                                    menu.badgeText!,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
                           ],
                         ),
                         const SizedBox(width: 14),
@@ -898,7 +1139,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     );
   }
 
-  /// TAB 1: grid 2 kolom "Untukmu" berisi semua menu toko (tanpa saringan).
+  /// TAB 1: Galeri, grid 2 kolom semua menu toko
   Widget _buildForYouGridTab(bool isDark) {
     final items = _menus;
 
@@ -908,7 +1149,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Untukmu di ${_vendor.businessName}',
+            'Galeri menu ${_vendor.businessName}',
             style: AppTextStyles.h3.copyWith(
               fontSize: 17,
               fontWeight: FontWeight.w800,
@@ -916,7 +1157,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            'Rekomendasi menu dari dapur ini',
+            'Semua menu dapur ini dalam tampilan foto',
             style: AppTextStyles.bodySmall.copyWith(
               color: AppColors.textSecondary,
               fontSize: 12,
@@ -997,7 +1238,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                 ),
                               ),
                             ),
-                            // Pita "Terlaris" di Bawah Foto (Persis GrabFood)
+                            // Pita status stok di bawah foto (badge server)
                             Positioned(
                               left: 0,
                               right: 0,
@@ -1109,7 +1350,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
             const SizedBox(height: 12),
           ],
 
-          // Kartu titik pickup dan jam operasional dapur
+          // Kartu Detail Lokasi & Jam Buka
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
