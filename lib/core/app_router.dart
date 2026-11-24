@@ -15,6 +15,7 @@ import '../screens/navigation/main_navigation_screen.dart';
 import '../screens/orders/active_orders_screen.dart';
 import '../screens/orders/checkout_screen.dart';
 import '../screens/orders/completed_orders_screen.dart';
+import '../screens/orders/order_chat_screen.dart';
 import '../screens/orders/order_tracking_screen.dart';
 import '../screens/orders/orders_screen.dart';
 import '../screens/orders/payment_screen.dart';
@@ -71,6 +72,11 @@ class AppRouter {
       final orderCode = ModalRoute.of(context)?.settings.arguments;
       return OrderTrackingScreen(
           orderCode: orderCode is String ? orderCode : '');
+    },
+    // Argumen: kode pesanan (String), dari tombol Chat di Lacak Pesanan.
+    AppRoutes.orderChat: (context) {
+      final orderCode = ModalRoute.of(context)?.settings.arguments;
+      return OrderChatScreen(orderCode: orderCode is String ? orderCode : '');
     },
     AppRoutes.liked: (context) => const LikedScreen(),
     AppRoutes.profile: (context) => const ProfileScreen(),

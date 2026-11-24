@@ -3,6 +3,7 @@
 // latar belakang.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/data/order_repository.dart';
 import 'package:kateringkita_pbl/models/order_api_model.dart';
 import 'package:kateringkita_pbl/screens/orders/order_tracking_screen.dart';
@@ -72,16 +73,18 @@ OrderApiModel cookingOrder({
 /// Memasang halaman Lacak Pesanan di layar 390×844 dengan [repository].
 Future<void> pumpTrackingScreen(
   WidgetTester tester,
-  FakeOrderRepository repository,
-) async {
+  FakeOrderRepository repository, {
+  Map<String, WidgetBuilder> routes = const {},
+}) async {
   tester.view.physicalSize = const Size(390, 844);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     Provider<OrderRepository>.value(
       value: repository,
-      child: const MaterialApp(
-        home: OrderTrackingScreen(orderCode: 'KK-20261124-0001'),
+      child: MaterialApp(
+        home: const OrderTrackingScreen(orderCode: 'KK-20261124-0001'),
+        routes: routes,
       ),
     ),
   );
@@ -190,5 +193,47 @@ void main() {
       expect(repository.getCalls, 1, reason: '$status setelah kembali');
       await tester.pumpWidget(const SizedBox());
     }
+  });
+
+  testWidgets('chat terbuka: tombol aktif dengan badge, membuka halaman Chat', (
+    tester,
+  ) async {
+    Object? chatArguments;
+    final repository = FakeOrderRepository(
+      cookingOrder(
+        extra: {
+          'chat': {
+            'available': true,
+            'is_open': true,
+            'closed_reason': null,
+            'unread_count': 2,
+            'other_party_last_read_id': null,
+            'reported_by_me': false,
+          },
+        },
+      ),
+    );
+    await pumpTrackingScreen(
+      tester,
+      repository,
+      routes: {
+        AppRoutes.orderChat: (context) {
+          chatArguments = ModalRoute.of(context)?.settings.arguments;
+          return const Scaffold(body: Text('layar-chat'));
+        },
+      },
+    );
+
+    final chatButton = find.widgetWithText(ShadButton, 'Chat');
+    expect(tester.widget<ShadButton>(chatButton).enabled, isTrue);
+    expect(
+      find.descendant(of: chatButton, matching: find.text('2')),
+      findsOneWidget,
+    );
+
+    await tester.tap(chatButton);
+    await tester.pumpAndSettle();
+    expect(find.text('layar-chat'), findsOneWidget);
+    expect(chatArguments, 'KK-20261124-0001');
   });
 }

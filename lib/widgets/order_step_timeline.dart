@@ -35,13 +35,6 @@ class _StepRow extends StatelessWidget {
   final OrderStep step;
   final bool isLast;
 
-  /// Jam dinding WIB berformat "HH:mm".
-  static String _wibClock(DateTime utc) {
-    final wallClock = toWibWallClock(utc);
-    String twoDigits(int value) => value.toString().padLeft(2, '0');
-    return '${twoDigits(wallClock.hour)}:${twoDigits(wallClock.minute)}';
-  }
-
   @override
   Widget build(BuildContext context) {
     // 1. Pilih warna dan ikon titik sesuai keadaan langkah.
@@ -113,7 +106,7 @@ class _StepRow extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(top: 1),
               child: Text(
-                _wibClock(at),
+                formatWibClock(at),
                 style: AppTextStyles.bodySmall.copyWith(
                   color: AppColors.textSecondary,
                 ),

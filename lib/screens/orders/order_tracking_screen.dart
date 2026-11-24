@@ -5,13 +5,14 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../api/api_exception.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
+import '../../core/app_routes.dart';
+import '../../core/app_shad_theme.dart';
 import '../../core/app_text_styles.dart';
 import '../../core/order_steps.dart';
 import '../../core/pickup_time.dart';
@@ -19,12 +20,14 @@ import '../../data/order_repository.dart';
 import '../../models/order_api_model.dart';
 import '../../widgets/order_status_label.dart';
 import '../../widgets/order_step_timeline.dart';
+import 'order_chat_screen.dart';
 
 /// Halaman Lacak Pesanan untuk satu pesanan, dibuka dengan kode pesanannya.
 ///
 /// Detail diambil dari `GET /orders/:code` saat dibuka, lalu diambil ulang tiap
 /// 15 detik. Pengambilan berhenti saat aplikasi di latar belakang atau ada
 /// halaman lain di atasnya, dan langsung jalan lagi saat kembali terlihat.
+/// Setelah pesanan selesai, dibatalkan, atau kedaluwarsa, cek berkala berhenti.
 class OrderTrackingScreen extends StatefulWidget {
   const OrderTrackingScreen({super.key, required this.orderCode});
 
@@ -116,33 +119,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     _load();
   }
 
-  /// Tema shadcn khusus halaman ini: latar netral aplikasi, aksen oranye.
-  ShadThemeData _shadTheme() {
-    final baseScheme = AppColors.isDarkMode
-        ? const ShadNeutralColorScheme.dark()
-        : const ShadNeutralColorScheme.light();
-    return ShadThemeData(
-      brightness: AppColors.isDarkMode ? Brightness.dark : Brightness.light,
-      colorScheme: baseScheme.copyWith(
-        background: AppColors.background,
-        foreground: AppColors.textPrimary,
-        card: AppColors.surface,
-        cardForeground: AppColors.textPrimary,
-        primary: AppColors.primary,
-        primaryForeground: Colors.white,
-        mutedForeground: AppColors.textMuted,
-        border: AppColors.cardBorder,
-        ring: AppColors.primary,
-      ),
-      textTheme: ShadTextTheme.fromGoogleFont(GoogleFonts.plusJakartaSans),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final order = _order;
     return ShadTheme(
-      data: _shadTheme(),
+      data: buildAppShadTheme(),
       child: Scaffold(
         backgroundColor: AppColors.background,
         appBar: AppBar(
@@ -295,33 +276,77 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     );
   }
 
-  /// Tombol Chat di bagian bawah. Belum terhubung ke halaman chat, jadi
-  /// selalu nonaktif; selama pesanan menunggu, ada keterangan kapan chat
-  /// terbuka.
-  Widget _chatSection(OrderApiModel order) => SafeArea(
-    child: Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          ShadButton(
-            width: double.infinity,
-            enabled: false,
-            leading: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
-            child: const Text('Chat'),
-          ),
-          if (order.status == 'holding') ...[
-            const SizedBox(height: 6),
-            Text(
-              'Chat terbuka setelah penjual menerima pesanan.',
-              textAlign: TextAlign.center,
-              style: AppTextStyles.bodySmall.copyWith(
-                color: AppColors.textMuted,
-              ),
+  /// Membuka halaman Chat, lalu mengambil ulang detail supaya badge pesan
+  /// belum dibaca ikut diperbarui (juga untuk pesanan yang sudah berakhir).
+  Future<void> _openChat(OrderApiModel order) async {
+    await Navigator.pushNamed(
+      context,
+      AppRoutes.orderChat,
+      arguments: order.code,
+    );
+    if (mounted && !_fetching) _load();
+  }
+
+  /// Tombol Chat di bagian bawah, dengan badge jumlah pesan penjual yang
+  /// belum dibaca. Chat bisa dibuka saat terbuka, dan sesudah pesanan berakhir
+  /// untuk membaca riwayatnya. Selama pesanan menunggu, atau untuk pesanan
+  /// meja, tombol nonaktif dengan keterangannya.
+  Widget _chatSection(OrderApiModel order) {
+    final chat = order.chat;
+    final canOpenChat =
+        chat != null && chat.available && chat.closedReason != 'not_started';
+    final unreadCount = chat?.unreadCount ?? 0;
+    final hint = order.status == 'holding'
+        ? chatClosedText('not_started')
+        : chat?.available == false
+        ? chatClosedText('unavailable')
+        : null;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ShadButton(
+              width: double.infinity,
+              enabled: canOpenChat,
+              onPressed: () => _openChat(order),
+              leading: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+              trailing: unreadCount > 0
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        unreadCount > 99 ? '99+' : '$unreadCount',
+                        style: const TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    )
+                  : null,
+              child: const Text('Chat'),
             ),
+            if (hint != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                hint,
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textMuted,
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 }

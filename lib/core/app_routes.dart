@@ -18,6 +18,7 @@ class AppRoutes {
   static const String activeOrders = '/active-orders';
   static const String completedOrders = '/completed-orders';
   static const String orderTracking = '/order-tracking';
+  static const String orderChat = '/order-chat';
   static const String liked = '/liked';
   static const String profile = '/profile';
   static const String notifications = '/notifications';
