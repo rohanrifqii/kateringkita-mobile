@@ -15,6 +15,7 @@ import '../../models/order_api_model.dart';
 import '../../models/product_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../../widgets/menu_image.dart';
 import '../../widgets/order_status_label.dart';
 import '../../widgets/review_sheet.dart';
@@ -140,6 +141,8 @@ class _OrderListViewState extends State<OrderListView>
         _error = null;
         _loading = false;
       });
+      // Badge chat di tab Pesanan ikut segar selama tab ini terbuka.
+      context.read<NotificationProvider?>()?.refresh();
     } catch (e) {
       if (!mounted || seq != _seq) return;
       setState(() {
