@@ -110,6 +110,37 @@ void main() {
     expect(appNavigatorKey.currentState!.canPop(), isFalse);
   });
 
+  /// Nama semua rute di navigator, dari teratas ke terbawah.
+  List<String?> stackNames() {
+    final names = <String?>[];
+    appNavigatorKey.currentState!.popUntil((route) {
+      names.add(route.settings.name);
+      return true;
+    });
+    return names;
+  }
+
+  for (final (initialRoute, label) in [
+    (AppRoutes.mainNav, 'beranda'),
+    ('/order-chat/', 'alamat Chat tanpa kode'),
+  ]) {
+    testWidgets('web dimuat ulang di $label: hanya satu beranda/tab', (
+      tester,
+    ) async {
+      tester.binding.platformDispatcher.defaultRouteNameTestValue =
+          initialRoute;
+      addTearDown(
+        tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+      );
+      await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(stackNames(), [AppRoutes.mainNav]);
+      expect(appNavigatorKey.currentState!.canPop(), isFalse);
+    });
+  }
+
   testWidgets('expired token at splash: guest continues to main nav', (
     tester,
   ) async {

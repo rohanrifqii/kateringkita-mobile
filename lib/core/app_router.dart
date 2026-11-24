@@ -114,18 +114,16 @@ class AppRouter {
     );
   }
 
-  /// Benar bila tumpukan awal untuk alamat [initialRoute] sudah memuat tab
-  /// Pesanan di bawah halaman tujuan.
+  /// Kode pesanan pada alamat [routeName] milik Lacak Pesanan atau Chat.
   ///
-  /// Saat web dibuka di `/order-chat/<kode>`, Flutter juga membangun rute
-  /// `/order-chat` (tanpa kode), dan [onGenerateRoute] mengubahnya menjadi tab
-  /// Pesanan. Alamat dalam lain tidak punya rute seperti itu.
-  ///
-  /// @param initialRoute alamat saat aplikasi dibuka, mis. dari peramban.
-  /// @returns true untuk `/order-tracking/...` dan `/order-chat/...`.
-  static bool hasOrdersTabBelow(String initialRoute) =>
-      initialRoute.startsWith('${AppRoutes.orderTracking}/') ||
-      initialRoute.startsWith('${AppRoutes.orderChat}/');
+  /// @param routeName alamat rute, mis. alamat awal dari peramban.
+  /// @returns kode pesanan; string kosong bila kodenya kosong atau tidak sah;
+  ///   null bila alamat itu bukan alamat Lacak Pesanan atau Chat.
+  static String? orderCodeInPath(String routeName) {
+    final settings = RouteSettings(name: routeName);
+    return orderCodeFromRoute(settings, AppRoutes.orderTracking) ??
+        orderCodeFromRoute(settings, AppRoutes.orderChat);
+  }
 
   /// Kode pesanan dari rute [settings] bila rute itu milik [basePath].
   ///
@@ -133,7 +131,6 @@ class AppRouter {
   /// @param basePath `AppRoutes.orderTracking` atau `AppRoutes.orderChat`.
   /// @returns kode pesanan; string kosong bila kodenya kosong atau tidak sah
   ///   (mis. memuat "/"); null bila rute itu bukan milik [basePath].
-  @visibleForTesting
   static String? orderCodeFromRoute(RouteSettings settings, String basePath) {
     final name = settings.name;
     final String rawCode;
