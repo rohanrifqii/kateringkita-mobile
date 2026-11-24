@@ -1,11 +1,20 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Kunci tanda tangan release dari android/key.properties (tidak di-commit, lihat android/.gitignore).
+// Isi: storeFile, storePassword, keyAlias, keyPassword. Contoh: android/key.properties.example.
+val kunciRilis = Properties().apply {
+    val f = rootProject.file("key.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
+
 android {
-    namespace = "com.example.kateringkita_pbl"
+    namespace = "id.kateringkita.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -15,25 +24,31 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.kateringkita_pbl"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // ID tetap aplikasi di HP dan Play Store; jangan diganti setelah rilis pertama (HP menganggapnya aplikasi lain)
+        applicationId = "id.kateringkita.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
-        // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
-        // You can force using the value of versionCode by specifying the `-P force-version-code-ignoring-abi=true`
-        // flag during build.
+        // versionCode/versionName dari pubspec.yaml (version: x.y.z+N)
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (!kunciRilis.isEmpty) {
+            create("release") {
+                storeFile = file(kunciRilis.getProperty("storeFile"))
+                storePassword = kunciRilis.getProperty("storePassword")
+                keyAlias = kunciRilis.getProperty("keyAlias")
+                keyPassword = kunciRilis.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Tanpa key.properties (mis. laptop anggota tim) build release tetap jalan dengan kunci debug,
+            // tetapi APK itu tidak bisa memperbarui APK resmi. APK untuk dibagikan wajib dibangun dengan key.properties.
+            signingConfig = if (kunciRilis.isEmpty) signingConfigs.getByName("debug") else signingConfigs.getByName("release")
         }
     }
 }
