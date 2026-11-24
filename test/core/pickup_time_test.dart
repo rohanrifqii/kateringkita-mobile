@@ -57,6 +57,21 @@ void main() {
         'Sab, 14 Nov 2026 · 00:00 WIB');
   });
 
+  test('formatWibStepTime: hari ini jam saja, hari lain dengan tanggal', () {
+    // Sekarang 24 Nov 10:00 WIB.
+    final now = DateTime.utc(2026, 11, 24, 3, 0);
+    expect(formatWibStepTime(DateTime.utc(2026, 11, 24, 2, 15), nowUtc: now),
+        '09:15');
+    expect(formatWibStepTime(DateTime.utc(2026, 11, 23, 2, 15), nowUtc: now),
+        '23 Nov 09:15');
+    // 23 Nov 17:30 UTC sudah 24 Nov 00:30 WIB: masih hari ini.
+    expect(formatWibStepTime(DateTime.utc(2026, 11, 23, 17, 30), nowUtc: now),
+        '00:30');
+    // Tanggal sama tahun lalu bukan hari ini.
+    expect(formatWibStepTime(DateTime.utc(2025, 11, 24, 2, 15), nowUtc: now),
+        '24 Nov 09:15');
+  });
+
   test('wibToUtc converts WIB wall clock to UTC', () {
     expect(wibToUtc(2026, 11, 14, 10, 30), DateTime.utc(2026, 11, 14, 3, 30));
   });

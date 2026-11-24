@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:kateringkita_pbl/core/app_routes.dart';
+import 'package:kateringkita_pbl/core/pickup_time.dart';
 import 'package:kateringkita_pbl/data/order_repository.dart';
 import 'package:kateringkita_pbl/models/order_api_model.dart';
 import 'package:kateringkita_pbl/screens/orders/order_tracking_screen.dart';
@@ -109,9 +110,10 @@ void main() {
     for (final text in [
       'Sedang dimasak',
       'Diterima',
-      '09:05',
+      // Jam saja bila hari ini; tanggal + jam bila test jalan di hari lain.
+      formatWibStepTime(DateTime.utc(2026, 11, 24, 2, 5)),
       'Dimasak',
-      '09:10',
+      formatWibStepTime(DateTime.utc(2026, 11, 24, 2, 10)),
       'Siap diambil',
       'Selesai',
       'Gazebo Teknik',
