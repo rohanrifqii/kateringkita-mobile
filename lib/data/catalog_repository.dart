@@ -56,8 +56,11 @@ class MerchantProfile {
   final String? description;
   final String? logoUrl;
 
-  /// Background profil toko (foto lanskap dari penjual); null = warna utama.
+  /// URL foto sampul (background) profil toko dari kolom `cover_url`: foto lanskap yang diunggah penjual.
+  /// Null bila penjual belum memasangnya; layar profil toko lalu memakai warna utama polos.
   final String? coverUrl;
+
+  /// Nama jenis toko, diambil dari `merchant_type.name` pada JSON.
   final String merchantTypeName;
 
   /// Status buka toko menurut backend saat data diambil.

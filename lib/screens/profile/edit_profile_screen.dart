@@ -62,6 +62,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final auth = context.read<AuthProvider>();
     final u = auth.user;
     if (u == null) return 'Masuk dulu untuk mengubah profil.';
+    // Galat server dikembalikan sebagai teks; galat per kolom diutamakan (sandi saat ini lebih dulu).
     try {
       await auth.updateProfile(
         fullName: name ?? u.fullName,

@@ -38,7 +38,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
   int _currentImageIndex = 0;
   final PageController _imagePageController = PageController();
 
-  // tanpa foto sama sekali: satu halaman placeholder
+  /// Isi galeri geser di bagian atas: foto utama + foto tambahan ([ProductModel.photos]). Foto tambahan baru
+  /// muncul setelah detail menu (GET /menus/{id}) selesai dimuat di _load. Menu tanpa foto sama sekali tetap
+  /// mendapat satu halaman berisi null, sehingga MenuImage menampilkan gambar pengganti (logo aplikasi).
   List<String?> get _galleryImages =>
       _product.photos.isEmpty ? const [null] : _product.photos;
 

@@ -1,4 +1,4 @@
-// Repository akun pelanggan: login, daftar, lupa sandi, profil, titik temu favorit, dan foto profil.
+// Repository akun pelanggan: login, daftar, keluar, lupa/reset sandi, ubah profil & sandi, titik temu favorit, dan foto profil.
 // Alur: layar → AuthProvider → AuthRepository → ApiClient → backend REST KateringKita.
 import 'dart:typed_data';
 
@@ -57,6 +57,7 @@ class AuthRepository {
         });
     final data = res.data as Map<String, dynamic>;
     final user = ApiUser.fromJson(data['user'] as Map<String, dynamic>);
+    // Token asli dari server disimpan; ApiClient membacanya untuk permintaan berikutnya.
     await TokenStore.saveSession(
         data['token'] as String, user.email ?? identifier);
     return user;

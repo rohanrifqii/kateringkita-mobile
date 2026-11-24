@@ -470,6 +470,7 @@ class _LikedScreenState extends State<LikedScreen> {
             ),
             FavoriteButton(menu: product, size: 22),
             const SizedBox(width: 4),
+            // Tombol "+ Order": membuka detail menu untuk memesan.
             GestureDetector(
               onTap: () => _openDetail(product),
               child: Container(

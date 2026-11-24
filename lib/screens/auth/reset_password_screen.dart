@@ -108,6 +108,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       return;
     }
 
+    // Sandi baru tersimpan di server: matikan loading lalu tampilkan dialog sukses.
     if (!mounted) return;
     setState(() => _isLoading = false);
 

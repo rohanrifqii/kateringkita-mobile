@@ -387,6 +387,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   /// lalu tampilkan hasil sebagai sesi baru dan simpan ke riwayat perangkat.
   Future<void> _submit() async {
     if (_loading || _refreshing) return;
+    // Tutup keyboard agar navbar bawah muncul kembali (navbar disembunyikan selama keyboard terbuka).
     FocusScope.of(context).unfocus();
     if (!_validate()) return;
     final repo = context.read<AssistantRepository>();
@@ -482,6 +483,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         child: Column(
           children: [
             _appBar(auth.isLoggedIn),
+            // Isi yang bisa digulir: sapaan, formulir, dan hasil; tamu hanya melihat ajakan masuk.
             Expanded(
               child: SingleChildScrollView(
                 controller: _scrollController,
@@ -572,6 +574,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 1. Judul riwayat + tombol tutup (X).
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 14, 12, 6),
               child: Row(
@@ -597,6 +600,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 ],
               ),
             ),
+            // 2. Tombol "Percakapan baru": tutup drawer lalu kosongkan layar.
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: OutlinedButton.icon(
@@ -615,6 +619,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 label: const Text('Percakapan baru'),
               ),
             ),
+            // 3. Keterangan penyimpanan + tombol Hapus Semua (hanya bila ada riwayat).
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 4, 12, 0),
               child: Row(
@@ -638,6 +643,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 ],
               ),
             ),
+            // 4. Daftar riwayat, atau pesan kosong bila belum ada.
             Expanded(
               child: _history.isEmpty
                   ? Center(
@@ -892,6 +898,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Judul formulir: ikon pengatur + teks.
           Row(
             children: [
               const Icon(Icons.tune_rounded, color: AppColors.primary, size: 20),
@@ -922,9 +929,11 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             ),
           ),
           const SizedBox(height: 8),
+          // Baris dua kolom: Modal (Rp) dan Jumlah porsi, keduanya opsional.
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Kolom kiri: modal (hanya angka).
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -943,6 +952,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 ),
               ),
               const SizedBox(width: 12),
+              // Kolom kanan: jumlah porsi (hanya angka).
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1005,6 +1015,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             ),
           ],
           const SizedBox(height: 16),
+          // Tombol Cari Rekomendasi ([_submit]); spinner selama memuat.
           SizedBox(
             width: double.infinity,
             height: 46,
