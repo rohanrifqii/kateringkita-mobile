@@ -68,15 +68,16 @@ Future<List<http.Request>> _pump(WidgetTester tester, List<Map<String, dynamic>>
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  testWidgets('banner dari server menggantikan kartu informasi', (tester) async {
+  testWidgets('banner dari server tampil di carousel', (tester) async {
     await _pump(tester, [_bannerPromo, _bannerToko]);
     expect(find.text('Diskon pembukaan'), findsOneWidget);
-    expect(find.text('Ambil di Titik Temu'), findsNothing);
+    expect(find.byType(PageView), findsOneWidget);
   });
 
-  testWidgets('tanpa banner server: kartu informasi lama tetap tampil', (tester) async {
+  testWidgets('tanpa banner server: area banner disembunyikan, tanpa kartu dummy', (tester) async {
     await _pump(tester, []);
-    expect(find.text('Ambil di Titik Temu'), findsOneWidget);
+    expect(find.byType(PageView), findsNothing);
+    expect(find.text('Ambil di Titik Temu'), findsNothing);
   });
 
   testWidgets('ketuk banner voucher: lembar voucher → Klaim → POST + snackbar', (tester) async {

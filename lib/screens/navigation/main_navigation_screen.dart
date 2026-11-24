@@ -42,10 +42,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final bool isKeyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
 
     final List<Widget> screens = [
-      HomeScreen(
-        key: ValueKey('home_$isDark'),
-        onTabChange: _onTabTapped,
-      ),
+      HomeScreen(key: ValueKey('home_$isDark')),
       OrdersScreen(key: ValueKey('orders_$isDark')),
       AIAssistantScreen(key: ValueKey('ai_$isDark')),
       LikedScreen(key: ValueKey('liked_$isDark')),

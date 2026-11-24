@@ -1,7 +1,8 @@
 // Layar Beranda (tab pertama MainNavigationScreen): titik temu favorit, pencarian, kategori, banner, dan daftar menu.
 // Kategori, menu, dan titik temu diambil lewat CatalogRepository (GET /meta/categories, /menus, /meta/pickup-points);
 // titik temu favorit disimpan ke profil lewat AuthProvider (PATCH /me). Banner dan pop-up promo diambil lewat
-// PromoContentRepository (GET /banners, GET /popup); bila server tidak punya banner, tampil kartu info statis di berkas ini.
+// PromoContentRepository (GET /banners, GET /popup); bila server tidak punya banner atau gagal dimuat, area banner
+// tidak ditampilkan.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -28,38 +29,10 @@ import '../orders/pickup_point_picker_screen.dart';
 
 /// Layar Beranda: katalog menu dari backend yang bisa difilter per kategori, plus pemilih titik temu favorit.
 class HomeScreen extends StatefulWidget {
-  /// Callback dari MainNavigationScreen untuk berpindah tab bawah (indeks tab).
-  final Function(int)? onTabChange;
-
-  const HomeScreen({super.key, this.onTabChange});
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
-}
-
-/// Tujuan tombol banner: layar cari, tab Pesanan, atau tab Asisten AI.
-enum _BannerAction { search, orders, assistant }
-
-/// Banner informasi layanan. Backend tidak punya promo publik (promo hanya
-/// kode di checkout), jadi banner tidak menjanjikan diskon atau pengantaran.
-class _InfoBanner {
-  const _InfoBanner({
-    required this.tag,
-    required this.title,
-    required this.subtitle,
-    required this.image,
-    this.cta,
-    this.action,
-  });
-
-  final String tag;
-  final String title;
-  final String subtitle;
-  final String image;
-
-  /// Tanpa [cta]/[action] tombol tidak ditampilkan.
-  final String? cta;
-  final _BannerAction? action;
 }
 
 /// State Beranda: kategori terpilih, daftar kategori/menu, banner aktif, dan titik temu.
@@ -79,60 +52,8 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentBannerIndex = 0;
   final PageController _bannerController = PageController();
 
-  /// Banner dari server (admin & penjual); kosong → kartu informasi bawaan.
+  /// Banner dari server (admin & penjual); kosong → area banner disembunyikan.
   List<PromoBanner> _serverBanners = const [];
-
-  /// Kartu informasi layanan bawaan (statis) yang tampil bila [_serverBanners] kosong.
-  static const List<_InfoBanner> _infoBanners = [
-    _InfoBanner(
-      tag: 'TITIK TEMU',
-      title: 'Ambil di Titik Temu',
-      subtitle:
-          'Pilih titik temu kampus saat checkout, lalu ambil pesananmu di sana.',
-      cta: 'Cari Menu →',
-      action: _BannerAction.search,
-      image: 'assets/images/nasi_kuning.png',
-    ),
-    _InfoBanner(
-      tag: 'PEMBAYARAN',
-      title: 'VA, QRIS & E-Wallet',
-      subtitle: 'Bayar lewat Midtrans: VA BCA, BNI, BRI, atau QRIS & e-wallet.',
-      cta: 'Lihat Pesanan →',
-      action: _BannerAction.orders,
-      image: 'assets/images/lumpia_diego.png',
-    ),
-    _InfoBanner(
-      tag: 'UNTUK ACARA',
-      title: 'Atur Waktu Ambil',
-      subtitle:
-          'Pilih tanggal & jam ambil hingga 7 hari ke depan untuk acaramu.',
-      cta: 'Tanya AI →',
-      action: _BannerAction.assistant,
-      image: 'assets/images/banner_promo.png',
-    ),
-  ];
-
-  /// Jalankan aksi tombol banner. Pesanan (tab 1) dan Asisten AI (tab 2) dibuka sebagai
-  /// tab di MainNavigationScreen; bila Home dibuka sendiri (tanpa [HomeScreen.onTabChange]), lewat rute biasa.
-  void _onBannerTap(_BannerAction action) {
-    final tab = widget.onTabChange;
-    switch (action) {
-      case _BannerAction.search:
-        Navigator.pushNamed(context, AppRoutes.search);
-      case _BannerAction.orders:
-        if (tab != null) {
-          tab(1);
-        } else {
-          Navigator.pushNamed(context, AppRoutes.orders);
-        }
-      case _BannerAction.assistant:
-        if (tab != null) {
-          tab(2);
-        } else {
-          Navigator.pushNamed(context, AppRoutes.aiAssistant);
-        }
-    }
-  }
 
   late final AuthProvider _auth;
   late bool _wasLoggedIn;
@@ -163,8 +84,8 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  /// Muat banner dari server (GET /banners) lalu pop-up promo. Galat diabaikan: beranda tetap memakai kartu
-  /// informasi bawaan. Indeks titik banner dikembalikan ke 0 setiap daftar banner berganti.
+  /// Muat banner dari server (GET /banners) lalu pop-up promo. Galat diabaikan: area banner tetap tersembunyi.
+  /// Indeks titik banner dikembalikan ke 0 setiap daftar banner berganti.
   Future<void> _loadBanners() async {
     try {
       final banners = await context.read<PromoContentRepository>().banners();
@@ -174,7 +95,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _currentBannerIndex = 0;
       });
     } catch (_) {
-      // gagal / repositori tidak dipasang: tetap kartu informasi bawaan
+      // gagal / repositori tidak dipasang: area banner tetap tersembunyi
     }
     await _loadPopup();
   }
@@ -699,162 +620,40 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 20),
 
-              // ---------------- BANNER: dari server bila ada, selain itu kartu info layanan statis ----------------
-              SizedBox(
-                width: double.infinity,
-                height: 172,
-                child: PageView.builder(
-                  controller: _bannerController,
-                  itemCount: _serverBanners.isNotEmpty ? _serverBanners.length : _infoBanners.length,
-                  onPageChanged: (index) {
-                    setState(() => _currentBannerIndex = index);
-                  },
-                  itemBuilder: (context, index) {
-                    // Banner server didahulukan; kode di bawahnya menggambar kartu info statis.
-                    if (_serverBanners.isNotEmpty) return _buildServerBanner(_serverBanners[index]);
-                    final banner = _infoBanners[index];
-                    return Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 2),
+              // ---------------- BANNER: dari server (GET /banners); tanpa banner bagian ini tidak tampil ----------------
+              if (_serverBanners.isNotEmpty) ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 172,
+                  child: PageView.builder(
+                    controller: _bannerController,
+                    itemCount: _serverBanners.length,
+                    onPageChanged: (index) {
+                      setState(() => _currentBannerIndex = index);
+                    },
+                    itemBuilder: (context, index) => _buildServerBanner(_serverBanners[index]),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                // Titik penanda banner yang sedang tampil.
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(_serverBanners.length, (index) {
+                    final isSelected = _currentBannerIndex == index;
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                      width: isSelected ? 20 : 6,
+                      height: 6,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 16,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: Stack(
-                        children: [
-                          // Background Image
-                          Positioned.fill(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(20),
-                              child: Image.asset(
-                                banner.image,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                            ),
-                          ),
-                          // Dark/Orange Gradient Overlay
-                          Positioned.fill(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(20),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.centerLeft,
-                                    end: Alignment.centerRight,
-                                    colors: [
-                                      const Color(0xFF1A130D).withValues(alpha: 0.92),
-                                      const Color(0xFF1A130D).withValues(alpha: 0.65),
-                                      Colors.transparent,
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          // Banner Content
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    banner.tag,
-                                    style: AppTextStyles.badge.copyWith(
-                                      color: Colors.white,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.5,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  banner.title,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.h2.copyWith(
-                                    color: Colors.white,
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  banner.subtitle,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: AppTextStyles.bodySmall.copyWith(
-                                    color: const Color(0xFFFEF3C7),
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                if (banner.cta != null &&
-                                    banner.action != null) ...[
-                                  const SizedBox(height: 12),
-                                  GestureDetector(
-                                    onTap: () => _onBannerTap(banner.action!),
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                          horizontal: 14, vertical: 6),
-                                      decoration: BoxDecoration(
-                                        color: Colors.white,
-                                        borderRadius: BorderRadius.circular(16),
-                                      ),
-                                      child: Text(
-                                        banner.cta!,
-                                        style: AppTextStyles.bodySmall.copyWith(
-                                          color: AppColors.primary,
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ),
-                        ],
+                        color: isSelected ? AppColors.primary : AppColors.cardBorder,
+                        borderRadius: BorderRadius.circular(3),
                       ),
                     );
-                  },
+                  }),
                 ),
-              ),
-              const SizedBox(height: 10),
-              // Dots Indicator
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(_serverBanners.isNotEmpty ? _serverBanners.length : _infoBanners.length, (index) {
-                  final isSelected = _currentBannerIndex == index;
-                  return AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    margin: const EdgeInsets.symmetric(horizontal: 3),
-                    width: isSelected ? 20 : 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppColors.primary : AppColors.cardBorder,
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  );
-                }),
-              ),
-              const SizedBox(height: 18),
+                const SizedBox(height: 18),
+              ],
 
               // ---------------- DAFTAR MENU HEADER ----------------
               Text(
