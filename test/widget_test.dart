@@ -141,6 +141,18 @@ void main() {
     });
   }
 
+  testWidgets('pembuka biasa dari "/": splash tetap tampil ~2,5 detik', (
+    tester,
+  ) async {
+    await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(_currentRoute(), AppRoutes.splash);
+    expect(find.text('Menyiapkan Dapur Kampus...'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(_currentRoute(), AppRoutes.mainNav);
+  });
+
   testWidgets('expired token at splash: guest continues to main nav', (
     tester,
   ) async {
