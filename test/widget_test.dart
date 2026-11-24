@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -22,6 +23,7 @@ import 'package:kateringkita_pbl/providers/notification_provider.dart';
 import 'package:kateringkita_pbl/screens/navigation/main_navigation_screen.dart';
 import 'package:kateringkita_pbl/widgets/phone_frame.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
@@ -340,10 +342,50 @@ void main() {
       expect(ctx.read<AuthProvider>().isLoggedIn, isTrue);
     });
 
-    testWidgets('token tidak sah: Login dibuka', (tester) async {
+    testWidgets('token tidak sah: Login dibuka, keranjang tersimpan dikosongkan', (
+      tester,
+    ) async {
       await reloadCheckout(tester, sessionValid: false);
       expect(_currentRoute(), AppRoutes.login);
+      final ctx = appNavigatorKey.currentContext!;
+      expect(ctx.read<CartProvider>().items, isEmpty);
+      expect(
+        await SharedPreferencesAsync().getString(CartStore.storageKey),
+        isNull,
+      );
     });
+
+    testWidgets(
+      'dimuat ulang lalu permintaan lain kena 401 sebelum GET /me: keranjang dikosongkan',
+      (tester) async {
+        final meNeverAnswers = Completer<http.Response>();
+        await _pump(
+          tester,
+          (r) => r.url.path.endsWith('/v1/me')
+              ? meNeverAnswers.future
+              : Future.value(_err(401, 'UNAUTHORIZED', 'x')),
+          secureValues: {'access_token': 'tok', 'session_email': 'a@x.com'},
+          savedPrefs: {CartStore.storageKey: savedCart},
+        );
+        await tester.pump();
+        final ctx = appNavigatorKey.currentContext!;
+        final cart = ctx.read<CartProvider>();
+        expect(cart.items, isNotEmpty); // dipulihkan dari perangkat
+
+        // Token tersimpan ditolak server: sesi dihapus, keranjang ikut kosong.
+        await expectLater(
+          ctx.read<ApiClient>().get('/orders'),
+          throwsA(isA<Object>()),
+        );
+        await tester.pumpAndSettle();
+        expect(_currentRoute(), AppRoutes.login);
+        expect(cart.items, isEmpty);
+        expect(
+          await SharedPreferencesAsync().getString(CartStore.storageKey),
+          isNull,
+        );
+      },
+    );
   });
 
   testWidgets('expired token at splash: guest continues to main nav', (
