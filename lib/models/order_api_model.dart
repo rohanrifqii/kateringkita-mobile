@@ -104,6 +104,35 @@ class OrderPayment {
       );
 }
 
+/// Jam tiap perubahan status pesanan dari server (`timeline`), dalam UTC.
+///
+/// Setiap jam bernilai null bila langkah itu belum terjadi, atau bila server
+/// lama belum mengirim `timeline` sama sekali.
+class OrderTimeline {
+  final DateTime? confirmedAt;
+  final DateTime? cookingAt;
+  final DateTime? readyAt;
+  final DateTime? completedAt;
+  final DateTime? cancelledAt;
+
+  const OrderTimeline({
+    this.confirmedAt,
+    this.cookingAt,
+    this.readyAt,
+    this.completedAt,
+    this.cancelledAt,
+  });
+
+  /// Membaca objek `timeline` berisi string ISO UTC atau null per kunci.
+  factory OrderTimeline.fromJson(Map<String, dynamic> json) => OrderTimeline(
+        confirmedAt: _dt(json['confirmed_at']),
+        cookingAt: _dt(json['cooking_at']),
+        readyAt: _dt(json['ready_at']),
+        completedAt: _dt(json['completed_at']),
+        cancelledAt: _dt(json['cancelled_at']),
+      );
+}
+
 class OrderApiModel {
   final String code;
   final String status;
@@ -131,6 +160,9 @@ class OrderApiModel {
   final bool canReview;
   final OrderPayment? payment;
 
+  /// Jam tiap langkah status; kosong bila server tidak mengirimnya.
+  final OrderTimeline timeline;
+
   const OrderApiModel({
     required this.code,
     required this.status,
@@ -157,6 +189,7 @@ class OrderApiModel {
     required this.canComplete,
     required this.canReview,
     this.payment,
+    this.timeline = const OrderTimeline(),
   });
 
   bool get isPaid => paymentStatus == 'paid';
@@ -194,6 +227,9 @@ class OrderApiModel {
       payment: json['payment'] == null
           ? null
           : OrderPayment.fromJson(json['payment'] as Map<String, dynamic>),
+      timeline: json['timeline'] == null
+          ? const OrderTimeline()
+          : OrderTimeline.fromJson(json['timeline'] as Map<String, dynamic>),
     );
   }
 }

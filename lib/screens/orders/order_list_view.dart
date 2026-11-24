@@ -306,7 +306,13 @@ class _OrderListViewState extends State<OrderListView>
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
         itemCount: _orders.length,
         separatorBuilder: (_, _) => const SizedBox(height: 14),
-        itemBuilder: (_, i) => _card(_orders[i]),
+        // Ketuk kartu (di luar tombolnya) untuk membuka Lacak Pesanan.
+        itemBuilder: (_, i) => InkWell(
+          onTap: () => Navigator.pushNamed(context, AppRoutes.orderTracking,
+              arguments: _orders[i].code),
+          borderRadius: BorderRadius.circular(16),
+          child: _card(_orders[i]),
+        ),
       ),
     );
   }

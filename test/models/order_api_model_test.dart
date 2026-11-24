@@ -139,4 +139,22 @@ void main() {
     expect(q.warnings.single.available, 3);
     expect(q.items.single.options, isEmpty);
   });
+
+  test('timeline: jam tiap langkah dibaca, tanpa timeline semuanya null', () {
+    final withTimeline = order()
+      ..['timeline'] = {
+        'confirmed_at': '2026-11-12T03:06:00.000Z',
+        'cooking_at': null,
+        'ready_at': null,
+        'completed_at': null,
+        'cancelled_at': null,
+      };
+    final parsed = OrderApiModel.fromJson(withTimeline).timeline;
+    expect(parsed.confirmedAt, DateTime.utc(2026, 11, 12, 3, 6));
+    expect(parsed.cookingAt, isNull);
+
+    final withoutTimeline = OrderApiModel.fromJson(order()).timeline;
+    expect(withoutTimeline.confirmedAt, isNull);
+    expect(withoutTimeline.cancelledAt, isNull);
+  });
 }

@@ -114,6 +114,29 @@ void main() {
     expect(find.widgetWithText(TextField, 'KK-9'), findsOneWidget);
   });
 
+  testWidgets('ketuk kartu pesanan membuka Lacak Pesanan dengan kodenya',
+      (tester) async {
+    Object? trackingArgs;
+    await tester.pumpWidget(_wrap(
+      (req) async => _json({
+        'data': [_order('KK-1')],
+        'meta': {'total': 1}
+      }),
+      routes: {
+        AppRoutes.orderTracking: (context) {
+          trackingArgs = ModalRoute.of(context)?.settings.arguments;
+          return const Scaffold(body: Text('layar-lacak'));
+        },
+      },
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Nasi Box +1 menu lain'));
+    await tester.pumpAndSettle();
+    expect(find.text('layar-lacak'), findsOneWidget);
+    expect(trackingArgs, 'KK-1');
+  });
+
   testWidgets('tab Aktif memuat ?tab=active; tombol sesuai can_cancel/complete',
       (tester) async {
     final seen = <Uri>[];

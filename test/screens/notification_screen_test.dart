@@ -87,7 +87,7 @@ class _Harness {
   final requests = <http.Request>[];
   late final NotificationProvider notifications;
   late final List<SingleChildWidget> providers;
-  Object? ordersArgs;
+  Object? trackingArgs;
   Object? ticketArgs;
 
   Widget app(Widget home) => MultiProvider(
@@ -95,9 +95,9 @@ class _Harness {
         child: MaterialApp(
           home: home,
           routes: {
-            AppRoutes.orders: (c) {
-              ordersArgs = ModalRoute.of(c)?.settings.arguments;
-              return const Scaffold(body: Text('layar-pesanan'));
+            AppRoutes.orderTracking: (c) {
+              trackingArgs = ModalRoute.of(c)?.settings.arguments;
+              return const Scaffold(body: Text('layar-lacak'));
             },
             AppRoutes.ticketDetail: (c) {
               ticketArgs = ModalRoute.of(c)?.settings.arguments;
@@ -295,11 +295,11 @@ void main() {
     expect(jsonDecode(post.body), {
       'ids': [3]
     });
-    expect(find.text('layar-pesanan'), findsOneWidget);
-    expect(h.ordersArgs, {'tab': 'active', 'q': 'KK-1'});
+    expect(find.text('layar-lacak'), findsOneWidget);
+    expect(h.trackingArgs, 'KK-1');
     expect(h.notifications.unreadCount, 1);
 
-    Navigator.of(tester.element(find.text('layar-pesanan'))).pop();
+    Navigator.of(tester.element(find.text('layar-lacak'))).pop();
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('unread-3')), findsNothing);
   });
@@ -335,7 +335,7 @@ void main() {
     });
     expect(find.text('layar-tiket'), findsOneWidget);
     expect(h.ticketArgs, 'TK-20261113-7QPX');
-    expect(h.ordersArgs, isNull);
+    expect(h.trackingArgs, isNull);
 
     // Info biasa tanpa ticket_code tidak pindah layar.
     Navigator.of(tester.element(find.text('layar-tiket'))).pop();
@@ -347,7 +347,7 @@ void main() {
     expect(h.ticketArgs, isNull);
   });
 
-  testWidgets('pesanan dibatalkan membuka tab Dibatalkan', (tester) async {
+  testWidgets('pesanan dibatalkan juga membuka Lacak Pesanan', (tester) async {
     final h = _Harness((req) async {
       if (req.method == 'POST') {
         return _json({
@@ -364,7 +364,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Pesanan ditolak'));
     await tester.pumpAndSettle();
-    expect(h.ordersArgs, {'tab': 'cancelled', 'q': 'KK-9'});
+    expect(h.trackingArgs, 'KK-9');
   });
 
   testWidgets('notifikasi promo hanya ditandai dibaca, tidak pindah layar',
@@ -382,7 +382,7 @@ void main() {
     await tester.tap(find.text('Promo baru dari Dapur A'));
     await tester.pumpAndSettle();
     expect(h.posts().length, 1);
-    expect(find.text('layar-pesanan'), findsNothing);
+    expect(find.text('layar-lacak'), findsNothing);
     expect(find.byKey(const ValueKey('unread-2')), findsNothing);
   });
 

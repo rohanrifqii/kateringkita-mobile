@@ -15,6 +15,7 @@ import '../screens/navigation/main_navigation_screen.dart';
 import '../screens/orders/active_orders_screen.dart';
 import '../screens/orders/checkout_screen.dart';
 import '../screens/orders/completed_orders_screen.dart';
+import '../screens/orders/order_tracking_screen.dart';
 import '../screens/orders/orders_screen.dart';
 import '../screens/orders/payment_screen.dart';
 import '../screens/orders/whatsapp_generator_screen.dart';
@@ -65,6 +66,12 @@ class AppRouter {
     },
     AppRoutes.activeOrders: (context) => const ActiveOrdersScreen(),
     AppRoutes.completedOrders: (context) => const CompletedOrdersScreen(),
+    // Argumen: kode pesanan (String), dari kartu pesanan atau notifikasi.
+    AppRoutes.orderTracking: (context) {
+      final orderCode = ModalRoute.of(context)?.settings.arguments;
+      return OrderTrackingScreen(
+          orderCode: orderCode is String ? orderCode : '');
+    },
     AppRoutes.liked: (context) => const LikedScreen(),
     AppRoutes.profile: (context) => const ProfileScreen(),
     AppRoutes.notifications: (context) => const NotificationScreen(),
