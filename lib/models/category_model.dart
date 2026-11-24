@@ -26,4 +26,10 @@ class CategoryModel {
         slug: json['slug'] as String,
         icon: (json['icon'] as String?) ?? '',
       );
+
+  /// Kebalikan [CategoryModel.fromJson] (dipakai CartStore untuk menyimpan keranjang).
+  ///
+  /// @returns objek JSON berkolom sama dengan data dari backend.
+  Map<String, dynamic> toJson() =>
+      {'id': id, 'name': name, 'slug': slug, 'icon': icon};
 }

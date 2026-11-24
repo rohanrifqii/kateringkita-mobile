@@ -1,7 +1,9 @@
-// Keranjang belanja di memori (hilang saat aplikasi ditutup), dibaca layar lewat Provider. Isinya
-// dikirim ke backend saat checkout lewat toQuoteItems() dan OrderRepository (POST /orders/quote, /orders).
+// Keranjang belanja, dibaca layar lewat Provider. Bila diberi CartStore (main.dart), isinya juga disimpan
+// di perangkat supaya tetap ada setelah halaman web dimuat ulang. Isinya dikirim ke backend saat checkout
+// lewat toQuoteItems() dan OrderRepository (POST /orders/quote, /orders).
 import 'package:flutter/foundation.dart';
 import '../api/idempotency.dart';
+import '../data/cart_store.dart';
 import '../models/cart_item.dart';
 import '../models/product_model.dart';
 
@@ -10,8 +12,15 @@ enum AddResult { added, differentMerchant }
 
 /// Keranjang multi-menu untuk satu toko (semua baris harus dari toko yang sama).
 class CartProvider extends ChangeNotifier {
+  /// [store] menyimpan isi keranjang di perangkat setiap kali berubah; null = hanya di memori.
+  CartProvider({this._store});
+
+  final CartStore? _store;
   final List<CartItem> _items = [];
   String? _idemKey;
+
+  /// True setelah isi keranjang pernah diubah; [restore] lalu tidak menimpanya dengan data lama.
+  bool _changedSinceStart = false;
 
   /// Isi keranjang (salinan tak-bisa-diubah; ubah lewat metode provider ini).
   List<CartItem> get items => List.unmodifiable(_items);
@@ -21,9 +30,22 @@ class CartProvider extends ChangeNotifier {
   /// ditutup lalu dibuka lagi) sampai isi keranjang berubah atau dikosongkan.
   String get idempotencyKey => _idemKey ??= newIdempotencyKey();
 
-  /// Isi keranjang berubah: niat checkout baru, kunci lama tidak berlaku.
+  /// Isi keranjang berubah: niat checkout baru, kunci lama tidak berlaku; isi baru disimpan ke perangkat.
   void _changed() {
     _idemKey = null;
+    _changedSinceStart = true;
+    _store?.save(_items);
+    notifyListeners();
+  }
+
+  /// Mengisi keranjang dengan isi yang tersimpan di perangkat (dipanggil sekali saat aplikasi dibuka).
+  /// Tidak melakukan apa-apa bila tidak ada [CartStore] atau keranjang sudah diubah selama data dibaca.
+  Future<void> restore() async {
+    final store = _store;
+    if (store == null) return;
+    final savedItems = await store.load();
+    if (_changedSinceStart || savedItems.isEmpty) return;
+    _items.addAll(savedItems);
     notifyListeners();
   }
 

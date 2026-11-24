@@ -16,6 +16,7 @@ import 'core/app_routes.dart';
 import 'data/ai_history_store.dart';
 import 'data/assistant_repository.dart';
 import 'data/auth_repository.dart';
+import 'data/cart_store.dart';
 import 'data/catalog_repository.dart';
 import 'data/favorite_repository.dart';
 import 'data/voucher_repository.dart';
@@ -111,7 +112,8 @@ Widget buildAppProviders({
 
   // Keranjang, favorit, lencana notifikasi & titik tiket milik sesi:
   // dikosongkan saat logout / sesi tidak valid.
-  final cart = CartProvider();
+  // Isi keranjang disimpan di perangkat dan dipulihkan sejak awal (tahan muat ulang web).
+  final cart = CartProvider(store: CartStore())..restore();
   final favoriteRepo = FavoriteRepository(api);
   final voucherRepo = VoucherRepository(api);
   final promoContentRepo = PromoContentRepository(api);
