@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/data/catalog_repository.dart';
+import 'package:kateringkita_pbl/providers/cart_provider.dart';
 import 'package:kateringkita_pbl/screens/home/home_screen.dart';
 import 'package:kateringkita_pbl/screens/home/search_screen.dart';
 import 'package:kateringkita_pbl/widgets/food_card.dart';
@@ -52,8 +53,11 @@ Widget _wrap(List<http.Request> log, Widget child,
       return _json(menus);
     }),
   );
-  return Provider<CatalogRepository>.value(
-    value: CatalogRepository(api),
+  return MultiProvider(
+    providers: [
+      Provider<CatalogRepository>.value(value: CatalogRepository(api)),
+      ChangeNotifierProvider(create: (_) => CartProvider()),
+    ],
     child: MaterialApp(home: child),
   );
 }
@@ -141,8 +145,11 @@ void _raceTest() {
         return _json(_menus([]));
       }),
     );
-    await tester.pumpWidget(Provider<CatalogRepository>.value(
-      value: CatalogRepository(api),
+    await tester.pumpWidget(MultiProvider(
+      providers: [
+        Provider<CatalogRepository>.value(value: CatalogRepository(api)),
+        ChangeNotifierProvider(create: (_) => CartProvider()),
+      ],
       child: const MaterialApp(home: HomeScreen()),
     ));
     await tester.pumpAndSettle();

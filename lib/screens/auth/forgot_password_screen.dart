@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'package:provider/provider.dart';
+
+import '../../api/api_exception.dart';
 import '../../core/app_colors.dart';
+import '../../data/auth_repository.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../widgets/auth_scaffold.dart';
@@ -44,16 +48,21 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     }
 
     setState(() => _isLoading = true);
-    // Dummy: simulasi request ke backend (diganti API saat UAS).
-    await Future<void>.delayed(const Duration(milliseconds: 900));
+    final email = _emailController.text.trim();
+    try {
+      await context.read<AuthRepository>().forgotPassword(email);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _emailError = e.field('email') ?? e.message;
+      });
+      return;
+    }
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    Navigator.pushNamed(
-      context,
-      AppRoutes.verifyCode,
-      arguments: _emailController.text.trim(),
-    );
+    Navigator.pushNamed(context, AppRoutes.verifyCode, arguments: email);
   }
 
   @override

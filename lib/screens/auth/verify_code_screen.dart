@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 
+import 'package:provider/provider.dart';
+
+import '../../api/api_exception.dart';
 import '../../core/app_colors.dart';
+import '../../data/auth_repository.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../widgets/auth_scaffold.dart';
@@ -19,6 +23,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
 
   String _code = '';
   bool _hasError = false;
+  String? _serverError;
   bool _isLoading = false;
 
   Future<void> _verify(String email) async {
@@ -28,27 +33,50 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
-    // Dummy: kode 6 digit apa pun dianggap valid (validasi asli di UAS).
-    await Future<void>.delayed(const Duration(milliseconds: 800));
+    setState(() {
+      _isLoading = true;
+      _serverError = null;
+    });
+    try {
+      await context.read<AuthRepository>().verifyCode(
+        email: email,
+        code: _code,
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _serverError = e.field('code') ?? e.message;
+      });
+      return;
+    }
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    Navigator.pushNamed(context, AppRoutes.resetPassword, arguments: email);
+    Navigator.pushNamed(
+      context,
+      AppRoutes.resetPassword,
+      arguments: {'email': email, 'code': _code},
+    );
   }
 
-  void _resendCode() {
+  Future<void> _resendCode(String email) async {
+    String message;
+    try {
+      message = await context.read<AuthRepository>().forgotPassword(email);
+    } on ApiException catch (e) {
+      message = e.message;
+    }
+    if (!mounted) return;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('Kode baru telah dikirim ke email Anda')),
-      );
+      ..showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
-    final email = args is String ? args : 'username@student.ub.ac.id';
+    final email = args is String ? args : '';
 
     return AuthScaffold(
       child: Column(
@@ -67,7 +95,8 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
               style: AppTextStyles.bodyMedium.copyWith(fontSize: 12.5),
               children: [
                 const TextSpan(
-                  text: 'Enter the 6-digit verification code sent to your email ',
+                  text:
+                      'Enter the 6-digit verification code sent to your email ',
                 ),
                 TextSpan(
                   text: email,
@@ -83,14 +112,20 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
           const SizedBox(height: 24),
           OtpInput(
             length: _codeLength,
-            hasError: _hasError,
+            hasError: _hasError || _serverError != null,
             onChanged: (value) {
               _code = value;
-              if (_hasError) setState(() => _hasError = false);
+              if (_hasError || _serverError != null) {
+                setState(() {
+                  _hasError = false;
+                  _serverError = null;
+                });
+              }
             },
           ),
           if (_hasError)
             const AuthFieldError('Masukkan 6 digit kode verifikasi'),
+          AuthFieldError(_serverError),
           const SizedBox(height: 24),
           PrimaryButton(
             text: 'Verify & Continue',
@@ -109,7 +144,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
                   ),
                 ),
                 GestureDetector(
-                  onTap: _resendCode,
+                  onTap: () => _resendCode(email),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text(

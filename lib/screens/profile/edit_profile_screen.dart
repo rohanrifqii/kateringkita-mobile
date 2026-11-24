@@ -8,7 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/app_text_styles.dart';
-import '../../data/app_database.dart';
+import '../../api/api_exception.dart';
+import '../../models/api_user.dart';
 import '../../data/auth_repository.dart';
 import '../../providers/theme_provider.dart';
 
@@ -95,7 +96,7 @@ class UserProfileExtras {
 
 /// Halaman "Ubah Profil" (Kelola Profil) bergaya Shopee dengan tema KateringKita
 class EditProfileScreen extends StatefulWidget {
-  final User? initialUser;
+  final ApiUser? initialUser;
   final UserProfileExtras initialExtras;
 
   const EditProfileScreen({
@@ -149,16 +150,24 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   }
 
   Future<void> _persistChanges({String? oldEmail}) async {
-    final db = context.read<AppDb>();
-    final repo = AuthRepository(db);
+    final repo = context.read<AuthRepository>();
     if (_userId != null) {
-      await repo.updateProfile(
-        userId: _userId!,
-        oldEmail: oldEmail ?? _email,
-        fullName: _name,
-        phone: _phone,
-        newEmail: _email,
-      );
+      // Catatan: server meminta current_password untuk ganti email/HP;
+      // layar ini belum punya field sandi (ditangani di rencana profil).
+      try {
+        await repo.updateProfile(
+          userId: _userId!,
+          oldEmail: oldEmail ?? _email,
+          fullName: _name,
+          phone: _phone,
+          newEmail: _email,
+        );
+      } on ApiException catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(e.message)));
+        }
+      }
     }
     await UserProfileExtras.save(_email, _extras);
   }

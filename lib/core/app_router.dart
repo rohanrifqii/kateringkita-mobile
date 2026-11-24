@@ -23,6 +23,9 @@ import '../screens/profile/profile_screen.dart';
 import '../screens/splash/splash_screen.dart';
 import 'app_routes.dart';
 
+/// Navigator global (dipakai mis. saat sesi kedaluwarsa).
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
 /// Central route table for the app.
 class AppRouter {
   AppRouter._();
@@ -36,7 +39,10 @@ class AppRouter {
     AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
     AppRoutes.verifyCode: (context) => const VerifyCodeScreen(),
     AppRoutes.resetPassword: (context) => const ResetPasswordScreen(),
-    AppRoutes.mainNav: (context) => const MainNavigationScreen(),
+    AppRoutes.mainNav: (context) {
+      final a = ModalRoute.of(context)?.settings.arguments;
+      return MainNavigationScreen(initialIndex: a is int ? a : 0);
+    },
     AppRoutes.home: (context) => const HomeScreen(),
     AppRoutes.search: (context) => const SearchScreen(),
     AppRoutes.productDetail: (context) => const ProductDetailScreen(),
