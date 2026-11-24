@@ -109,7 +109,8 @@ class _PaymentScreenState extends State<PaymentScreen>
   void didChangeDependencies() {
     super.didChangeDependencies();
     // 1. Pesanan disiapkan sekali saja.
-    if (_orderLoaded || _loadingOrder) return;
+    // Setelah gagal dimuat, pengguna yang mencoba lagi lewat tombol (tidak otomatis).
+    if (_orderLoaded || _loadingOrder || _error != null) return;
     _repo = context.read<OrderRepository>();
     final argument = ModalRoute.of(context)?.settings.arguments;
     // 2. Pesanan dari argumen rute: langsung tampil, lalu disegarkan dari server.
