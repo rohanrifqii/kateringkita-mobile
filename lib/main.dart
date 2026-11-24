@@ -1,6 +1,6 @@
 // Titik masuk aplikasi: membaca pilihan tema tersimpan, lalu memasang semua provider (tema, keranjang, ApiClient,
-// auth, katalog, pesanan, favorit, voucher, konten promo, notifikasi, tiket Bantuan, Asisten AI, riwayat AI)
-// di atas seluruh layar.
+// auth, katalog, pesanan, chat pesanan, favorit, voucher, konten promo, notifikasi, tiket Bantuan, Asisten AI,
+// riwayat AI) di atas seluruh layar.
 // Layar membaca provider ini untuk mengakses data: layar → provider → repository → ApiClient → backend.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -117,6 +117,8 @@ Widget buildAppProviders({
   final promoContentRepo = PromoContentRepository(api);
   final favorites = FavoritesProvider(favoriteRepo);
   final notificationRepo = NotificationRepository(api);
+  // Repository chat dipakai bersama: oleh layar Chat dan oleh NotificationProvider
+  // (jumlah chat pesanan yang belum dibaca).
   final orderChatRepo = OrderChatRepository(api);
   final notifications =
       NotificationProvider(notificationRepo, chatRepository: orderChatRepo);
@@ -159,7 +161,7 @@ Widget buildAppProviders({
 }
 
 /// Widget akar aplikasi: membuat [MaterialApp] dengan tema terang/gelap dari [ThemeProvider]
-/// dan daftar rute dari [AppRouter]. Setiap layar dibungkus [PhoneFrame] (di web dengan layar
+/// dan daftar rute dari [AppRouter] (termasuk `onGenerateRoute` untuk Lacak Pesanan dan Chat). Setiap layar dibungkus [PhoneFrame] (di web dengan layar
 /// lebih lebar dari ponsel, aplikasi tampil selebar ponsel di tengah).
 ///
 /// Widget ini dibangun ulang setiap kali tema berubah, dan saat itu juga menyalin status

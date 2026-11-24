@@ -10,9 +10,9 @@ import '../core/pickup_time.dart';
 
 /// Daftar langkah pesanan dari atas ke bawah, satu baris per langkah.
 ///
-/// Langkah yang sudah lewat dan yang sedang berjalan menampilkan jamnya dalam
-/// WIB (misalnya "09:05", atau "23 Nov 09:05" bila bukan hari ini). Langkah
-/// yang belum terjadi tidak punya jam.
+/// Langkah yang sudah lewat, sedang berjalan, atau gagal menampilkan jamnya
+/// dalam WIB bila tercatat (misalnya "09:05", atau "23 Nov 09:05" bila bukan
+/// hari ini). Langkah yang belum terjadi tidak menampilkan jam.
 class OrderStepTimeline extends StatelessWidget {
   const OrderStepTimeline({super.key, required this.steps});
 

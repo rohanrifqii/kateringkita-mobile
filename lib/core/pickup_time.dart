@@ -1,5 +1,6 @@
 // Aturan dan format waktu ambil pesanan dalam zona WIB, dipakai layar checkout untuk memilih dan
 // memeriksa waktu ambil sebelum pesanan dikirim ke backend (yang menyimpan waktu dalam UTC).
+// Fungsi format jamnya juga dipakai Lacak Pesanan dan Chat pesanan untuk menampilkan jam WIB.
 
 /// Selisih zona WIB dari UTC: +7 jam, tanpa pergeseran musim panas (DST).
 const Duration wibOffset = Duration(hours: 7);
@@ -42,6 +43,7 @@ const _months = [
   'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
 ];
 
+/// Angka dua digit dengan nol di depan, mis. 5 → "05".
 String _two(int v) => v.toString().padLeft(2, '0');
 
 /// Tanggal WIB dari instan [utc], mis. "Sab, 14 Nov 2026".
@@ -78,7 +80,7 @@ String formatWibStepTime(DateTime utc, {DateTime? nowUtc}) {
   return '${wallClock.day} ${_months[wallClock.month - 1]} $clock';
 }
 
-/// Mis. "Sab, 14 Nov 2026 · 10:00 WIB".
+/// Tanggal dan jam WIB dari instan [utc], mis. "Sab, 14 Nov 2026 · 10:00 WIB".
 String formatWib(DateTime utc) {
   final w = toWibWallClock(utc);
   return '${formatWibDate(utc)} · ${_two(w.hour)}:${_two(w.minute)} WIB';

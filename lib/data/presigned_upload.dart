@@ -1,5 +1,6 @@
 // Unggah foto langsung ke penyimpanan lewat alamat unggah bertanda tangan
-// (presign). Dipakai bersama oleh foto profil dan foto chat pesanan.
+// (presign). Dipakai bersama oleh foto profil (AuthRepository) dan foto chat pesanan
+// (OrderChatRepository); alamatnya diminta dulu dari backend oleh repository masing-masing.
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -9,6 +10,7 @@ import '../api/api_exception.dart';
 /// Batas ukuran foto yang diterima server (5 MB).
 const int photoMaxBytes = 5242880;
 
+/// Ekstensi berkas yang diterima → content type yang dikirim ke server.
 const _photoContentTypes = {
   'jpg': 'image/jpeg',
   'jpeg': 'image/jpeg',
@@ -16,6 +18,7 @@ const _photoContentTypes = {
   'webp': 'image/webp',
 };
 
+/// Batas waktu satu PUT ke penyimpanan sebelum dianggap gagal.
 const _uploadTimeout = Duration(seconds: 60);
 
 /// Content type foto dari tipe yang dilaporkan pemilih berkas, atau dari
@@ -39,6 +42,9 @@ String? photoContentType(String fileName, {String? mimeType}) {
 /// [contentType] dan panjang [bytes]. Header Authorization aplikasi sengaja
 /// tidak dikirim.
 ///
+/// @param url alamat PUT bertanda tangan dari backend.
+/// @param contentType tipe foto, hasil [photoContentType].
+/// @param bytes isi berkas foto.
 /// @param client klien HTTP untuk test; null berarti klien baru yang langsung
 ///   ditutup setelah selesai.
 /// @throws ApiException `UPLOAD_FAILED` bila jaringan putus, waktu habis, atau

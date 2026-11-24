@@ -1,7 +1,6 @@
-// Halaman Lacak Pesanan untuk pembeli: status sekarang dalam ukuran besar,
-// urutan langkah beserta jamnya, titik temu, ringkasan singkat, dan tombol
-// Chat. Data diperbarui otomatis tiap 15 detik selama halaman terlihat dan
-// aplikasi ada di depan. Hanya halaman ini yang memakai tema shadcn_ui.
+// Halaman Lacak Pesanan untuk pembeli (rute /order-tracking/<kode>), dibuka dari kartu di daftar Pesanan atau
+// notifikasi status pesanan: status besar, linimasa langkah beserta jamnya, titik temu, ringkasan, dan tombol Chat.
+// Data dari OrderRepository (GET /orders/:code), diperbarui tiap 15 detik; tema shadcn_ui sama dengan halaman Chat.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -38,15 +37,29 @@ class OrderTrackingScreen extends StatefulWidget {
   State<OrderTrackingScreen> createState() => _OrderTrackingScreenState();
 }
 
+/// State Lacak Pesanan: detail pesanan terakhir, timer cek berkala, dan status muat/galat.
+/// [WidgetsBindingObserver] dipakai untuk tahu kapan aplikasi pindah ke latar belakang.
 class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     with WidgetsBindingObserver {
+  // Jeda antar-cek detail pesanan.
   static const _refreshInterval = Duration(seconds: 15);
 
+  // Detail pesanan terakhir dari server; null sebelum pemuatan pertama berhasil.
   OrderApiModel? _order;
+
+  // Pesan galat pemuatan; hanya tampil bila [_order] masih null.
   String? _errorMessage;
+
+  // Benar selama permintaan berjalan, supaya cek berkala tidak menumpuk.
   bool _fetching = false;
+
+  // Benar bila aplikasi sedang di depan (tidak di latar belakang).
   bool _foreground = true;
+
+  // Benar bila halaman ini rute teratas (tidak tertutup halaman lain, mis. Chat).
   bool _routeVisible = true;
+
+  // Timer cek berkala; dibatalkan di dispose atau saat pesanan berakhir.
   Timer? _refreshTimer;
 
   @override
@@ -79,16 +92,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     super.dispose();
   }
 
-  /// Cek berkala: hanya saat terlihat, di depan, tidak sedang mengambil, dan
-  /// pesanan belum berakhir (status akhir tidak akan berubah lagi).
+  // Cek berkala: hanya saat terlihat, di depan, tidak sedang mengambil, dan
+  // pesanan belum berakhir (status akhir tidak akan berubah lagi).
   void _refresh() {
     if (!mounted || !_foreground || !_routeVisible || _fetching) return;
     if (_order?.isFinished ?? false) return;
     _load();
   }
 
-  /// Mengambil detail pesanan. Bila cek berkala gagal, data terakhir tetap
-  /// tampil; pesan galat hanya muncul bila belum ada data sama sekali.
+  // Mengambil detail pesanan (`GET /orders/:code`). Bila cek berkala gagal, data terakhir tetap
+  // tampil; pesan galat hanya muncul bila belum ada data sama sekali.
   Future<void> _load() async {
     _fetching = true;
     try {
@@ -114,6 +127,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     }
   }
 
+  // Tombol "Coba Lagi": hapus pesan galat (indikator muat tampil lagi), lalu muat ulang.
   void _retry() {
     setState(() => _errorMessage = null);
     _load();
@@ -146,6 +160,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     );
   }
 
+  // Pesan galat di tengah layar dengan tombol "Coba Lagi".
   Widget _errorState(String message) => Center(
     child: Padding(
       padding: const EdgeInsets.all(32),
@@ -164,7 +179,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     ),
   );
 
-  // Scroll hanya cadangan untuk layar pendek; di layar umum semuanya muat.
+  // Isi halaman: kartu status, kartu linimasa langkah ([buildOrderSteps] → [OrderStepTimeline]), dan kartu titik
+  // temu. Scroll hanya cadangan untuk layar pendek; di layar umum semuanya muat.
   Widget _details(OrderApiModel order) => SingleChildScrollView(
     padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
     child: Column(
@@ -182,6 +198,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     ),
   );
 
+  // Kartu status: nama toko dan kode, label status besar (merah bila batal/kedaluwarsa, plus alasan batal bila
+  // ada), lalu jumlah menu dan total harga.
   Widget _statusCard(OrderApiModel order) {
     final isFailed = order.status == 'cancelled' || order.status == 'expired';
     final cancelReason = order.cancelReason;
@@ -223,6 +241,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     );
   }
 
+  // Kartu titik temu: nama dan keterangan titik, serta jam ambil (WIB) bila sudah ditentukan.
   Widget _pickupCard(OrderApiModel order) {
     final description = order.pickupPoint.description;
     final pickupAt = order.pickupAt;
@@ -276,20 +295,20 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen>
     );
   }
 
-  /// Membuka halaman Chat, lalu mengambil ulang detail supaya badge pesan
-  /// belum dibaca ikut diperbarui (juga untuk pesanan yang sudah berakhir).
+  // Membuka halaman Chat, lalu mengambil ulang detail supaya badge pesan
+  // belum dibaca ikut diperbarui (juga untuk pesanan yang sudah berakhir).
   Future<void> _openChat(OrderApiModel order) async {
     await Navigator.pushNamed(context, AppRoutes.orderChatFor(order.code));
     if (mounted && !_fetching) _load();
   }
 
-  /// Tombol Chat di bagian bawah, dengan badge jumlah pesan penjual yang
-  /// belum dibaca. Chat bisa dibuka saat terbuka, dan sesudah pesanan berakhir
-  /// untuk membaca riwayatnya. Selama pesanan menunggu, atau untuk pesanan
-  /// meja, tombol nonaktif dengan keterangannya.
-  ///
-  /// @param order pesanan yang sedang dilacak, beserta keadaan chat-nya.
-  /// @returns tombol Chat selebar layar, plus keterangan bila nonaktif.
+  // Tombol Chat di bagian bawah, dengan badge jumlah pesan penjual yang
+  // belum dibaca. Chat bisa dibuka saat terbuka, dan sesudah pesanan berakhir
+  // untuk membaca riwayatnya. Selama pesanan menunggu, atau untuk pesanan
+  // meja, tombol nonaktif dengan keterangannya.
+  //
+  // @param order pesanan yang sedang dilacak, beserta keadaan chat-nya.
+  // @returns tombol Chat selebar layar, plus keterangan bila nonaktif.
   Widget _chatSection(OrderApiModel order) {
     // 1. Chat bisa dibuka bila tersedia dan sudah dimulai (penjual sudah
     //    menerima pesanan); sesudah pesanan berakhir pun tetap bisa dibaca.

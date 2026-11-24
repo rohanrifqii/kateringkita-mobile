@@ -3,7 +3,7 @@
 // shadcn kita memakai Plus Jakarta Sans, dan ShadButton/ShadCard tidak
 // menggambar ikon Lucide, jadi berkas ini hanya menambah ukuran unduhan.
 //
-// Jalankan sesudah `flutter build web`:
+// Jalankan dari akar proyek sesudah `flutter build web` (tool/build_web.ps1 sudah menjalankannya otomatis):
 //   dart run tool/strip_unused_web_fonts.dart
 // Aman dijalankan berulang: jalan kedua tidak membuang apa-apa lagi.
 import 'dart:convert';
@@ -49,6 +49,9 @@ bool isUnusedFontFamily(String family) =>
   return (kept: kept, removedAssets: removedAssets);
 }
 
+/// Titik masuk skrip: menyaring `build/web/assets/FontManifest.json`, menghapus
+/// berkas font yang dibuang, lalu mencetak ringkasannya. Keluar dengan kode 1
+/// bila hasil build web belum ada.
 void main() {
   // 1. Tolak jalan bila belum ada hasil build web.
   final assetsDir = Directory('build/web/assets');

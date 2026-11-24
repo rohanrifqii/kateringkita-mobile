@@ -1,5 +1,6 @@
 // Tabel rute aplikasi: memetakan nama rute di AppRoutes ke layar yang dibuka lewat Navigator.pushNamed.
-// Dipasang ke MaterialApp di main.dart; juga menyediakan appNavigatorKey untuk navigasi tanpa BuildContext.
+// Lacak Pesanan dan Chat pesanan (kode pesanan ada di alamat) dibuat oleh onGenerateRoute. Dipasang ke
+// MaterialApp di main.dart; juga menyediakan appNavigatorKey untuk navigasi tanpa BuildContext.
 import 'package:flutter/material.dart';
 
 import '../screens/ai/ai_assistant_screen.dart';

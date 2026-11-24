@@ -1,6 +1,7 @@
 // Chat satu pesanan antara pembeli dan penjual lewat REST backend: membaca dan
 // mengirim pesan, menandai sudah dibaca, mengunggah foto, dan melaporkan chat.
-// Semua rute khusus pembeli pemilik pesanan.
+// Semua rute khusus pembeli pemilik pesanan. Alur: layar Chat / NotificationProvider →
+// OrderChatRepository → ApiClient → backend REST KateringKita.
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
@@ -25,10 +26,12 @@ class OrderChatRepository {
   final ApiClient _api;
   final http.Client? _uploadClient;
 
+  /// Alamat dasar chat satu pesanan: `/orders/<kode>/messages`.
   String _messagesPath(String code) =>
       '/orders/${Uri.encodeComponent(code)}/messages';
 
-  /// Mengambil pesan dan keadaan chat sebuah pesanan.
+  /// Mengambil pesan dan keadaan chat sebuah pesanan
+  /// (GET /orders/{kode}/messages).
   ///
   /// @param code kode pesanan.
   /// @param afterId bila diisi, hanya pesan dengan id lebih besar yang
@@ -52,7 +55,8 @@ class OrderChatRepository {
     );
   }
 
-  /// Mengirim satu pesan berisi teks, foto, atau keduanya.
+  /// Mengirim satu pesan berisi teks, foto, atau keduanya
+  /// (POST /orders/{kode}/messages).
   ///
   /// @param code kode pesanan yang chat-nya dikirimi pesan.
   /// @param body teks pesan; di-trim, dan tidak dikirim bila kosong.
@@ -77,7 +81,8 @@ class OrderChatRepository {
     return ChatMessage.fromJson(response.data as Map<String, dynamic>);
   }
 
-  /// Menandai pesan penjual sudah dibaca sampai [lastId].
+  /// Menandai pesan penjual sudah dibaca sampai [lastId]
+  /// (POST /orders/{kode}/messages/read).
   ///
   /// @param code kode pesanan yang chat-nya dibaca.
   /// @param lastId id pesan terakhir yang benar-benar tampil di layar; null
@@ -91,8 +96,10 @@ class OrderChatRepository {
     );
   }
 
-  /// Meminta alamat unggah bertanda tangan untuk satu foto chat.
+  /// Meminta alamat unggah bertanda tangan untuk satu foto chat
+  /// (POST /orders/{kode}/messages/upload).
   ///
+  /// @param code kode pesanan pemilik foto.
   /// @param contentType `image/jpeg`, `image/png`, atau `image/webp`.
   /// @param size ukuran foto dalam byte.
   /// @returns alamat PUT, alamat publik foto, dan batas waktu alamat PUT.
@@ -116,6 +123,7 @@ class OrderChatRepository {
   /// Tipe dan ukuran dicek dulu tanpa jaringan, lalu alamat unggah diminta
   /// lewat [requestUpload], dan berkas dikirim dengan PUT ke alamat itu.
   ///
+  /// @param code kode pesanan yang chat-nya dikirimi foto.
   /// @param fileName nama berkas, untuk menentukan tipe foto.
   /// @param mimeType tipe dari pemilih berkas; didahulukan dari ekstensi
   ///   [fileName] bila JPG, PNG, atau WebP.
@@ -149,8 +157,9 @@ class OrderChatRepository {
     return upload.publicUrl;
   }
 
-  /// Melaporkan chat ke admin.
+  /// Melaporkan chat ke admin (POST /orders/{kode}/chat-report).
   ///
+  /// @param code kode pesanan yang chat-nya dilaporkan.
   /// @param reason alasan laporan, 5–500 karakter setelah di-trim.
   /// @throws ApiException 409 `ALREADY_REPORTED` bila pembeli sudah pernah
   ///   melaporkan chat ini.
@@ -161,7 +170,8 @@ class OrderChatRepository {
     );
   }
 
-  /// Jumlah pesan penjual yang belum dibaca di semua pesanan pembeli.
+  /// Jumlah pesan penjual yang belum dibaca di semua pesanan pembeli
+  /// (GET /me/chats/unread).
   ///
   /// @returns total untuk badge tab Pesanan.
   /// @throws ApiException bila jaringan gagal.
@@ -171,6 +181,8 @@ class OrderChatRepository {
     return (data['total'] as num?)?.toInt() ?? 0;
   }
 
+  /// Galat 400 `VALIDATION_ERROR` buatan klien untuk foto yang ditolak
+  /// sebelum dikirim ke server.
   static ApiException _invalidPhoto(String message) =>
       ApiException(status: 400, code: 'VALIDATION_ERROR', message: message);
 }

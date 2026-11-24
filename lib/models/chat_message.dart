@@ -1,5 +1,6 @@
 // Model chat satu pesanan antara pembeli dan penjual: satu pesan, keadaan chat
 // untuk pembeli, dan fungsi untuk menggabungkan pesan hasil cek berkala.
+// Dibuat dari JSON oleh OrderChatRepository dan ditampilkan di layar Chat pesanan.
 
 /// Satu pesan chat pesanan (teks, foto, atau keduanya).
 class ChatMessage {
@@ -75,7 +76,8 @@ class ChatState {
 
   /// Membaca keadaan chat dari JSON server.
   ///
-  /// @param json objek `ChatState` bersama (lihat spec chat pesanan).
+  /// @param json objek `chat` dari server: `{available, is_open,
+  ///   closed_reason, unread_count, other_party_last_read_id, reported_by_me}`.
   /// @returns keadaan chat; angka yang hilang dianggap 0.
   /// @throws TypeError bila `available` atau `is_open` bukan boolean.
   factory ChatState.fromJson(Map<String, dynamic> json) => ChatState(

@@ -1,5 +1,7 @@
-// Provider jumlah notifikasi belum dibaca untuk lencana lonceng (NotificationBell) dan layar Notifikasi.
-// Alur: NotificationBell/layar → NotificationProvider → NotificationRepository → ApiClient → backend.
+// Provider jumlah notifikasi belum dibaca untuk lencana lonceng (NotificationBell) dan layar Notifikasi,
+// serta jumlah chat pesanan belum dibaca untuk badge tab Pesanan (CustomBottomNavbar).
+// Alur: NotificationBell/layar → NotificationProvider → NotificationRepository / OrderChatRepository → ApiClient
+// → backend.
 import 'package:flutter/foundation.dart';
 
 import '../data/notification_repository.dart';
@@ -26,13 +28,15 @@ class NotificationProvider extends ChangeNotifier {
   /// Jumlah pesan penjual yang belum dibaca di semua pesanan pembeli.
   int get chatUnreadCount => _chatUnread;
 
+  /// Mencegah permintaan ganda saat refresh dipanggil berulang.
   bool _fetching = false;
 
   /// Naik saat [clear]; jawaban dari sesi sebelumnya diabaikan.
   int _epoch = 0;
 
-  /// Ambil ulang jumlah notifikasi dan chat belum dibaca. Galat diabaikan
-  /// (lencana tetap), masing-masing tanpa saling memengaruhi.
+  /// Ambil ulang jumlah notifikasi dan chat belum dibaca dari server, keduanya
+  /// bersamaan. Diabaikan bila permintaan sebelumnya belum selesai. Galat
+  /// diabaikan (lencana tetap), masing-masing tanpa saling memengaruhi.
   Future<void> refresh() async {
     if (_fetching) return;
     final epoch = _epoch;
@@ -44,6 +48,9 @@ class NotificationProvider extends ChangeNotifier {
     }
   }
 
+  /// Jumlah notifikasi belum dibaca (GET /me/notifications lewat
+  /// [NotificationRepository.unreadCount]);
+  /// hasilnya dibuang bila [epoch] sudah usang (pengguna keluar di tengah jalan).
   Future<void> _refreshNotifications(int epoch) async {
     try {
       final unreadCount = await _repo.unreadCount();
@@ -53,6 +60,8 @@ class NotificationProvider extends ChangeNotifier {
     }
   }
 
+  /// Jumlah chat belum dibaca (GET /me/chats/unread); dilewati bila provider
+  /// dibuat tanpa [OrderChatRepository].
   Future<void> _refreshChat(int epoch) async {
     final chatRepository = _chatRepository;
     if (chatRepository == null) return;
@@ -64,6 +73,8 @@ class NotificationProvider extends ChangeNotifier {
     }
   }
 
+  /// Simpan [total] chat belum dibaca (negatif dianggap 0); beri tahu
+  /// pendengar hanya bila nilainya berubah.
   void _setChatUnread(int total) {
     final value = total < 0 ? 0 : total;
     if (value == _chatUnread) return;
@@ -71,7 +82,8 @@ class NotificationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Dipakai saat server sudah mengembalikan `unread_count` (daftar/tandai).
+  /// Setel jumlah notifikasi belum dibaca ke [n] (negatif dianggap 0). Dipakai
+  /// saat server sudah mengembalikan `unread_count` (daftar/tandai).
   void setUnread(int n) {
     final v = n < 0 ? 0 : n;
     if (v == _unread) return;
@@ -79,8 +91,8 @@ class NotificationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Dipanggil saat keluar / sesi tidak valid: lencana jadi 0 dan jawaban
-  /// permintaan yang masih berjalan diabaikan.
+  /// Dipanggil saat keluar / sesi tidak valid: lencana lonceng dan badge chat
+  /// jadi 0, dan jawaban permintaan yang masih berjalan diabaikan.
   void clear() {
     _epoch++;
     _fetching = false;

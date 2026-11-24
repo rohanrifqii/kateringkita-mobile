@@ -1,10 +1,12 @@
 // Widget gambar menu/toko dari URL yang dikirim backend REST KateringKita (misalnya
 // ProductModel.imageUrl, banner, pop-up promo), dipakai kartu, layar katalog, dan pop-up promo.
+// Juga berisi decodeWidthFor, yang dipakai bersama ProfileAvatar agar foto didekode seukuran tampilnya.
 import 'package:flutter/material.dart';
 
-/// Lebar piksel untuk mendekode gambar: [logicalWidth] dikali kerapatan piksel.
-/// Mengembalikan null bila lebar tidak terhingga atau tidak valid, sehingga
-/// gambar didekode apa adanya.
+/// Lebar piksel untuk mendekode gambar: [logicalWidth] dikali
+/// [devicePixelRatio] (kerapatan piksel layar), dibulatkan.
+/// Mengembalikan null bila lebar null, tidak terhingga, atau ≤ 0, sehingga
+/// gambar didekode apa adanya (ukuran asli).
 int? decodeWidthFor(double? logicalWidth, double devicePixelRatio) {
   if (logicalWidth == null || !logicalWidth.isFinite || logicalWidth <= 0) {
     return null;
@@ -46,6 +48,7 @@ class MenuImage extends StatelessWidget {
   Widget _box() =>
       Container(width: width, height: height, color: Colors.grey.shade200);
 
+  /// Gambar dari jaringan [u], didekode selebar [cacheWidth] piksel (null = ukuran asli).
   Widget _network(String u, int? cacheWidth) => Image.network(
         u,
         width: width,

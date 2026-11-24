@@ -1,3 +1,6 @@
+// Model pesanan, pembayaran, rincian harga (quote), jam tiap langkah status, dan keadaan chat sebagaimana
+// dikirim backend REST KateringKita. Dibuat oleh OrderRepository dan dipakai layar checkout, pembayaran, daftar
+// pesanan, Lacak Pesanan, Chat, ulasan, dan form tiket. Semua nominal uang berupa bilangan bulat Rupiah.
 import 'chat_message.dart';
 import 'pickup_point.dart';
 import 'product_model.dart';
@@ -165,6 +168,11 @@ class OrderTimeline {
       );
 }
 
+/// Satu pesanan lengkap dari backend, dipakai layar pesanan, Lacak Pesanan, Chat, pembayaran,
+/// dan WhatsApp.
+///
+/// [OrderApiModel.fromJson] mengubah objek JSON pesanan menjadi kelas ini; data toko diambil
+/// dari objek `merchant` di dalam JSON tersebut.
 class OrderApiModel {
   /// Kode pesanan dari backend (kolom `code`).
   final String code;
@@ -258,6 +266,8 @@ class OrderApiModel {
   bool get isFinished =>
       status == 'completed' || status == 'cancelled' || status == 'expired';
 
+  /// Membaca satu pesanan dari JSON server. `timeline` yang tidak dikirim menjadi
+  /// [OrderTimeline] kosong, `chat` yang tidak dikirim menjadi null.
   factory OrderApiModel.fromJson(Map<String, dynamic> json) {
     final merchant = json['merchant'] as Map<String, dynamic>;
     return OrderApiModel(

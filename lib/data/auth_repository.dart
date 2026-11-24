@@ -22,7 +22,8 @@ class AuthRepository {
   /// aplikasi). null: klien baru per unggahan.
   final http.Client? _uploadClient;
 
-  /// Batas ukuran foto profil, sama dengan server.
+  /// Batas ukuran foto profil (5 MB), sama dengan server; diambil dari
+  /// [photoMaxBytes] yang juga dipakai foto chat.
   static const int avatarMaxBytes = photoMaxBytes;
 
   /// Dipanggil saat [currentUser] mendapati sesi tidak valid (401) dan token
@@ -179,12 +180,12 @@ class AuthRepository {
   }
 
   /// Content type foto dari ekstensi [fileName], atau null bila bukan
-  /// JPG/PNG/WebP.
+  /// JPG/PNG/WebP. Meneruskan ke [photoContentType] di presigned_upload.dart.
   static String? avatarContentType(String fileName) =>
       photoContentType(fileName);
 
   /// Ganti foto profil: minta URL presign (POST /me/avatar), PUT berkas ke
-  /// penyimpanan, lalu simpan public_url ke profil (PATCH /me). Tipe & ukuran
+  /// penyimpanan lewat [putToPresignedUrl], lalu simpan public_url ke profil (PATCH /me). Tipe & ukuran
   /// dicek dulu tanpa jaringan. Galat berupa [ApiException] dengan pesan siap
   /// tampil.
   Future<ApiUser> uploadAvatar({

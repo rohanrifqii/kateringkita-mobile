@@ -1,6 +1,6 @@
 // Logika murni halaman Lacak Pesanan: mengubah status pesanan dan jam-jam di
 // `timeline` menjadi urutan langkah yang siap digambar. Tidak ada widget di
-// sini supaya mudah diuji.
+// sini supaya mudah diuji; hasilnya digambar oleh OrderStepTimeline di layar Lacak Pesanan.
 import '../models/order_api_model.dart';
 
 /// Keadaan satu langkah di urutan Lacak Pesanan.
@@ -27,7 +27,8 @@ class OrderStep {
 /// Menyusun langkah Lacak Pesanan dari [order].
 ///
 /// Pesanan yang berjalan normal selalu punya empat langkah: Diterima, Dimasak,
-/// Siap diambil, dan Selesai. Selama status `holding`, satu langkah tunggu
+/// Siap diambil, dan Selesai. Selama status `holding` (atau status lain yang
+/// tidak dikenal), satu langkah tunggu
 /// ("Menunggu pembayaran", atau "Menunggu konfirmasi" bila sudah dibayar)
 /// ditaruh di depan. Pesanan yang dibatalkan atau kedaluwarsa hanya
 /// menampilkan langkah yang sempat terjadi, lalu satu langkah akhir merah.

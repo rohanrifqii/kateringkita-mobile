@@ -1,7 +1,7 @@
 // Layar Notifikasi: dibuka dari ikon lonceng di Beranda. Daftarnya diambil dari server lewat NotificationRepository
 // (GET /me/notifications, tandai dibaca lewat POST /me/notifications/read) dan jumlah belum dibaca disinkronkan ke
 // NotificationProvider supaya lencana lonceng ikut berubah. Tamu hanya melihat ajakan masuk. Notifikasi diketuk
-// membuka daftar Pesanan (notifikasi pesanan) atau Detail Tiket (notifikasi balasan tiket Bantuan).
+// membuka Lacak Pesanan (notifikasi status pesanan) atau Detail Tiket (notifikasi balasan tiket Bantuan).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -16,7 +16,8 @@ import '../../models/app_notification.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
 
-/// Notifikasi in-app dari `GET /me/notifications`.
+/// Layar daftar notifikasi in-app milik pengguna yang login, diambil dari `GET /me/notifications` dengan paginasi
+/// 20 per halaman, filter chip per tipe, tandai dibaca satu per satu atau sekaligus, dan tarik-untuk-muat-ulang.
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
 

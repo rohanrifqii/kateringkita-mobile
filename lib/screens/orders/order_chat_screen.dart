@@ -1,7 +1,7 @@
-// Halaman Chat satu pesanan untuk pembeli: gelembung pesan teks dan foto,
-// pesan cepat, tanda "Dibaca", dan tombol Laporkan. Pesan baru diambil tiap
-// 5 detik selama halaman terlihat dan aplikasi ada di depan. Bila pesanan
-// sudah berakhir, riwayat tetap tampil dalam mode hanya-baca.
+// Halaman Chat satu pesanan untuk pembeli, dibuka dari tombol Chat di Lacak Pesanan (rute /order-chat/<kode>):
+// gelembung pesan teks dan foto, pesan cepat, tanda "Dibaca", dan tombol Laporkan. Data lewat OrderChatRepository
+// (GET/POST /orders/:code/messages, .../read, .../upload, POST /orders/:code/chat-report). Pesan baru diambil tiap
+// 5 detik selama halaman terlihat dan aplikasi ada di depan; pesanan yang sudah berakhir tampil hanya-baca.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -65,25 +65,41 @@ class OrderChatScreen extends StatefulWidget {
   State<OrderChatScreen> createState() => _OrderChatScreenState();
 }
 
+/// State halaman Chat: daftar pesan, keadaan chat dari server, timer cek berkala, dan status kirim/unggah.
+/// [WidgetsBindingObserver] dipakai untuk tahu kapan aplikasi pindah ke latar belakang.
 class _OrderChatScreenState extends State<OrderChatScreen>
     with WidgetsBindingObserver {
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
+
+  // Timer cek pesan baru tiap [chatPollInterval]; dibatalkan di dispose.
   Timer? _pollTimer;
 
+  // Semua pesan yang sudah diterima, urut id naik.
   List<ChatMessage> _messages = const [];
 
-  /// Id terbesar yang datang dari `fetch`. Pesan hasil kirim sendiri tidak
-  /// dihitung, supaya pesan penjual yang masuk lebih dulu tidak terlewat.
+  // Id terbesar yang datang dari `fetch`. Pesan hasil kirim sendiri tidak
+  // dihitung, supaya pesan penjual yang masuk lebih dulu tidak terlewat.
   int? _lastFetchedId;
+
+  // Keadaan chat terakhir dari server (terbuka/tertutup, belum dibaca, dilaporkan); null sebelum pemuatan pertama.
   ChatState? _chat;
+
+  // Pesan galat pemuatan pertama; hanya tampil bila [_chat] masih null.
   String? _errorMessage;
+
+  // Benar selama permintaan `fetch` berjalan, supaya cek berkala tidak menumpuk.
   bool _fetching = false;
   bool _sending = false;
   bool _uploading = false;
+
+  // Benar bila aplikasi sedang di depan (tidak di latar belakang).
   bool _foreground = true;
+
+  // Benar bila halaman ini rute teratas (tidak tertutup halaman lain).
   bool _routeVisible = true;
 
+  // Benar bila chat tertutup untuk selamanya (pesanan berakhir atau pesanan meja), jadi cek berkala tidak perlu.
   bool get _isFinallyClosed =>
       _finalClosedReasons.contains(_chat?.closedReason);
 
@@ -119,29 +135,31 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     super.dispose();
   }
 
-  /// Cek berkala: hanya saat terlihat, di depan, tidak sedang mengambil, dan
-  /// chat belum tertutup untuk selamanya.
+  // Cek berkala: hanya saat terlihat, di depan, tidak sedang mengambil, dan
+  // chat belum tertutup untuk selamanya.
   void _poll() {
     if (!mounted || !_foreground || !_routeVisible || _fetching) return;
     if (_isFinallyClosed) return;
     _load();
   }
 
+  // Menampilkan snackbar mengambang, menggantikan snackbar yang sedang tampil.
   void _showSnack(String text) => ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(
       SnackBar(content: Text(text), behavior: SnackBarBehavior.floating),
     );
 
-  /// Benar bila daftar belum tampil atau pembeli sedang di dekat pesan
-  /// terakhir. Pembeli yang menggulir ke atas membaca riwayat tidak ditarik
-  /// ke bawah oleh cek berkala.
+  // Benar bila daftar belum tampil atau pembeli sedang di dekat pesan
+  // terakhir. Pembeli yang menggulir ke atas membaca riwayat tidak ditarik
+  // ke bawah oleh cek berkala.
   bool get _isNearBottom {
     if (!_scrollController.hasClients) return true;
     final position = _scrollController.position;
     return position.maxScrollExtent - position.pixels <= _nearBottomDistance;
   }
 
+  // Menggulir ke pesan terakhir setelah frame berikutnya, saat daftar sudah memuat pesan baru.
   void _scrollToEnd() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
@@ -149,8 +167,8 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     });
   }
 
-  /// Mengambil pesan sesudah pesan terakhir hasil cek, lalu menandai pesan
-  /// penjual sudah dibaca. Bila gagal, pesan lama tetap tampil.
+  // Mengambil pesan sesudah pesan terakhir hasil cek, lalu menandai pesan
+  // penjual sudah dibaca. Bila gagal, pesan lama tetap tampil.
   Future<void> _load() async {
     _fetching = true;
     final repository = context.read<OrderChatRepository>();
@@ -194,6 +212,8 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     }
   }
 
+  // Mengirim tanda baca sampai pesan [lastId] (`POST /orders/:code/messages/read`), mengosongkan hitungan belum
+  // dibaca di layar, lalu menyegarkan NotificationProvider supaya badge chat di tab Pesanan ikut turun.
   Future<void> _markRead(OrderChatRepository repository, int lastId) async {
     try {
       await repository.markRead(widget.orderCode, lastId: lastId);
@@ -205,8 +225,8 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     }
   }
 
-  /// Mengirim teks atau foto. Bila server menjawab chat sudah tertutup,
-  /// halaman beralih ke mode hanya-baca tanpa membuang riwayat.
+  // Mengirim teks atau foto. Bila server menjawab chat sudah tertutup,
+  // halaman beralih ke mode hanya-baca tanpa membuang riwayat.
   Future<void> _send({String? body, String? imageUrl}) async {
     final text = body?.trim();
     final hasText = text != null && text.isNotEmpty;
@@ -250,8 +270,8 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     }
   }
 
-  /// Memilih foto dengan pemilih gambar yang sama seperti foto profil, lalu
-  /// mengunggah dan mengirimnya sebagai pesan.
+  // Memilih foto dengan pemilih gambar yang sama seperti foto profil, lalu
+  // mengunggah dan mengirimnya sebagai pesan.
   Future<void> _pickAndSendPhoto() async {
     // 1. Pilih sumber foto.
     final source = await showModalBottomSheet<ImageSource>(
@@ -311,7 +331,7 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     }
   }
 
-  /// Meminta alasan lalu melaporkan chat ke admin.
+  // Meminta alasan lalu melaporkan chat ke admin.
   Future<void> _report() async {
     // 1. Minta alasan; dialog sendiri yang memeriksa panjangnya.
     final reason = await showDialog<String>(
@@ -399,6 +419,7 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     );
   }
 
+  // Isi halaman sebelum chat pertama kali dimuat: indikator muat, atau pesan galat dengan tombol "Coba Lagi".
   Widget _placeholder() {
     final errorMessage = _errorMessage;
     if (errorMessage == null) {
@@ -429,10 +450,10 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     );
   }
 
-  /// Daftar gelembung pesan untuk [chat], atau ajakan menulis bila kosong.
-  ///
-  /// Tanda "Dibaca" hanya dipasang di pesan terakhir pembeli yang sudah
-  /// dibaca penjual menurut `otherPartyLastReadId`.
+  // Daftar gelembung pesan untuk [chat], atau ajakan menulis bila kosong.
+  //
+  // Tanda "Dibaca" hanya dipasang di pesan terakhir pembeli yang sudah
+  // dibaca penjual menurut `otherPartyLastReadId`.
   Widget _messageList(ChatState chat) {
     // 1. Belum ada pesan: ajak pembeli mengabari penjual.
     if (_messages.isEmpty) {
@@ -474,6 +495,8 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     );
   }
 
+  // Gelembung satu pesan: pesan pembeli di kanan berwarna utama, pesan penjual di kiri; foto (bila ada) di atas
+  // teks, lalu jam WIB dan tanda "Dibaca" bila [showRead].
   Widget _bubble(ChatMessage message, {required bool showRead}) {
     final mine = message.isFromCustomer;
     final body = message.body;
@@ -574,8 +597,8 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     );
   }
 
-  /// Kotak pengganti foto setinggi [chatPhotoHeight] selama foto dimuat, atau
-  /// ikon foto rusak bila [failed].
+  // Kotak pengganti foto setinggi [chatPhotoHeight] selama foto dimuat, atau
+  // ikon foto rusak bila [failed].
   Widget _photoPlaceholder(
     double width, {
     required bool mine,
@@ -601,12 +624,13 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     );
   }
 
+  // Latar bilah bawah (kotak ketik atau keterangan chat tertutup) dengan garis batas di atasnya.
   BoxDecoration get _barDecoration => BoxDecoration(
     color: AppColors.surface,
     border: Border(top: BorderSide(color: AppColors.cardBorder)),
   );
 
-  /// Kotak ketik dengan pesan cepat, tombol foto, dan tombol kirim.
+  // Kotak ketik dengan pesan cepat, tombol foto, dan tombol kirim.
   Widget _composer() {
     final busy = _sending || _uploading;
     return SafeArea(
@@ -701,7 +725,7 @@ class _OrderChatScreenState extends State<OrderChatScreen>
     );
   }
 
-  /// Pengganti kotak ketik saat chat tertutup: riwayat tetap bisa dibaca.
+  // Pengganti kotak ketik saat chat tertutup: riwayat tetap bisa dibaca.
   Widget _closedBar(ChatState chat) => SafeArea(
     top: false,
     child: Container(
@@ -741,8 +765,11 @@ class _ReportDialog extends StatefulWidget {
   State<_ReportDialog> createState() => _ReportDialogState();
 }
 
+/// State dialog laporan: isi kotak alasan dan pesan galat validasinya.
 class _ReportDialogState extends State<_ReportDialog> {
   final _reasonController = TextEditingController();
+
+  /// Pesan galat di bawah kotak alasan; dihapus begitu pengguna mengetik lagi.
   String? _errorText;
 
   @override
@@ -751,6 +778,7 @@ class _ReportDialogState extends State<_ReportDialog> {
     super.dispose();
   }
 
+  /// Memeriksa panjang alasan; bila sah, dialog ditutup dan alasannya dikembalikan ke [_OrderChatScreenState._report].
   void _submit() {
     final reason = _reasonController.text.trim();
     if (reason.length < 5 || reason.length > 500) {

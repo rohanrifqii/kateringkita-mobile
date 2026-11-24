@@ -1,6 +1,6 @@
 // Widget daftar pesanan satu tab, dipakai OrdersScreen, ActiveOrdersScreen, dan CompletedOrdersScreen.
 // Data dari server lewat OrderRepository (GET /me/orders) beserta aksinya: batal, selesai, bayar, ulasan,
-// pesan lagi, dan membuka pesan WhatsApp.
+// pesan lagi, dan membuka pesan WhatsApp. Ketuk kartu membuka Lacak Pesanan pesanan itu.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -24,7 +24,8 @@ import '../../widgets/order_status_label.dart';
 import '../../widgets/review_sheet.dart';
 
 /// Daftar pesanan satu tab (`active` | `completed` | `cancelled`) dari server,
-/// lengkap dengan aksi batal / selesai / bayar / pesan lagi.
+/// lengkap dengan aksi batal / selesai / bayar / pesan lagi, penanda pesan
+/// chat belum dibaca per kartu, dan ketuk kartu untuk membuka Lacak Pesanan.
 ///
 /// Polling 15 dtk hanya berjalan saat layar terlihat: tab IndexedStack yang
 /// tersembunyi (TickerMode mati), rute lain di atasnya, atau aplikasi di
@@ -35,7 +36,10 @@ import '../../widgets/review_sheet.dart';
 class OrderListView extends StatefulWidget {
   const OrderListView({super.key, required this.tab, this.query = ''});
 
+  /// Tab yang dimuat: `active`, `completed`, atau `cancelled`.
   final String tab;
+
+  /// Kata kunci pencarian (dikirim sebagai `q`); kosong = semua pesanan di tab itu.
   final String query;
 
   @override
@@ -122,6 +126,7 @@ class _OrderListViewState extends State<OrderListView>
     super.dispose();
   }
 
+  // Status login dibaca tanpa berlangganan (dipakai di luar build).
   bool get _loggedIn => context.read<AuthProvider>().isLoggedIn;
 
   // Muat ulang diam-diam (tanpa spinner) hanya bila layar terlihat, aplikasi
@@ -157,7 +162,8 @@ class _OrderListViewState extends State<OrderListView>
         _error = null;
         _loading = false;
       });
-      // Badge chat di tab Pesanan ikut segar selama tab ini terbuka.
+      // Badge chat di tab Pesanan ikut segar selama tab ini terbuka; provider
+      // boleh tidak terpasang (mis. di tes), maka dibaca sebagai nullable.
       context.read<NotificationProvider?>()?.refresh();
     } catch (e) {
       if (!mounted || seq != _seq) return;
@@ -174,6 +180,7 @@ class _OrderListViewState extends State<OrderListView>
   String _msg(Object e) =>
       e is ApiException ? e.message : 'Terjadi kesalahan. Coba lagi.';
 
+  // Menampilkan pesan singkat di bawah layar.
   void _snack(String text) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(text)));
 
@@ -369,6 +376,7 @@ class _OrderListViewState extends State<OrderListView>
         ),
       );
 
+  // Tampilan untuk tamu: ajakan masuk dengan tombol yang membuka alur login.
   Widget _guestPrompt() => Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -395,6 +403,8 @@ class _OrderListViewState extends State<OrderListView>
         ),
       );
 
+  // Keadaan kosong: pesan sesuai tab dan tombol kembali ke beranda untuk
+  // menjelajah menu (seluruh tumpukan rute dibuang).
   Widget _emptyState() {
     final message = switch (widget.tab) {
       'active' => 'Belum ada pesanan aktif.',
@@ -438,6 +448,8 @@ class _OrderListViewState extends State<OrderListView>
     return '$m:$r';
   }
 
+  // Label status pesanan berwarna: hijau selesai, merah batal/kedaluwarsa,
+  // warna utama untuk status lain.
   Widget _badge(OrderApiModel o) {
     final (bg, fg) = switch (o.status) {
       'completed' => (AppColors.successLight, AppColors.successDark),
@@ -454,7 +466,7 @@ class _OrderListViewState extends State<OrderListView>
     );
   }
 
-  /// Penanda jumlah pesan penjual yang belum dibaca di chat pesanan ini.
+  // Penanda jumlah pesan penjual yang belum dibaca di chat pesanan ini.
   Widget _chatUnreadChip(int unreadCount) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
@@ -473,6 +485,12 @@ class _OrderListViewState extends State<OrderListView>
         ),
       );
 
+  // Kartu satu pesanan. Tombol mengikuti status: belum dibayar (`holding`)
+  // -> Lanjutkan Bayar; masih berjalan -> Buka WhatsApp; selesai / batal /
+  // kedaluwarsa -> Pesan Lagi. Ulasan, batal, dan selesai mengikuti flag
+  // dari server (canReview, canCancel, canComplete). Penanda "pesan baru"
+  // tampil bila chat pesanan punya pesan penjual yang belum dibaca. Latarnya
+  // memakai Ink (bukan Container) agar efek ketuk InkWell pembungkusnya terlihat.
   Widget _card(OrderApiModel o) {
     final first = o.items.isEmpty ? null : o.items.first;
     final more = o.items.length - 1;
@@ -629,12 +647,14 @@ class _OrderListViewState extends State<OrderListView>
     );
   }
 
+  // Gaya tombol teks kecil (Batalkan / Selesaikan Pesanan) tanpa ruang sentuh ekstra.
   ButtonStyle get _textBtn => TextButton.styleFrom(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         minimumSize: Size.zero,
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
       );
 
+  // Tombol aksi berisi warna [color]; [onTap] null membuatnya nonaktif.
   Widget _filled(String text, Color color, VoidCallback? onTap) =>
       ElevatedButton(
         style: ElevatedButton.styleFrom(
