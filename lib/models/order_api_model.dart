@@ -1,3 +1,4 @@
+import 'chat_message.dart';
 import 'pickup_point.dart';
 import 'product_model.dart';
 import 'voucher.dart';
@@ -163,6 +164,9 @@ class OrderApiModel {
   /// Jam tiap langkah status; kosong bila server tidak mengirimnya.
   final OrderTimeline timeline;
 
+  /// Keadaan chat pesanan untuk pembeli; null bila server tidak mengirimnya.
+  final ChatState? chat;
+
   const OrderApiModel({
     required this.code,
     required this.status,
@@ -190,6 +194,7 @@ class OrderApiModel {
     required this.canReview,
     this.payment,
     this.timeline = const OrderTimeline(),
+    this.chat,
   });
 
   bool get isPaid => paymentStatus == 'paid';
@@ -235,6 +240,9 @@ class OrderApiModel {
       timeline: json['timeline'] == null
           ? const OrderTimeline()
           : OrderTimeline.fromJson(json['timeline'] as Map<String, dynamic>),
+      chat: json['chat'] == null
+          ? null
+          : ChatState.fromJson(json['chat'] as Map<String, dynamic>),
     );
   }
 }
