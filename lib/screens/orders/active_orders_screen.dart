@@ -1,10 +1,13 @@
+// Layar terpisah berisi daftar pesanan aktif (rute AppRoutes.activeOrders). Isinya OrderListView tab
+// 'active' yang memuat data dari server (GET /me/orders?tab=active). Tab Pesanan utama memakai OrdersScreen.
 import 'package:flutter/material.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/app_text_styles.dart';
 import 'order_list_view.dart';
 
-/// Layar daftar pesanan berstatus 'active' yang tersimpan di database lokal; ikut diperbarui saat tabel berubah.
+/// Layar daftar pesanan aktif milik pengguna yang login, diambil dari server
+/// lewat [OrderListView] (polling 15 detik saat layar terlihat).
 class ActiveOrdersScreen extends StatelessWidget {
   const ActiveOrdersScreen({super.key});
 

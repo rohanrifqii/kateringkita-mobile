@@ -1,6 +1,10 @@
+// Penerjemah status pesanan dari backend menjadi teks yang ditampilkan di daftar pesanan.
 import '../models/order_api_model.dart';
 
 /// Label status pesanan untuk pelanggan.
+///
+/// Status `holding`/`pending` dianggap "Dikonfirmasi" bila sudah dibayar; pembatalan dibedakan
+/// menurut pihak yang membatalkan. Status yang tidak dikenal ditampilkan apa adanya.
 String orderStatusLabel(OrderApiModel o) {
   switch (o.status) {
     case 'holding':

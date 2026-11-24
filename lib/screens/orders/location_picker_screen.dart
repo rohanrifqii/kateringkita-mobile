@@ -1,3 +1,6 @@
+// Layar pemilih lokasi di peta OpenStreetMap, dibuka dari Beranda (ketuk nama titik temu di bilah atas).
+// Pencarian & nama alamat lewat MapService (layanan OSM), alamat tersimpan/riwayat disimpan lokal di
+// SettingsStore; nama & nomor pengguna diambil dari backend lewat AuthRepository.currentUser (GET /me).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -35,8 +38,10 @@ class DeliveryLocation {
     this.isSaved = false,
   });
 
+  /// Koordinat dalam bentuk LatLng untuk dipakai peta.
   LatLng get latLng => LatLng(latitude, longitude);
 
+  /// Salinan dengan field tertentu diganti; field yang tidak diisi tetap sama.
   DeliveryLocation copyWith({
     String? id,
     String? name,
@@ -61,6 +66,8 @@ class DeliveryLocation {
     );
   }
 
+  /// Mengubah lokasi ini menjadi entri yang bisa disimpan di SettingsStore (alamat tersimpan/riwayat);
+  /// [updatedAt] adalah teks waktu yang ditampilkan, bukan tanggal.
   StoredLocationEntry toStoredEntry({String updatedAt = 'Baru saja'}) {
     return StoredLocationEntry(
       id: id,
@@ -93,7 +100,9 @@ class DeliveryLocation {
   }
 }
 
-/// Halaman Pemilihan Lokasi Pengantaran berbasis OpenStreetMap Resmi (100% Gratis Tanpa API Key)
+/// Halaman pemilihan lokasi berbasis OpenStreetMap (tanpa API key). Dibuka dengan nama dan
+/// koordinat lokasi saat ini; saat dikonfirmasi, lokasi disimpan ke SettingsStore lalu layar
+/// ditutup dengan `pop(DeliveryLocation)`.
 class LocationPickerScreen extends StatefulWidget {
   final String? currentLocationName;
   final double? initialLat;
@@ -169,7 +178,7 @@ class _LocationPickerScreenState extends State<LocationPickerScreen>
   }
 
   Future<void> _initializeUserLocationData() async {
-    // 1. Muat profil user yang sedang login
+    // 1. Muat profil user yang sedang login dari backend (GET /me); tamu atau galat dibiarkan default.
     try {
       final user = await context.read<AuthRepository>().currentUser();
       if (user != null) {

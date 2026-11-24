@@ -1,3 +1,6 @@
+// Layar Checkout: dibuka dari keranjang (CartProvider) untuk memesan semua menu di keranjang dari satu toko.
+// Alur: wajib login → muat titik temu toko (CatalogRepository, GET /menus/{id}) → hitung total di server
+// (OrderRepository.quote, POST /orders/quote) → buat pesanan (POST /orders) → lanjut ke layar Pembayaran.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -25,8 +28,10 @@ import '../../widgets/payment_method_tile.dart';
 import '../../widgets/primary_button.dart';
 import 'pickup_point_picker_screen.dart';
 
-/// Checkout isi keranjang: quote server, titik temu, waktu ambil,
-/// metode bayar, lalu buat pesanan (dengan Idempotency-Key).
+/// Layar checkout isi keranjang: data pemesan, titik temu, waktu ambil, metode bayar, dan total
+/// yang dihitung server (quote). Tombol "Proses Pembayaran" membuat pesanan dengan header
+/// Idempotency-Key lalu mengganti layar ini dengan layar Pembayaran (AppRoutes.payment).
+/// Bila pengguna batal login, layar langsung ditutup.
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key});
 
@@ -35,7 +40,9 @@ class CheckoutScreen extends StatefulWidget {
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
+  // Angka berlebar sama agar harga tidak "bergoyang" saat nilainya berubah.
   static const List<FontFeature> _tabular = [FontFeature.tabularFigures()];
+  // Jeda sebelum meminta quote, supaya mengetik/menekan +/- beruntun hanya memicu satu permintaan.
   static const Duration _quoteDebounce = Duration(milliseconds: 400);
 
   // Pilihan metode bayar yang ditampilkan (daftar tetap di aplikasi).
@@ -69,19 +76,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   /// true setelah lolos requireLogin.
   bool _authorized = false;
 
-  // Titik temu.
+  // Titik temu: daftar milik toko, status muat, pilihan saat ini, dan galat dari server.
   List<PickupPoint> _points = const [];
   bool _pointsLoading = false;
   String? _pointsError;
   PickupPoint? _point;
   String? _pointError;
 
-  // Waktu ambil.
+  // Waktu ambil: "Secepatnya" atau tanggal-jam pilihan (disimpan dalam UTC).
   bool _asap = true;
   DateTime? _pickupAtUtc;
   String? _pickupError;
 
-  // Quote.
+  // Quote (rincian total dari server). _quoteSeq naik tiap permintaan baru; jawaban dengan nomor
+  // lama diabaikan agar respons yang telat tidak menimpa hasil terbaru.
   Timer? _debounce;
   int _quoteSeq = 0;
   bool _quoting = false;
@@ -94,7 +102,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String? _phoneError;
   String? _noteError;
 
-  // Buat pesanan.
+  // Buat pesanan: status kirim dan galat per baris keranjang (kunci = CartItem.key).
   bool _submitting = false;
   Map<String, String> _lineErrors = const {};
 
@@ -103,6 +111,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
+    // Ditunda ke setelah frame pertama karena _start bisa membuka layar login (butuh Navigator).
     WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
 
@@ -118,6 +127,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   CartProvider get _cart => context.read<CartProvider>();
 
+  /// Jumlah hari pre-order terbesar di keranjang (0 bila tidak ada menu pre-order).
   int get _preorderDays => _cart.hasPreorder ? _cart.maxPreorderDays : 0;
 
   /// Pre-order wajib memilih tanggal; "Secepatnya" hanya untuk non pre-order.
@@ -125,6 +135,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   // ---------- Alur ----------
 
+  /// Pastikan login (tutup layar bila batal), isi nama & nomor dari profil, lalu muat titik temu.
   Future<void> _start() async {
     if (!mounted) return;
     final ok = await requireLogin(context);
@@ -140,6 +151,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     await _loadPoints();
   }
 
+  /// Memuat titik temu toko lewat detail menu pertama di keranjang (GET /menus/{id}), karena
+  /// semua menu di keranjang berasal dari satu toko. Titik favorit pengguna dipilih otomatis,
+  /// bila tidak ada dipakai titik pertama. Setelah itu quote dijadwalkan.
   Future<void> _loadPoints() async {
     final items = _cart.items;
     if (items.isEmpty) return;
@@ -180,12 +194,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  /// Quote baru bisa diminta bila sudah login, keranjang berisi, titik temu dipilih, dan
+  /// (untuk pre-order) tanggal ambil sudah diisi.
   bool get _canQuote =>
       _authorized &&
       _cart.items.isNotEmpty &&
       _point != null &&
       (!_cart.hasPreorder || _pickupAtUtc != null);
 
+  /// Menjadwalkan permintaan quote setelah jeda _quoteDebounce. Menaikkan _quoteSeq agar quote yang
+  /// sedang berjalan dianggap usang; bila syarat belum lengkap, total dikosongkan.
   void _scheduleQuote() {
     _debounce?.cancel();
     _quoteSeq++;
@@ -200,6 +218,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _debounce = Timer(_quoteDebounce, _runQuote);
   }
 
+  /// Meminta rincian total ke server (POST /orders/quote). Berhasil: semua galat kolom dihapus.
+  /// Gagal: galat yang menyebut kolom tertentu ditampilkan di kolom itu, sisanya di kartu ringkasan.
   Future<void> _runQuote() async {
     final seq = ++_quoteSeq;
     final repo = context.read<OrderRepository>();
@@ -235,11 +255,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  /// Isi kolom tanpa spasi tepi; null bila kosong (agar server menganggapnya tidak diisi).
   String? _opt(TextEditingController c) {
     final t = c.text.trim();
     return t.isEmpty ? null : t;
   }
 
+  /// Badan permintaan yang sama untuk quote dan buat pesanan. `pickup_at` (UTC, ISO-8601) hanya
+  /// dikirim bila pengguna memilih tanggal-jam; tanpa itu server memakai "secepatnya".
   Map<String, dynamic> _body() {
     final at = _pickupAtUtc;
     return {
@@ -253,7 +276,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     };
   }
 
-  /// Memetakan `fields` galat ke baris/kolom. true bila ada yang terpetakan.
+  /// Memetakan `fields` galat validasi server ke tampilan: `items.N...` ke baris keranjang ke-N,
+  /// selebihnya ke kolom titik temu, waktu ambil, promo, nama, telepon, atau catatan.
+  /// Mengembalikan true bila ada yang terpetakan. Galat baris lama selalu diganti.
   bool _applyFieldErrors(ApiException e) {
     final items = _cart.items;
     final lines = <String, String>{};
@@ -291,21 +316,26 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return matched;
   }
 
+  /// Setelah isi keranjang berubah: hapus galat per baris dan hitung ulang total.
   void _onCartChanged() {
     setState(() => _lineErrors = const {});
     _scheduleQuote();
   }
 
+  /// Mengubah jumlah porsi satu baris keranjang.
   void _setQty(CartItem item, int qty) {
     _cart.setQty(item.key, qty);
     _onCartChanged();
   }
 
+  /// Menghapus satu baris dari keranjang.
   void _remove(CartItem item) {
     _cart.remove(item.key);
     _onCartChanged();
   }
 
+  /// Membuka PickupPointPickerScreen. Bila daftar titik masih kosong (mis. tadi gagal dimuat),
+  /// ketukan ini justru memuat ulang daftar.
   Future<void> _openPointPicker() async {
     if (_pointsLoading) return;
     if (_points.isEmpty) {
@@ -327,6 +357,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _scheduleQuote();
   }
 
+  /// Memilih "Secepatnya": tanggal-jam pilihan dihapus.
   void _selectAsap() {
     setState(() {
       _asap = true;
@@ -336,6 +367,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _scheduleQuote();
   }
 
+  /// Pemilih tanggal lalu jam, semuanya dalam waktu WIB. Rentang tanggal: paling cepat hari ini
+  /// (atau H-n untuk pre-order) dan paling lambat maxPickupAhead. Hasil dicek ulang dengan
+  /// isPickupAllowed; bila ditolak, pesan galat ditampilkan dan pilihan lama dipertahankan.
   Future<void> _pickDateTime() async {
     final po = _preorderDays;
     final nowUtc = DateTime.now().toUtc();
@@ -366,6 +400,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
     if (date == null || !mounted) return;
 
+    // Jam awal pemilih: jam yang sudah dipilih, atau 1 jam dari sekarang (hari ini), atau 10.00.
     final nowWib = toWibWallClock(DateTime.now().toUtc());
     final isToday = date.year == nowWib.year &&
         date.month == nowWib.month &&
@@ -406,6 +441,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _scheduleQuote();
   }
 
+  /// Tombol bayar aktif hanya bila quote terbaru sudah ada dan tidak sedang menghitung/mengirim.
   bool _canPay(CartProvider cart) =>
       _authorized &&
       cart.items.isNotEmpty &&
@@ -415,6 +451,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       !_submitting &&
       (!cart.hasPreorder || _pickupAtUtc != null);
 
+  /// Menampilkan dialog konfirmasi dengan total dari quote; "ya" menjalankan _submit.
   void _confirmOrder() {
     final q = _quote;
     if (q == null) return;
@@ -425,6 +462,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  /// Membuat pesanan (POST /orders) dengan metode bayar terpilih. Berhasil: keranjang dikosongkan
+  /// dan layar diganti layar Pembayaran dengan pesanan baru sebagai argumen. Gagal: galat kolom
+  /// ditampilkan dan pesan muncul di snackbar.
   Future<void> _submit() async {
     final cart = _cart;
     final repo = context.read<OrderRepository>();
@@ -467,6 +507,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  /// Menampilkan snackbar, mengganti snackbar yang sedang tampil.
   void _showSnack(String text) => ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(content: Text(text)));
@@ -565,8 +606,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  // ---------- Sections ----------
+  // ---------- Bagian tampilan ----------
 
+  /// Tampilan saat keranjang kosong, dengan tombol kembali ke beranda (menu utama).
   Widget _buildEmpty() {
     return Center(
       child: Padding(
@@ -645,6 +687,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return item.estimatedLineTotal;
   }
 
+  /// Kartu satu baris keranjang: gambar, nama, opsi, label pre-order, harga, galat baris,
+  /// tombol hapus, dan pengatur jumlah. Tombol dimatikan selama pesanan dikirim.
   Widget _buildItemCard(CartItem item, int index) {
     final error = _lineErrors[item.key];
     final option = item.option;
@@ -731,6 +775,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  /// Pengatur jumlah (- / +); tombol "-" mati saat jumlah sudah di minimal pesan menu.
   Widget _buildStepper(CartItem item) {
     final minQty = item.menu.minOrderQty < 1 ? 1 : item.menu.minOrderQty;
 
@@ -779,6 +824,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  /// Formulir data pemesan. Mengubah kolom yang sedang bergalat menghapus galatnya dan meminta
+  /// quote ulang; kode promo selalu memicu quote ulang karena memengaruhi total.
   Widget _buildOrdererForm(CartProvider cart) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -851,8 +898,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  /// Kartu lokasi titik temu dengan peta mini OSM dan perkiraan waktu tiba (MapService.estimateEta);
-  /// diketuk untuk membuka pemilih lokasi.
+  /// Kartu titik temu: peta mini OSM sebagai latar, nama & keterangan titik terpilih, atau status
+  /// memuat/galat. Diketuk untuk membuka pemilih titik temu (atau memuat ulang bila gagal).
   Widget _buildLocationSelectorCard() {
     final point = _point;
     final String title;
@@ -1056,6 +1103,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  /// Kartu waktu ambil: pilihan "Secepatnya" (mati bila ada menu pre-order) atau tanggal & jam,
+  /// plus info tanggal paling cepat untuk pre-order.
   Widget _buildPickupTimeCard(CartProvider cart) {
     final preorder = cart.hasPreorder;
     final po = preorder ? cart.maxPreorderDays : 0;
@@ -1144,6 +1193,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  /// Kotak peringatan dari quote server (mis. info stok atau promo).
   Widget _buildWarnings(List<QuoteWarning> warnings) {
     return Container(
       width: double.infinity,
@@ -1204,6 +1254,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  /// Kartu ringkasan biaya. Angka hanya dari quote server; selama quote belum ada, tampil alasan
+  /// (menghitung, galat + "Coba lagi", atau data yang belum dipilih).
   Widget _buildSummaryCard(CartProvider cart) {
     final q = _quote;
     final Widget body;

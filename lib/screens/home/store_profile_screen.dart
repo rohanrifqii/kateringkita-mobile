@@ -187,6 +187,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      // Tombol "Lihat Keranjang (n)" ke Checkout, hanya tampil bila keranjang berisi.
       bottomNavigationBar: Consumer<CartProvider>(
         builder: (context, cart, _) {
           if (cart.count == 0) return const SizedBox.shrink();
@@ -270,7 +271,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
           ],
         ),
 
-        // Top Floating Action Bar (Back, Search, Favorite, Share)
+        // Top Floating Action Bar (Back, Keranjang, Search, Favorite, Share)
         SafeArea(
           bottom: false,
           child: Padding(
@@ -282,6 +283,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                   onTap: () => Navigator.pop(context),
                 ),
                 const Spacer(),
+                // Ikon keranjang dengan lencana jumlah item; diketuk membuka Checkout.
                 const CartButton(),
                 const SizedBox(width: 8),
                 _buildCircleTopButton(
@@ -859,7 +861,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                       ),
                                     ],
                                   ),
-                                  // Tombol + oranye: langsung ke checkout menu ini (nonaktif bila menu tidak bisa dipesan)
+                                  // Tombol + oranye: tambah 1 porsi menu ini ke keranjang tanpa opsi (nonaktif bila menu tidak bisa dipesan)
                                   GestureDetector(
                                     onTap: !menu.canOrder
                                         ? null
@@ -965,7 +967,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                 ),
                               ),
                             ),
-                            // Tombol + Bulat di Pojok Kanan Atas Foto (Persis GrabFood)
+                            // Tombol + bulat di pojok kanan atas foto: tambah 1 porsi ke keranjang (nonaktif bila tidak bisa dipesan)
                             Positioned(
                               top: 8,
                               right: 8,

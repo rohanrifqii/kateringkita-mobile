@@ -1,3 +1,5 @@
+// Tab "Pesanan" di navigasi bawah (MainNavigationScreen) dan rute AppRoutes.orders. Berisi kolom cari dan
+// tab status; daftar pesanannya sendiri dimuat dari server oleh OrderListView (GET /me/orders).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -6,7 +8,9 @@ import '../../core/app_colors.dart';
 import '../../core/app_text_styles.dart';
 import 'order_list_view.dart';
 
-/// Layar daftar pesanan dengan tab status dan kolom cari (nama produk / kode pesanan).
+/// Layar daftar pesanan dengan tab status (Aktif / Selesai / Dibatalkan) dan
+/// kolom cari (nama menu / kode pesanan). Pencarian dikirim ke server sebagai
+/// parameter `q`. Tombol kembali hanya muncul bila layar dibuka sebagai rute.
 class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
 
@@ -15,6 +19,7 @@ class OrdersScreen extends StatefulWidget {
 }
 
 class _OrdersScreenState extends State<OrdersScreen> {
+  // Nilai `tab` untuk server, urutannya sama dengan label [tabs].
   static const _tabKeys = ['active', 'completed', 'cancelled'];
   static const tabs = ['Aktif', 'Selesai', 'Dibatalkan'];
 
@@ -23,6 +28,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
   String _searchQuery = '';
   Timer? _debounce;
 
+  /// Debounce 400 ms: query baru diteruskan ke OrderListView (yang memuat
+  /// ulang) setelah pengguna berhenti mengetik.
   void _onSearch(String val) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), () {
@@ -173,6 +180,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
               ),
             ),
             Expanded(
+              // Key per tab: ganti tab membuat OrderListView baru (state dan
+              // daftar lama dibuang, lalu dimuat ulang).
               child: OrderListView(
                 key: ValueKey(_tabKeys[_selectedTabIndex]),
                 tab: _tabKeys[_selectedTabIndex],

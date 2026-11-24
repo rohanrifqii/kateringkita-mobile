@@ -1,9 +1,12 @@
+// Aksi "tambah ke keranjang" bersama untuk layar detail menu dan profil toko: menambah ke CartProvider
+// dan menangani kasus keranjang berisi menu dari toko lain.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/product_model.dart';
 import '../providers/cart_provider.dart';
 
-/// Tambah ke keranjang; bila toko beda, tanya dulu lalu ganti keranjang.
+/// Tambah [qty] [menu] (dengan [option] opsional) ke keranjang; bila toko beda, tanya dulu
+/// lewat dialog lalu ganti keranjang bila pengguna memilih "Ya". Snackbar muncul bila berhasil.
 Future<void> addToCartWithPrompt(
   BuildContext context,
   ProductModel menu, {

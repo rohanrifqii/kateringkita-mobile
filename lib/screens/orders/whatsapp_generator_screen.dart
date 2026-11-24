@@ -1,3 +1,6 @@
+// Layar pesan WhatsApp ke penjual untuk satu pesanan (argumen rute: kode pesanan). Dibuka dari lembar sukses
+// bayar atau tombol "Buka WhatsApp" di daftar pesanan. Teks dan tautan wa.me dibuat server
+// (GET /orders/:code/whatsapp); pengguna boleh mengedit teks sebelum membuka WhatsApp.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +14,7 @@ import '../../widgets/primary_button.dart';
 
 /// URL wa.me untuk dibuka. Bila [text] sama dengan pesan server, pakai URL
 /// server apa adanya; bila diedit, pakai nomor dari URL server + teks baru.
+/// Nomor diambil dari segmen path terakhir URL server (wa.me/<nomor>).
 String buildWhatsAppUrl({
   required String serverUrl,
   required String serverMessage,
@@ -22,6 +26,8 @@ String buildWhatsAppUrl({
   return 'https://wa.me/$number?text=${Uri.encodeComponent(text)}';
 }
 
+/// Layar pratinjau dan pengiriman pesan WhatsApp pesanan. Argumen rute wajib
+/// berupa kode pesanan (String); selain itu layar langsung ditutup.
 class WhatsAppGeneratorScreen extends StatefulWidget {
   const WhatsAppGeneratorScreen({super.key});
 
@@ -37,6 +43,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
   bool _loading = true;
   String? _error;
   String _code = '';
+  // Teks dan URL asli dari server, untuk tahu apakah pengguna mengedit teks.
   String _serverMessage = '';
   String _serverUrl = '';
 
@@ -56,6 +63,8 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
     _load();
   }
 
+  /// Ambil teks + URL wa.me dari server (GET /orders/:code/whatsapp) dan isi
+  /// kolom teks; galat ditampilkan dengan tombol Coba lagi.
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -103,6 +112,8 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
     );
   }
 
+  /// Buka WhatsApp dengan teks di kolom (lihat [buildWhatsAppUrl]); SnackBar
+  /// bila tidak bisa dibuka.
   Future<void> _openWhatsApp() async {
     final url = buildWhatsAppUrl(
       serverUrl: _serverUrl,
@@ -254,7 +265,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // Action Buttons (Copy / Edit)
+                    // Tombol Salin dan Edit (Edit hanya memfokuskan kolom teks)
                     Row(
                       children: [
                         Expanded(

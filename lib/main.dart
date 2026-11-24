@@ -1,5 +1,5 @@
 // Titik masuk aplikasi: menyiapkan penyimpanan lokal dan tema, lalu memasang semua provider
-// (tema, keranjang, database lokal, ApiClient, CatalogRepository) di atas seluruh layar.
+// (tema, keranjang, ApiClient, AuthRepository, AuthProvider, CatalogRepository, OrderRepository) di atas seluruh layar.
 // Layar membaca provider ini untuk mengakses data: layar → provider → repository → ApiClient → backend.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -57,12 +57,17 @@ void main() async {
 }
 
 /// Daftar provider aplikasi (dipisah supaya wiring asli bisa diuji).
+///
+/// Membungkus [child] dengan [MultiProvider]. [client] bisa diisi klien HTTP palsu saat
+/// pengujian; [isDark] adalah mode gelap awal. Di sini juga diatur: penanganan 401 global
+/// (hapus sesi lalu buka layar Login) dan pengosongan keranjang saat pengguna keluar.
 Widget buildAppProviders({
   required Widget child,
   http.Client? client,
   bool isDark = false,
 }) {
   late final AuthProvider auth;
+  // Penanda agar beberapa balasan 401 yang datang bersamaan hanya memicu satu pengalihan.
   var redirecting = false;
 
   final api = ApiClient(

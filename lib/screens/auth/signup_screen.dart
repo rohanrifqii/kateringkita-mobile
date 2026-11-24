@@ -1,3 +1,5 @@
+// Layar Daftar akun pelanggan: nama, email, No. HP, sandi. Dibuka dari Login ("Create New Account").
+// Daftar lewat AuthRepository -> POST /auth/customer/register, lalu langsung login lewat AuthProvider (POST /auth/login).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -11,6 +13,8 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/primary_button.dart';
 
+/// Formulir pendaftaran pelanggan. Tombol Sign Up aktif hanya bila kotak syarat & ketentuan dicentang
+/// (centangnya tidak dikirim ke server). Sukses: masuk MainNav dalam keadaan sudah login.
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
 
@@ -27,6 +31,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _agreeToTerms = false;
   bool _obscurePassword = true;
   bool _loading = false;
+  // Galat per kolom dari server, kuncinya nama field API (full_name, email, phone, password).
   Map<String, String?> _errors = {};
 
   @override
@@ -38,10 +43,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
+  /// Tampilkan pesan singkat di SnackBar.
   void _showMessage(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  /// Validasi lokal (semua terisi, format email, HP 08 + 10–13 digit, aturan sandi), daftar ke server,
+  /// lalu login otomatis. Bila daftar ditolak, galat ditaruh per kolom (atau SnackBar bila bukan galat kolom).
+  /// Bila daftar berhasil tetapi login otomatis gagal, pengguna diarahkan ke Login dengan email terisi.
   Future<void> _onSignUp() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -94,7 +103,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return;
     }
 
-    // Backend tidak mengembalikan token saat daftar: login langsung.
+    // Backend tidak mengembalikan token saat daftar, jadi login langsung dengan email + sandi yang sama.
     try {
       await auth.login(email, password);
     } on ApiException {

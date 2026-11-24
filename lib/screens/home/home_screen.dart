@@ -286,6 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
+                  // Ikon keranjang dengan lencana jumlah item; diketuk membuka Checkout.
                   const CartButton(),
                   const SizedBox(width: 8),
                   // Notification icon with badge dot

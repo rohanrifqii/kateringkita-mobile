@@ -1,3 +1,5 @@
+// Layar Atur Ulang Sandi (langkah 3 dari 3 lupa sandi): isi sandi baru + konfirmasinya.
+// Dibuka dari VerifyCodeScreen; menyimpan lewat AuthRepository -> POST /auth/password/reset (email + kode + sandi).
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -13,6 +15,8 @@ import '../../widgets/auth_scaffold.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/primary_button.dart';
 
+/// Formulir sandi baru. Argumen rute: Map {'email', 'code'} dari layar verifikasi.
+/// Setelah sukses, dialog sukses lalu kembali ke Login (tumpukan rute dibersihkan, email diisi otomatis).
 class ResetPasswordScreen extends StatefulWidget {
   const ResetPasswordScreen({super.key});
 
@@ -38,17 +42,20 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     super.dispose();
   }
 
+  /// Sandi baru wajib diisi dan lolos aturan sandi bersama (validatePasswordRules).
   String? _validateNew(String v) {
     if (v.isEmpty) return 'Password baru wajib diisi';
     return validatePasswordRules(v);
   }
 
+  /// Konfirmasi wajib diisi dan harus sama dengan sandi baru.
   String? _validateConfirm(String v) {
     if (v.isEmpty) return 'Konfirmasi password wajib diisi';
     if (v != _newController.text) return 'Password tidak sama';
     return null;
   }
 
+  /// Ganti seluruh tumpukan rute dengan Login; [email] dipakai sebagai prefill kolom email.
   void _backToLogin([String? email]) {
     Navigator.pushNamedAndRemoveUntil(
       context,
@@ -58,6 +65,8 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     );
   }
 
+  /// Validasi lokal, lalu POST /auth/password/reset. Galat kolom password tampil di kolom sandi baru;
+  /// galat lain (mis. kode kedaluwarsa) tampil sebagai _serverError.
   Future<void> _save() async {
     FocusScope.of(context).unfocus();
 
@@ -108,6 +117,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     );
   }
 
+  /// Tombol mata untuk menampilkan/menyembunyikan sandi.
   Widget _eyeButton(bool obscure, VoidCallback onTap) {
     return IconButton(
       icon: Icon(

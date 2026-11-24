@@ -1,3 +1,6 @@
+// Layar pembayaran pesanan, dibuka dari checkout (setelah POST /orders) atau tombol "Lanjutkan Bayar" di
+// daftar pesanan. Bayar lewat Virtual Account (POST /orders/:code/va) atau Snap Midtrans untuk QRIS/e-wallet
+// (POST /orders/:code/online lalu SnapWebViewScreen). Status bayar selalu dibaca dari server.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -17,12 +20,15 @@ import 'snap_webview_screen.dart';
 /// Membuka halaman Snap. Dapat diganti di test.
 typedef SnapOpener = Future<void> Function(BuildContext context, String url);
 
+// Pembuka Snap bawaan: dorong SnapWebViewScreen dan tunggu sampai ditutup.
 Future<void> _openSnapWebView(BuildContext context, String url) => Navigator.of(
   context,
 ).push<void>(MaterialPageRoute(builder: (_) => SnapWebViewScreen(url: url)));
 
 /// Halaman pembayaran pesanan (argumen rute: [OrderApiModel]).
 /// Status bayar selalu berasal dari server (polling GET /orders/:code).
+/// Argumen rute yang bukan [OrderApiModel] membuat layar langsung ditutup.
+/// [snapOpener] membuka halaman Snap; bawaannya WebView, test bisa menggantinya.
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({super.key, this.snapOpener = _openSnapWebView});
 
@@ -52,8 +58,11 @@ class _PaymentScreenState extends State<PaymentScreen>
   StreamSubscription<OrderApiModel>? _pollSub;
   bool _busy = false;
   bool _refreshing = false;
+  // Lembar sukses hanya muncul sekali.
   bool _successShown = false;
+  // Selama WebView Snap terbuka, lembar sukses ditunda sampai layar kembali.
   bool _snapOpen = false;
+  // True setelah ada data dari server (bukan hanya argumen rute).
   bool _serverConfirmed = false;
   OrderVa? _va;
   String? _error;
@@ -67,6 +76,7 @@ class _PaymentScreenState extends State<PaymentScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Argumen rute dibaca sekali; lalu mulai hitung mundur dan polling.
     if (_argsLoaded) return;
     final arg = ModalRoute.of(context)?.settings.arguments;
     if (arg is! OrderApiModel) {
@@ -87,6 +97,8 @@ class _PaymentScreenState extends State<PaymentScreen>
   }
 
   /// Sisa waktu berpatokan pada `seconds_left` server, bukan jam perangkat.
+  /// Jam perangkat hanya dipakai bila server tidak mengirim `seconds_left`
+  /// (selisih ke `hold_until`); tidak pernah negatif.
   int _computeRemaining(OrderApiModel o) {
     final s = o.secondsLeft;
     if (s != null) return s < 0 ? 0 : s;
@@ -110,6 +122,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     return o;
   }
 
+  /// Selama status masih menunggu: hitung mundur tiap detik (saat habis,
+  /// tanya server) dan polling status lewat [PaymentPoller].
   void _startWatching() {
     if (_outcome != PaymentOutcome.waiting) return;
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -123,6 +137,7 @@ class _PaymentScreenState extends State<PaymentScreen>
     _pollSub = _poller!.start().listen(_apply);
   }
 
+  /// Hentikan timer hitung mundur dan polling.
   void _stopWatching() {
     _countdownTimer?.cancel();
     _countdownTimer = null;
@@ -141,9 +156,12 @@ class _PaymentScreenState extends State<PaymentScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Kembali dari aplikasi bank/e-wallet: cek status segera.
     if (state == AppLifecycleState.resumed && _argsLoaded) _refresh();
   }
 
+  /// Ambil status terbaru (GET /orders/:code) sekali; panggilan yang tumpang
+  /// tindih diabaikan dan galat didiamkan.
   Future<void> _refresh() async {
     if (_refreshing || !mounted) return;
     _refreshing = true;
@@ -157,6 +175,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     }
   }
 
+  /// Terapkan data pesanan dari server ke layar; hentikan pemantauan bila
+  /// status sudah final dan tampilkan lembar sukses bila sudah dibayar.
   void _apply(OrderApiModel o) {
     if (!mounted) return;
     // Monoton: status bayar tidak boleh mundur karena respons usang.
@@ -172,6 +192,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     if (o.isPaid) _scheduleSuccess();
   }
 
+  /// Jadwalkan lembar sukses setelah frame ini (sekali saja, tidak saat Snap
+  /// masih terbuka).
   void _scheduleSuccess() {
     if (_successShown || _snapOpen) return;
     _successShown = true;
@@ -190,12 +212,15 @@ class _PaymentScreenState extends State<PaymentScreen>
   String _errorText(Object e) =>
       e is ApiException ? e.message : 'Terjadi gangguan. Coba lagi.';
 
+  /// Tampilkan galat; 409 (konflik dengan keadaan pesanan di server) memicu
+  /// penyegaran status.
   void _onApiError(Object e) {
     if (!mounted) return;
     setState(() => _error = _errorText(e));
     if (e is ApiException && e.status == 409) _refresh();
   }
 
+  /// Minta nomor Virtual Account untuk bank terpilih (POST /orders/:code/va).
   Future<void> _createVa() async {
     setState(() {
       _busy = true;
@@ -212,6 +237,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     }
   }
 
+  /// Bayar QRIS / e-wallet: siapkan tautan Snap (POST /orders/:code/online
+  /// bila belum ada), buka WebView, lalu cek status ke server setelah ditutup.
   Future<void> _payOnline() async {
     setState(() {
       _busy = true;
@@ -266,6 +293,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     (_) => false,
   );
 
+  /// Lembar sukses (tidak bisa ditutup dengan geser). Bila uang masuk setelah
+  /// pesanan kedaluwarsa, tampil pesan pengembalian dana tanpa tombol WhatsApp.
   void _showPaymentSuccessSheet() {
     final late = _order.status == 'expired';
     showModalBottomSheet<void>(
@@ -504,6 +533,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     ),
   );
 
+  /// Bagian VA: nomor VA bila sudah dibuat, selain itu pilihan bank + tombol
+  /// buat nomor.
   Widget _vaSection() {
     final va = _va;
     if (va != null) {
@@ -624,6 +655,7 @@ class _PaymentScreenState extends State<PaymentScreen>
     ),
   );
 
+  /// Pesanan dibatalkan atau kedaluwarsa tanpa pembayaran.
   Widget _endedSection() {
     final cancelled = _outcome == PaymentOutcome.cancelled;
     return Container(
@@ -695,6 +727,7 @@ class _PaymentScreenState extends State<PaymentScreen>
           else ...[
             _timerCard(),
             const SizedBox(height: 12),
+            // Metode bayar sudah dipilih saat checkout.
             if (_order.paymentMethod == 'va')
               _vaSection()
             else

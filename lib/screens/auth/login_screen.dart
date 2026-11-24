@@ -1,3 +1,5 @@
+// Layar Login: masuk dengan email atau No. WhatsApp + sandi. Dibuka dari splash/onboarding, setelah daftar,
+// atau dari requireLogin (mode tamu). Login lewat AuthProvider -> AuthRepository -> POST /auth/login.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
@@ -9,6 +11,9 @@ import '../../widgets/app_modal_dialog.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/primary_button.dart';
 
+/// Layar masuk akun. Argumen rute opsional: String email (prefill dari daftar) atau
+/// Map {'email', 'returnTo'}; bila returnTo true, setelah berhasil layar ditutup dengan hasil true
+/// (kembali ke layar asal) alih-alih membuka MainNav.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -22,14 +27,17 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePassword = true;
   bool _loading = false;
   bool _argsLoaded = false;
+  // true bila dibuka dari requireLogin: selesai login cukup pop(true), bukan pindah ke beranda.
   bool _returnTo = false;
+  // Pesan galat per kolom dari respons validasi server (ApiException.field).
   String? _identifierError;
   String? _passwordError;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Email dikirim dari halaman SignUp setelah register berhasil.
+    // Baca argumen rute sekali saja: String = email dari SignUp setelah daftar berhasil,
+    // Map = {'email', 'returnTo'} dari requireLogin atau layar lain.
     if (!_argsLoaded) {
       final args = ModalRoute.of(context)?.settings.arguments;
       if (args is String) _emailController.text = args;
@@ -49,6 +57,9 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  /// Validasi kolom kosong, panggil AuthProvider.login (POST /auth/login). Galat ApiException
+  /// ditaruh di bawah kolom identifier/password; bila bukan galat kolom, tampil di SnackBar.
+  /// Berhasil: pop(true) bila returnTo, selain itu dialog sukses lalu ke MainNav dan tumpukan rute dibersihkan.
   Future<void> _onLogin() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text;

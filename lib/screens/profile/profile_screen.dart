@@ -1,3 +1,5 @@
+// Layar Profil (tab terakhir MainNavigationScreen): kartu profil, keamanan akun, preferensi, bantuan, dan tombol keluar.
+// Data akun dari AuthRepository.currentUser (GET /me); preferensi & data tambahan profil disimpan lokal (SharedPreferences).
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -16,6 +18,7 @@ import '../../providers/theme_provider.dart';
 import '../../widgets/app_modal_dialog.dart';
 import 'edit_profile_screen.dart';
 
+/// Halaman profil & pengaturan. Untuk tamu (tanpa sesi) kartu profil memakai nilai contoh.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -45,6 +48,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadUserAndPreferences();
   }
 
+  /// Memuat akun (GET /me; null bila tamu), data tambahan profil per email, dan preferensi aplikasi
+  /// dari SharedPreferences. Tamu memakai email contoh sebagai kunci data tambahan.
   Future<void> _loadUserAndPreferences() async {
     final user = await context.read<AuthRepository>().currentUser();
     final email = user?.email ?? 'abdurrahim.workspace@gmail.com';
@@ -70,6 +75,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  /// Buka EditProfileScreen, lalu muat ulang data setelah kembali.
   Future<void> _openEditProfile() async {
     await Navigator.push<bool>(
       context,
@@ -83,6 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await _loadUserAndPreferences();
   }
 
+  /// SnackBar mengambang berikon centang.
   void _showToast(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -109,6 +116,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Buka chat WhatsApp CS lewat wa.me; bila gagal dibuka, nomor CS disalin ke clipboard.
   Future<void> _openCustomerSupportWhatsApp() async {
     const phone = '6285852157352';
     const message =
@@ -327,6 +335,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           return;
                         }
 
+                        // Ganti sandi ke server (PUT /me/password); changePassword mengembalikan pesan galat atau null.
                         final email =
                             _user?.email ?? 'abdurrahim.workspace@gmail.com';
                         final repo = context.read<AuthRepository>();
@@ -1228,6 +1237,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     AppModalDialog.showLogout(
                       context,
                       onConfirm: () async {
+                        // Keluar: POST /auth/logout + hapus sesi lokal, lalu ganti seluruh tumpukan rute dengan Login.
                         final nav = Navigator.of(context);
                         await context.read<AuthProvider>().logout();
                         nav.pushNamedAndRemoveUntil(

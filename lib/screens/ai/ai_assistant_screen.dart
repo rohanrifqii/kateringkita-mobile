@@ -131,7 +131,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
-  /// Mengambil nama depan akun yang sedang login dari database lokal (AuthRepository).
+  /// Mengambil nama depan akun yang sedang login lewat AuthRepository.currentUser (GET /me);
+  /// tamu atau galat 401 menghasilkan null sehingga sapaan bawaan tetap dipakai.
   Future<void> _loadUserName() async {
     final user = await context.read<AuthRepository>().currentUser();
     if (!mounted) return;
@@ -388,7 +389,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   }
 
   /// Membungkus paket rekomendasi menjadi satu ProductModel sementara (id 0, merchant "ai-package",
-  /// harga = total modal) lalu membuka CheckoutScreen dengan produk itu.
+  /// harga = total modal) lalu membuka rute checkout dengan produk itu sebagai argumen.
+  /// Catatan: CheckoutScreen kini hanya membaca isi keranjang (CartProvider) dan mengabaikan argumen ini,
+  /// jadi paket AI tidak ikut tampil di checkout.
   void _onOrderRecommendation() {
     final bundleProduct = ProductModel(
       id: 0,

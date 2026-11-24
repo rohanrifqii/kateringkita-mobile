@@ -1,3 +1,5 @@
+// Repository akun pelanggan: login, daftar, keluar, lupa/reset sandi, ubah profil dan sandi lewat
+// backend REST. Dipakai AuthProvider dan layar auth/profil: layar → AuthProvider → AuthRepository → ApiClient.
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import '../models/api_user.dart';
@@ -14,6 +16,10 @@ class AuthRepository {
   /// membersihkan state, tanpa navigasi (aman saat splash: lanjut sebagai tamu).
   final void Function()? onSessionInvalid;
 
+  /// POST /auth/login dengan [identifier] (email atau no HP) dan [password], sebagai klien `mobile`.
+  ///
+  /// Bila berhasil, token dan email disimpan ke [TokenStore] lalu data pengguna dikembalikan.
+  /// Sandi salah tidak memicu penanganan 401 global; [ApiException] diteruskan ke pemanggil.
   Future<ApiUser> login({
     required String identifier,
     required String password,
@@ -32,7 +38,9 @@ class AuthRepository {
     return user;
   }
 
+  /// POST /auth/customer/register: mendaftarkan akun pelanggan baru.
   /// Backend tidak mengembalikan token saat daftar; panggil [login] sesudahnya.
+  /// Melempar [ApiException] (mis. galat per kolom bila email/HP sudah dipakai).
   Future<void> register({
     required String fullName,
     required String email,
@@ -47,7 +55,10 @@ class AuthRepository {
     });
   }
 
-  /// null bila tidak ada token atau sesi sudah tidak valid (401).
+  /// GET /me: data pengguna dari token yang tersimpan.
+  ///
+  /// null bila tidak ada token atau sesi sudah tidak valid (401); pada 401 token dihapus dan
+  /// [onSessionInvalid] dipanggil. Galat lain (mis. jaringan) dilempar ulang.
   Future<ApiUser?> currentUser() async {
     final token = await TokenStore.readToken();
     if (token == null || token.isEmpty) return null;
@@ -64,6 +75,8 @@ class AuthRepository {
     }
   }
 
+  /// POST /auth/logout lalu menghapus token lokal. Galat dari server diabaikan supaya
+  /// pengguna tetap bisa keluar walau sedang luring.
   Future<void> logout() async {
     try {
       await _api.post('/auth/logout', handleUnauthorized: false);
@@ -73,17 +86,22 @@ class AuthRepository {
     await TokenStore.logout();
   }
 
+  /// POST /auth/password/forgot: meminta kode reset sandi dikirim ke [email].
+  /// Mengembalikan pesan dari server (string kosong bila tidak ada).
   Future<String> forgotPassword(String email) async {
     final res = await _api.post('/auth/password/forgot',
         handleUnauthorized: false, body: {'email': email});
     return (res.data as Map<String, dynamic>)['message'] as String? ?? '';
   }
 
+  /// POST /auth/password/verify: memeriksa [code] reset sandi untuk [email].
+  /// Melempar [ApiException] bila kode salah atau kedaluwarsa.
   Future<void> verifyCode({required String email, required String code}) async {
     await _api.post('/auth/password/verify',
         handleUnauthorized: false, body: {'email': email, 'code': code});
   }
 
+  /// POST /auth/password/reset: menyetel sandi baru [password] memakai [code] yang sudah diverifikasi.
   Future<void> resetPassword({
     required String email,
     required String code,
@@ -95,6 +113,10 @@ class AuthRepository {
   }
 
   /// PATCH /me. Mengubah email/HP butuh [currentPassword] di server.
+  ///
+  /// `email` hanya dikirim bila [newEmail] berbeda dari [oldEmail] (tanpa beda huruf besar/kecil).
+  /// Bila server mengembalikan email, email sesi di [TokenStore] ikut diperbarui. [userId]
+  /// tidak dipakai oleh metode ini. Melempar [ApiException] bila gagal.
   Future<ApiUser> updateProfile({
     required int userId,
     required String oldEmail,
@@ -117,7 +139,8 @@ class AuthRepository {
     return user;
   }
 
-  /// PUT /me/password. Return null bila sukses, atau pesan galat dari server.
+  /// PUT /me/password. Return null bila sukses, atau pesan galat dari server
+  /// (galat kolom sandi lama/baru didahulukan). [email] tidak dipakai oleh metode ini.
   Future<String?> changePassword({
     required String email,
     required String currentPassword,
@@ -136,6 +159,7 @@ class AuthRepository {
     }
   }
 
+  // Mengambil objek `user` dari balasan /me.
   ApiUser _userFrom(ApiResponse res) => ApiUser.fromJson(
       (res.data as Map<String, dynamic>)['user'] as Map<String, dynamic>);
 }

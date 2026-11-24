@@ -1,3 +1,5 @@
+// Layar Lupa Sandi (langkah 1 dari 3): isi email, server mengirim kode OTP 6 digit ke email itu.
+// Dibuka dari tombol "Forgot Password?" di Login; memanggil AuthRepository -> POST /auth/password/forgot.
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -11,6 +13,7 @@ import '../../widgets/auth_scaffold.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/primary_button.dart';
 
+/// Formulir email untuk meminta kode reset sandi; setelah sukses lanjut ke VerifyCodeScreen membawa email.
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
 
@@ -31,6 +34,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
+  /// Validasi lokal sebelum ke server: wajib diisi dan berbentuk email. Mengembalikan pesan galat atau null.
   String? _validateEmail(String value) {
     final email = value.trim();
     if (email.isEmpty) return 'Email wajib diisi';
@@ -38,6 +42,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     return null;
   }
 
+  /// Validasi email, kirim POST /auth/password/forgot, lalu buka layar verifikasi kode dengan email
+  /// sebagai argumen. Galat server (ApiException) ditampilkan di bawah kolom email.
   Future<void> _sendResetCode() async {
     FocusScope.of(context).unfocus();
 

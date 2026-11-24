@@ -1,3 +1,5 @@
+// Layar Verifikasi Kode (langkah 2 dari 3 lupa sandi): isi OTP 6 digit yang dikirim ke email.
+// Dibuka dari ForgotPasswordScreen dengan argumen email; memeriksa kode lewat POST /auth/password/verify.
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -11,6 +13,8 @@ import '../../widgets/auth_scaffold.dart';
 import '../../widgets/otp_input.dart';
 import '../../widgets/primary_button.dart';
 
+/// Input OTP untuk reset sandi. Argumen rute: String email. Kode yang lolos diteruskan bersama email
+/// ke ResetPasswordScreen; kodenya dipakai lagi oleh server saat sandi baru disimpan.
 class VerifyCodeScreen extends StatefulWidget {
   const VerifyCodeScreen({super.key});
 
@@ -22,10 +26,13 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
   static const int _codeLength = 6;
 
   String _code = '';
+  // _hasError: kode belum 6 digit (cek lokal); _serverError: kode ditolak server.
   bool _hasError = false;
   String? _serverError;
   bool _isLoading = false;
 
+  /// Cek panjang kode, kirim POST /auth/password/verify, lalu buka ResetPasswordScreen dengan
+  /// {'email', 'code'}. Galat server ditampilkan di bawah kotak OTP.
   Future<void> _verify(String email) async {
     FocusScope.of(context).unfocus();
     if (_code.length < _codeLength) {
@@ -60,6 +67,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
     );
   }
 
+  /// Minta kode baru (POST /auth/password/forgot lagi); pesan dari server atau galatnya tampil di SnackBar.
   Future<void> _resendCode(String email) async {
     String message;
     try {

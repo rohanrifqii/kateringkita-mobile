@@ -1,5 +1,5 @@
-// Skrip seed sekali jalan: 5 toko demo aplikasi mobile -> backend KateringKita.
-// Jalankan: dart run tool/seed_toko.dart [--api <url>]
+// Skrip seed sekali jalan: 5 toko demo aplikasi mobile -> backend KateringKita (data dari tool/seed_toko.json).
+// Jalankan dari root repo: dart run tool/seed_toko.dart [--api <url>]. Penjelasan lengkap di tool/README.md.
 // Kredensial diketik saat jalan, tidak pernah ditulis ke berkas.
 import 'dart:convert';
 import 'dart:io';
@@ -9,11 +9,14 @@ import 'package:http/http.dart' as http;
 
 import 'seed_lib.dart';
 
+/// Alamat API production yang dipakai bila `--api` tidak diberikan.
 const defaultApi = 'https://ketring-45f82aef1ca0.herokuapp.com/api/v1';
 
+/// Alamat API terpilih (diisi di [main]) dan klien HTTP bersama untuk seluruh skrip.
 late String api;
 final client = http.Client();
 
+/// Galat balasan HTTP bukan 2xx: kode [status] dan isi [body] mentah dari server.
 class ApiError implements Exception {
   final int status;
   final String body;
@@ -22,6 +25,10 @@ class ApiError implements Exception {
   String toString() => 'HTTP $status: $body';
 }
 
+/// Memanggil endpoint [path] dengan [method] HTTP, [token] Bearer opsional, dan [body] JSON opsional.
+///
+/// Mengembalikan isi `data` dari balasan (atau seluruh JSON bila tanpa `data`; null bila kosong).
+/// Melempar [ApiError] untuk balasan bukan 2xx.
 Future<dynamic> call(
   String method,
   String path, {
@@ -30,21 +37,28 @@ Future<dynamic> call(
 }) async {
   final req = http.Request(method, Uri.parse('$api$path'));
   req.headers['Accept'] = 'application/json';
+  // Header login hanya bila token diberikan.
   if (token != null) req.headers['Authorization'] = 'Bearer $token';
+  // Body dikirim sebagai JSON.
   if (body != null) {
     req.headers['Content-Type'] = 'application/json';
     req.body = jsonEncode(body);
   }
   final res = await http.Response.fromStream(await client.send(req));
+  // Kode 3xx ke atas dianggap gagal.
   if (res.statusCode >= 300) throw ApiError(res.statusCode, res.body);
+  // Balasan kosong (mis. 204) menjadi null.
   if (res.body.isEmpty) return null;
   final j = jsonDecode(res.body);
   return j is Map && j.containsKey('data') ? j['data'] : j;
 }
 
+/// Meminta input dari terminal dengan teks [label]; [def] adalah nilai bawaan bila pengguna hanya
+/// menekan Enter. [secret] true menyembunyikan ketikan (untuk sandi) bila terminal mendukung.
 String ask(String label, {String? def, bool secret = false}) {
   stdout.write(def == null ? '$label: ' : '$label [$def]: ');
   String? line;
+  // Mode sandi: matikan gema terminal, lalu pastikan gema dinyalakan lagi walau terjadi galat.
   if (secret) {
     var hidden = false;
     try {
@@ -70,6 +84,8 @@ String ask(String label, {String? def, bool secret = false}) {
   return line.isEmpty ? (def ?? '') : line;
 }
 
+/// POST /auth/login sebagai klien [clientType] (`web` untuk admin, `mobile` untuk penjual).
+/// Mengembalikan token akses; melempar [ApiError] bila gagal (401 bila akun/sandi salah).
 Future<String> login(
   String identifier,
   String password,
@@ -87,6 +103,10 @@ Future<String> login(
   return d['token'] as String;
 }
 
+/// Mengunggah gambar [assetPath] untuk keperluan [purpose] (`logo` atau `menu`).
+///
+/// Langkahnya: POST /merchant/uploads meminta URL unggah, lalu berkas dikirim dengan PUT ke URL
+/// itu (penyimpanan R2). Mengembalikan URL publik gambar; melempar [ApiError] bila gagal.
 Future<String> upload(String token, String purpose, String assetPath) async {
   final bytes = Uint8List.fromList(File(assetPath).readAsBytesSync());
   final ctype = contentTypeOf(bytes);
@@ -101,12 +121,16 @@ Future<String> upload(String token, String purpose, String assetPath) async {
   req.headers['Content-Type'] = ctype;
   req.bodyBytes = bytes;
   final res = await http.Response.fromStream(await client.send(req));
+  // PUT ke penyimpanan gagal.
   if (res.statusCode >= 300) {
     throw ApiError(res.statusCode, 'PUT upload gagal: ${res.body}');
   }
   return d['public_url'] as String;
 }
 
+/// Alur utama: baca `--api`, muat daftar toko dari JSON, login admin, ambil kategori menu
+/// (slug → id), lalu proses tiap toko. Toko yang gagal dicatat; skrip keluar dengan kode 1
+/// bila ada yang gagal.
 Future<void> main(List<String> args) async {
   final i = args.indexOf('--api');
   api = (i >= 0 && i + 1 < args.length ? args[i + 1] : defaultApi).replaceAll(
@@ -129,6 +153,7 @@ Future<void> main(List<String> args) async {
   };
 
   final failed = <String>[];
+  // Satu toko gagal tidak menghentikan toko berikutnya.
   for (final s in stores) {
     stdout.writeln('\n== ${s['business_name']} ==');
     try {
@@ -143,9 +168,13 @@ Future<void> main(List<String> args) async {
     '\nRingkasan: berhasil ${stores.length - failed.length}, gagal ${failed.length}'
     '${failed.isEmpty ? '' : ' (${failed.join(', ')})'}',
   );
+  // Kode keluar 1 menandai ada toko yang gagal.
   if (failed.isNotEmpty) exit(1);
 }
 
+/// Memproses satu toko [s]: login penjual (daftar bila belum ada), verifikasi oleh admin
+/// ([adminToken]) bila belum `verified`, perbarui profil + logo, lalu buat menu yang belum ada
+/// (kategori dicari di [cats]). Melempar galat bila ada langkah yang gagal.
 Future<void> seedStore(
   Map<String, dynamic> s,
   String adminToken,
@@ -155,12 +184,15 @@ Future<void> seedStore(
   final pw = ask('Sandi penjual (8-72, huruf+angka)', secret: true);
 
   String? token;
+  // Coba login dulu; 401 berarti penjual belum terdaftar (atau sandi salah).
   try {
     token = await login(phone, pw, 'mobile');
     stdout.writeln('  login penjual OK (sudah terdaftar)');
   } on ApiError catch (e) {
     if (e.status != 401) rethrow;
   }
+  // Belum bisa login: daftarkan penjual lalu login. 409 berarti nomor sudah terdaftar,
+  // jadi kemungkinan sandi yang diketik salah.
   if (token == null) {
     try {
       await call(
@@ -187,6 +219,7 @@ Future<void> seedStore(
 
   final me = await call('GET', '/me', token: token);
   final merchant = me['merchant'] as Map<String, dynamic>;
+  // Toko baru belum terverifikasi: admin memverifikasinya.
   if (merchant['verification_status'] != 'verified') {
     await call(
       'POST',
@@ -217,6 +250,7 @@ Future<void> seedStore(
     '/merchant/menus',
     token: token,
   )) as List).map((m) => m['name'] as String).toSet();
+  // Buat menu yang namanya belum ada (aman dijalankan ulang).
   for (final m in (s['menus'] as List).cast<Map<String, dynamic>>()) {
     final mname = m['name'] as String;
     if (existing.contains(mname)) {

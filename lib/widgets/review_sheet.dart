@@ -1,3 +1,5 @@
+// Lembar bawah "Beri Ulasan" untuk pesanan selesai, dibuka dari daftar pesanan. Ulasan dikirim
+// lewat OrderRepository.review (POST /orders/:code/reviews).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -7,7 +9,8 @@ import '../core/app_text_styles.dart';
 import '../data/order_repository.dart';
 import '../models/order_api_model.dart';
 
-/// Lembar ulasan menu untuk pesanan selesai. Hasil `true` bila ulasan terkirim.
+/// Lembar ulasan menu untuk pesanan selesai. Hasil `true` bila ulasan terkirim,
+/// null bila ditutup tanpa mengirim.
 Future<bool?> showReviewSheet(BuildContext context, OrderApiModel order) {
   final repo = context.read<OrderRepository>();
   return showModalBottomSheet<bool>(
@@ -20,6 +23,7 @@ Future<bool?> showReviewSheet(BuildContext context, OrderApiModel order) {
   );
 }
 
+// Isi lembar ulasan: satu baris bintang + komentar per menu unik di pesanan.
 class _ReviewSheet extends StatefulWidget {
   const _ReviewSheet({required this.order, required this.repo});
   final OrderApiModel order;
@@ -31,9 +35,11 @@ class _ReviewSheet extends StatefulWidget {
 
 class _ReviewSheetState extends State<_ReviewSheet> {
   late final List<OrderItem> _menus;
+  // Semua peta di bawah memakai id menu sebagai kunci.
   final Map<int, int> _rating = {};
   final Map<int, TextEditingController> _comments = {};
   final Map<int, String> _errors = {};
+  // Menu yang ditolak server (mis. sudah pernah diulas): barisnya dikunci.
   final Set<int> _done = {};
   bool _sending = false;
   String? _error;
@@ -41,6 +47,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
   @override
   void initState() {
     super.initState();
+    // Menu yang sama bisa muncul di beberapa baris pesanan (opsi berbeda); ulas sekali saja.
     final seen = <int>{};
     _menus = [
       for (final i in widget.order.items)
@@ -59,6 +66,9 @@ class _ReviewSheetState extends State<_ReviewSheet> {
     super.dispose();
   }
 
+  /// Mengirim ulasan untuk menu yang diberi bintang dan belum dikunci. Berhasil: lembar ditutup
+  /// dengan hasil true. Gagal: galat per menu (`items.N.menu_id`) mengunci baris itu, selain itu
+  /// pesan galat umum ditampilkan.
   Future<void> _send() async {
     final rated = _menus
         .where((m) => _rating.containsKey(m.menuId) && !_done.contains(m.menuId))
@@ -100,6 +110,7 @@ class _ReviewSheetState extends State<_ReviewSheet> {
     }
   }
 
+  // Satu baris menu: 5 tombol bintang (ketuk bintang yang sama untuk menghapus) dan kolom komentar.
   Widget _row(OrderItem m) {
     final r = _rating[m.menuId] ?? 0;
     final err = _errors[m.menuId];

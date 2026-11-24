@@ -99,7 +99,7 @@ class OrderPayment {
       );
 }
 
-/// Satu pesanan lengkap dari backend (berbeda dengan `OrderModel` yang dipakai layar lama).
+/// Satu pesanan lengkap dari backend, dipakai layar pesanan, pembayaran, dan WhatsApp.
 ///
 /// [OrderApiModel.fromJson] mengubah objek JSON pesanan menjadi kelas ini; data toko diambil
 /// dari objek `merchant` di dalam JSON tersebut.

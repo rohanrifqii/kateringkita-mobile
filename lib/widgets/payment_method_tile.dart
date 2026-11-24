@@ -1,3 +1,5 @@
+// Pilihan metode pembayaran (kartu dengan radio) di layar checkout. Nilai metode yang dipilih dikirim
+// ke backend sebagai `payment_method` saat membuat pesanan.
 import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
@@ -18,6 +20,8 @@ enum PaymentMethod {
       };
 }
 
+/// Data tampilan satu pilihan metode bayar: [code] teks pendek di kotak ikon (mis. `QR`),
+/// [title], [subtitle], [badge] opsional, serta warna aksen dan latar ikonnya.
 class PaymentMethodOption {
   final PaymentMethod method;
   final String code;
@@ -38,6 +42,7 @@ class PaymentMethodOption {
   });
 }
 
+/// Kartu satu metode bayar; berbingkai warna utama bila [selected]. [onTap] dipanggil saat diketuk.
 class PaymentMethodTile extends StatelessWidget {
   final PaymentMethodOption option;
   final bool selected;

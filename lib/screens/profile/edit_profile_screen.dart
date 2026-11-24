@@ -1,3 +1,6 @@
+// Layar Ubah Profil (dibuka dari kartu profil atau menu "Kelola Profil" di ProfileScreen). Nama, email, dan No. HP dikirim ke server
+// lewat AuthRepository.updateProfile (PATCH /me); bio, gender, tanggal lahir, foto, dan status verifikasi
+// hanya disimpan lokal di SharedPreferences (UserProfileExtras), bukan di backend.
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -13,7 +16,8 @@ import '../../models/api_user.dart';
 import '../../data/auth_repository.dart';
 import '../../providers/theme_provider.dart';
 
-/// Data tambahan profil pengguna yang disimpan di SharedPreferences
+/// Data tambahan profil pengguna yang hanya disimpan lokal di SharedPreferences, terpisah per email
+/// (kunci prof_*_<email>). Backend tidak menyimpan data ini.
 class UserProfileExtras {
   final String bio;
   final String gender;
@@ -33,6 +37,7 @@ class UserProfileExtras {
     this.isEmailVerified = false,
   });
 
+  /// Salinan dengan field yang diberikan diganti; field null tetap memakai nilai lama.
   UserProfileExtras copyWith({
     String? bio,
     String? gender,
@@ -55,11 +60,13 @@ class UserProfileExtras {
 
   static final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
 
+  // Email diubah jadi akhiran kunci yang aman (huruf kecil, selain a-z0-9 jadi _); kosong = 'default'.
   static String _scope(String email) {
     if (email.trim().isEmpty) return 'default';
     return email.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_');
   }
 
+  /// Membaca data tambahan milik [email] dari SharedPreferences; kunci yang belum ada memakai nilai bawaan.
   static Future<UserProfileExtras> load(String email) async {
     final s = _scope(email);
     final bio = await _prefs.getString('prof_bio_$s') ??
@@ -82,6 +89,7 @@ class UserProfileExtras {
     );
   }
 
+  /// Menulis seluruh field [data] ke SharedPreferences di bawah kunci milik [email].
   static Future<void> save(String email, UserProfileExtras data) async {
     final s = _scope(email);
     await _prefs.setString('prof_bio_$s', data.bio);
@@ -94,7 +102,9 @@ class UserProfileExtras {
   }
 }
 
-/// Halaman "Ubah Profil" (Kelola Profil) bergaya Shopee dengan tema KateringKita
+/// Halaman "Ubah Profil" (Kelola Profil) bergaya Shopee dengan tema KateringKita.
+/// [initialUser] dari GET /me (null untuk tamu: nilai contoh yang tampil dan tidak ada yang dikirim ke server);
+/// [initialExtras] dari UserProfileExtras.load.
 class EditProfileScreen extends StatefulWidget {
   final ApiUser? initialUser;
   final UserProfileExtras initialExtras;
@@ -149,11 +159,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     return '$first************$last@$domain';
   }
 
+  /// Simpan perubahan: bila ada akun (userId), kirim nama/HP/email ke PATCH /me (email hanya dikirim bila
+  /// berbeda dari [oldEmail]); galat server cukup tampil di SnackBar, nilai di layar tidak dikembalikan.
+  /// Setelah itu data tambahan selalu disimpan lokal di bawah email yang sedang tampil.
   Future<void> _persistChanges({String? oldEmail}) async {
     final repo = context.read<AuthRepository>();
     if (_userId != null) {
-      // Catatan: server meminta current_password untuk ganti email/HP;
-      // layar ini belum punya field sandi (ditangani di rencana profil).
+      // Catatan: server meminta current_password untuk ganti email/HP, sedangkan layar ini belum punya
+      // kolom sandi; akibatnya perubahan itu ditolak server dan pesannya muncul di SnackBar.
       try {
         await repo.updateProfile(
           userId: _userId!,
@@ -172,6 +185,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     await UserProfileExtras.save(_email, _extras);
   }
 
+  /// SnackBar mengambang berikon centang (juga dipakai untuk pesan gagal memilih foto).
   void _showSuccessToast(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -200,6 +214,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   // ---------------- MODAL EDIT TIAP FIELD ----------------
 
+  /// Ambil foto dari galeri/kamera, salin ke folder dokumen aplikasi, lalu simpan path-nya sebagai avatar
+  /// (hanya lokal; foto tidak diunggah ke server).
   Future<void> _pickAndSaveImage(ImageSource source) async {
     try {
       final picker = ImagePicker();
@@ -569,6 +585,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
   }
 
+  /// Pilih tanggal lahir (minimal berumur 10 tahun), simpan sebagai teks "dd Bulan yyyy" di data lokal.
   Future<void> _pickBirthDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -617,7 +634,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     }
   }
 
-  /// Sheet Ubah & Verifikasi Nomor WhatsApp / Email (Menggabungkan fungsi Akun WhatsApp & Email secara profesional)
+  /// Sheet ubah & verifikasi No. WhatsApp / email. OTP di sini hanya simulasi (tidak ada panggilan server);
+  /// menekan simpan menandai kontak terverifikasi secara lokal lalu memanggil _persistChanges.
   void _showContactVerificationSheet({required bool isPhone}) {
     final currentVal = isPhone ? _phone : _email;
     final isVerified =

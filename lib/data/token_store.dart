@@ -1,3 +1,5 @@
+// Penyimpanan sesi login (token akses dan email) di perangkat. ApiClient membaca token dari sini
+// untuk header Authorization; AuthRepository menulis/menghapusnya saat login dan logout.
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Rahasia (token, email sesi) disimpan terenkripsi:
@@ -14,12 +16,14 @@ class TokenStore {
         key: _sessionEmailKey, value: email.trim().toLowerCase());
   }
 
+  /// Token akses yang tersimpan, atau null bila belum login.
   static Future<String?> readToken() => _storage.read(key: _tokenKey);
 
+  /// Email pengguna yang sedang login (huruf kecil), atau null bila belum login.
   static Future<String?> readSessionEmail() =>
       _storage.read(key: _sessionEmailKey);
 
-  /// Logout menghapus sesi lokal.
+  /// Logout menghapus sesi lokal (token dan email).
   static Future<void> logout() async {
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _sessionEmailKey);

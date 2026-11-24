@@ -1,10 +1,12 @@
+// Tombol ikon keranjang di bilah atas layar Beranda, detail menu, dan profil toko.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/app_colors.dart';
 import '../core/app_routes.dart';
 import '../providers/cart_provider.dart';
 
-/// Ikon keranjang dengan lencana jumlah item.
+/// Ikon keranjang dengan lencana jumlah item (dari [CartProvider.count]); ketuk untuk membuka
+/// layar checkout. Lencana disembunyikan bila keranjang kosong.
 class CartButton extends StatelessWidget {
   const CartButton({super.key});
 

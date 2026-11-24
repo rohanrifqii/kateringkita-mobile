@@ -8,7 +8,7 @@ import 'dart:math';
 ///
 /// Angka acaknya berasal dari [Random.secure] agar sulit ditebak. Bit pada byte ke-6 dan
 /// ke-8 diatur supaya hasilnya sah sebagai UUID v4. Kunci ini lazimnya diteruskan lewat
-/// parameter `headers` pada `ApiClient.post`; di cabang ini fungsi ini belum dipanggil.
+/// parameter `headers` pada `ApiClient.post`. Dipakai `CartProvider.idempotencyKey` saat membuat pesanan.
 String newIdempotencyKey() {
   final r = Random.secure();
   final b = List<int>.generate(16, (_) => r.nextInt(256));
