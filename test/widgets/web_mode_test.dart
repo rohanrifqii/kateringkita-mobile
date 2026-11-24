@@ -7,9 +7,13 @@ import 'package:kateringkita_pbl/widgets/menu_image.dart';
 import 'package:kateringkita_pbl/widgets/phone_frame.dart';
 import 'package:kateringkita_pbl/widgets/profile_avatar.dart';
 
-NetworkImage _networkImage(WidgetTester tester) => tester
-    .widget<Image>(find.byWidgetPredicate((w) => w is Image && w.image is NetworkImage))
-    .image as NetworkImage;
+// Gambar didekode lewat ResizeImage; bukalah pembungkusnya untuk memeriksa NetworkImage.
+NetworkImage _networkImage(WidgetTester tester) {
+  final provider = tester
+      .widget<Image>(find.byWidgetPredicate((w) => w is Image && (w.image is NetworkImage || w.image is ResizeImage)))
+      .image;
+  return (provider is ResizeImage ? provider.imageProvider : provider) as NetworkImage;
+}
 
 void main() {
   group('foto di versi web', () {

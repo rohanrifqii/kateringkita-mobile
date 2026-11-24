@@ -100,8 +100,13 @@ Future<AuthProvider> _pump(
 }
 
 Finder _networkAvatar(String url) => find.byWidgetPredicate(
-    (w) => w is Image && w.image is NetworkImage &&
-        (w.image as NetworkImage).url == url);
+    // Foto didekode lewat ResizeImage; bandingkan URL provider aslinya.
+    (w) {
+      if (w is! Image) return false;
+      final p = w.image;
+      final inner = p is ResizeImage ? p.imageProvider : p;
+      return inner is NetworkImage && inner.url == url;
+    });
 
 void main() {
   testWidgets('header memakai foto dari avatar_url server', (tester) async {

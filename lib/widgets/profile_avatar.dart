@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
+import 'menu_image.dart' show decodeWidthFor;
 
 /// Foto profil dari server (`avatar_url`); inisial nama bila kosong, sedang
 /// dimuat, atau gagal dimuat. [borderRadius] null berarti lingkaran.
@@ -50,6 +51,8 @@ class ProfileAvatar extends StatelessWidget {
       width: size,
       height: size,
       fit: BoxFit.cover,
+      // Didekode seukuran tampil agar memori peramban ponsel tidak jebol.
+      cacheWidth: decodeWidthFor(size, MediaQuery.devicePixelRatioOf(context)),
       // web: penyimpanan foto tanpa header CORS → tampilkan lewat elemen <img>
       webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
       errorBuilder: (_, _, _) => _initials(),
