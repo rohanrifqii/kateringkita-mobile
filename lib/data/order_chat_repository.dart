@@ -54,11 +54,12 @@ class OrderChatRepository {
 
   /// Mengirim satu pesan berisi teks, foto, atau keduanya.
   ///
+  /// @param code kode pesanan yang chat-nya dikirimi pesan.
   /// @param body teks pesan; di-trim, dan tidak dikirim bila kosong.
   /// @param imageUrl alamat publik foto hasil [uploadImage].
-  /// @returns pesan yang tersimpan di server.
+  /// @returns pesan yang tersimpan di server, lengkap dengan id dan jamnya.
   /// @throws ApiException misalnya 409 `CHAT_CLOSED` bila pesanan sudah
-  ///   selesai saat pesan dikirim.
+  ///   selesai saat pesan dikirim, atau 422 bila teks/foto tidak valid.
   Future<ChatMessage> send(
     String code, {
     String? body,
@@ -77,7 +78,10 @@ class OrderChatRepository {
 
   /// Menandai pesan penjual sudah dibaca sampai [lastId].
   ///
-  /// @param lastId id pesan terakhir yang benar-benar tampil di layar.
+  /// @param code kode pesanan yang chat-nya dibaca.
+  /// @param lastId id pesan terakhir yang benar-benar tampil di layar; null
+  ///   berarti semua pesan penjual sampai saat ini.
+  /// @returns selesai tanpa nilai bila server menerima tanda baca.
   /// @throws ApiException bila server menolak atau jaringan gagal.
   Future<void> markRead(String code, {int? lastId}) async {
     await _api.post(
@@ -112,6 +116,8 @@ class OrderChatRepository {
   /// lewat [requestUpload], dan berkas dikirim dengan PUT ke alamat itu.
   ///
   /// @param fileName nama berkas, untuk menentukan tipe foto.
+  /// @param mimeType tipe dari pemilih berkas; didahulukan dari ekstensi
+  ///   [fileName] bila JPG, PNG, atau WebP.
   /// @param bytes isi berkas.
   /// @returns alamat publik foto, untuk dikirim lewat [send].
   /// @throws ApiException bila format bukan JPG/PNG/WebP, ukuran lebih dari
@@ -119,10 +125,11 @@ class OrderChatRepository {
   Future<String> uploadImage(
     String code, {
     required String fileName,
+    String? mimeType,
     required Uint8List bytes,
   }) async {
     // 1. Cek tipe dan ukuran sebelum memakai jaringan.
-    final contentType = photoContentType(fileName);
+    final contentType = photoContentType(fileName, mimeType: mimeType);
     if (contentType == null) {
       throw _invalidPhoto('Format foto harus JPG, PNG, atau WebP.');
     }

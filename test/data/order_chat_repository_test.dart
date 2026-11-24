@@ -144,6 +144,43 @@ void main() {
     },
   );
 
+  test(
+    'uploadImage memakai mimeType pemilih untuk berkas tanpa ekstensi',
+    () async {
+      late Map<String, dynamic> uploadRequest;
+      final repository = buildRepository(
+        (request) async {
+          uploadRequest = jsonDecode(request.body) as Map<String, dynamic>;
+          return jsonResponse(200, {
+            'data': {
+              'upload_url': 'https://storage.test/put?sig=1',
+              'public_url': 'https://img.edufin.app/orders/5/chat/b.webp',
+              'expires_at': '2026-11-24T03:00:00.000Z',
+            },
+          });
+        },
+        (request) async => http.Response('', 200),
+      );
+      await repository.uploadImage(
+        'KK-1',
+        fileName: 'blob-1234',
+        mimeType: 'image/webp',
+        bytes: Uint8List.fromList([1]),
+      );
+      expect(uploadRequest, {'content_type': 'image/webp', 'size': 1});
+      // Tipe dari pemilih yang tidak didukung tetap ditolak.
+      await expectLater(
+        repository.uploadImage(
+          'KK-1',
+          fileName: 'blob-1234',
+          mimeType: 'image/gif',
+          bytes: Uint8List(1),
+        ),
+        throwsA(isA<ApiException>()),
+      );
+    },
+  );
+
   test('unreadTotal membaca total dari /me/chats/unread', () async {
     final repository = buildRepository((request) async {
       expect(request.url.path, '/api/v1/me/chats/unread');

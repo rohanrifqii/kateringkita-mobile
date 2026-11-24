@@ -18,12 +18,16 @@ const _photoContentTypes = {
 
 const _uploadTimeout = Duration(seconds: 60);
 
-/// Content type foto dari ekstensi nama berkas.
+/// Content type foto dari tipe yang dilaporkan pemilih berkas, atau dari
+/// ekstensi nama berkas bila tipe itu tidak ada atau tidak didukung.
 ///
 /// @param fileName nama berkas, misalnya "foto.JPG".
-/// @returns `image/jpeg`, `image/png`, atau `image/webp`; null bila ekstensinya
-///   bukan JPG, PNG, atau WebP.
-String? photoContentType(String fileName) {
+/// @param mimeType tipe dari pemilih berkas, misalnya "image/png"; berguna di
+///   web saat berkas galeri tidak punya ekstensi.
+/// @returns `image/jpeg`, `image/png`, atau `image/webp`; null bila tipe dan
+///   ekstensinya bukan JPG, PNG, atau WebP.
+String? photoContentType(String fileName, {String? mimeType}) {
+  if (_photoContentTypes.containsValue(mimeType)) return mimeType;
   final dot = fileName.lastIndexOf('.');
   if (dot < 0) return null;
   return _photoContentTypes[fileName.substring(dot + 1).toLowerCase()];
