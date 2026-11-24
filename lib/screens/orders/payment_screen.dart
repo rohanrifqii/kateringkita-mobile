@@ -1,5 +1,5 @@
-// Layar pembayaran pesanan, dibuka dari checkout (setelah POST /orders) atau tombol "Lanjutkan Bayar" di
-// daftar pesanan. Bayar lewat Virtual Account (POST /orders/:code/va), QRIS yang QR-nya digambar langsung di layar ini
+// Layar pembayaran pesanan (alamat /payment/<kode>), dibuka dari checkout (setelah POST /orders) atau tombol
+// "Lanjutkan Bayar" di daftar pesanan; saat halaman web dimuat ulang, pesanan dimuat lagi dari kode di alamat. Bayar lewat Virtual Account (POST /orders/:code/va), QRIS yang QR-nya digambar langsung di layar ini
 // (POST /orders/:code/qris), atau cadangan halaman Snap Midtrans (POST /orders/:code/online lalu SnapWebViewScreen).
 // Status bayar selalu dibaca dari server.
 import 'dart:async';
@@ -38,20 +38,25 @@ Future<void> _openExternal(String url) async {
   }
 }
 
-/// Halaman pembayaran pesanan (argumen rute: [OrderApiModel]).
+/// Halaman pembayaran pesanan. Pesanan diambil dari argumen rute ([OrderApiModel]) bila ada;
+/// bila tidak (mis. halaman web dimuat ulang di `/payment/<kode>`), pesanan [orderCode]
+/// dimuat dari server (GET /orders/:code).
 /// Status bayar selalu berasal dari server (polling GET /orders/:code).
 /// Pesanan `online`: QRIS dibuat otomatis dan QR-nya digambar di aplikasi;
 /// halaman Snap Midtrans hanya cadangan selama QR belum ada.
-/// Argumen rute yang bukan [OrderApiModel] membuat layar langsung ditutup.
+/// Tanpa argumen [OrderApiModel] dan tanpa [orderCode], layar langsung ditutup.
 /// [snapOpener] membuka halaman Snap (bawaannya WebView) dan [linkOpener] membuka gambar QR di luar aplikasi;
 /// keduanya bisa diganti di test.
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({
     super.key,
+    this.orderCode,
     this.snapOpener = _openSnapWebView,
     this.linkOpener = _openExternal,
   });
 
+  /// Kode pesanan dari alamat `/payment/<kode>`; dipakai bila argumen rute tidak membawa pesanan.
+  final String? orderCode;
   final SnapOpener snapOpener;
   final LinkOpener linkOpener;
 
@@ -68,7 +73,10 @@ class _PaymentScreenState extends State<PaymentScreen>
     'BRI': 'bri',
   };
 
-  bool _argsLoaded = false;
+  // True setelah pesanan tersedia (dari argumen rute atau dari server).
+  bool _orderLoaded = false;
+  // True selama pesanan [PaymentScreen.orderCode] dimuat dari server.
+  bool _loadingOrder = false;
   late OrderApiModel _order;
   late OrderRepository _repo;
 
@@ -100,26 +108,64 @@ class _PaymentScreenState extends State<PaymentScreen>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Argumen rute dibaca sekali; lalu mulai hitung mundur dan polling.
-    if (_argsLoaded) return;
-    final arg = ModalRoute.of(context)?.settings.arguments;
-    if (arg is! OrderApiModel) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) Navigator.pop(context);
-      });
+    // 1. Pesanan disiapkan sekali saja.
+    if (_orderLoaded || _loadingOrder) return;
+    _repo = context.read<OrderRepository>();
+    final argument = ModalRoute.of(context)?.settings.arguments;
+    // 2. Pesanan dari argumen rute: langsung tampil, lalu disegarkan dari server.
+    if (argument is OrderApiModel) {
+      _startWith(argument, fromServer: false);
       return;
     }
-    _argsLoaded = true;
-    _repo = context.read<OrderRepository>();
-    _order = arg;
-    _va = arg.payment?.va;
-    _qris = arg.payment?.qris;
-    _remainingSeconds = _computeRemaining(arg);
+    // 3. Hanya ada kode di alamat (mis. halaman web dimuat ulang): muat dari server.
+    if (widget.orderCode != null) {
+      _loadingOrder = true;
+      _loadOrderByCode();
+      return;
+    }
+    // 4. Tidak ada pesanan sama sekali: tutup layar.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) Navigator.pop(context);
+    });
+  }
+
+  /// Memuat pesanan [PaymentScreen.orderCode] dari server (GET /orders/:code) lalu
+  /// menampilkannya; bila gagal, layar menampilkan pesan dan tombol coba lagi.
+  /// Pemanggil menyetel [_loadingOrder] lebih dulu.
+  Future<void> _loadOrderByCode() async {
+    try {
+      final order = await _repo.get(widget.orderCode!);
+      if (!mounted) return;
+      setState(() {
+        _loadingOrder = false;
+        _startWith(order, fromServer: true);
+      });
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _loadingOrder = false;
+        _error = _errorText(error);
+      });
+    }
+  }
+
+  /// Menampilkan [order] lalu mulai hitung mundur dan polling status bayar.
+  ///
+  /// @param order pesanan yang dibayar.
+  /// @param fromServer true bila [order] baru saja diambil dari server, jadi
+  ///   tidak perlu disegarkan lagi sebelum QRIS disiapkan.
+  void _startWith(OrderApiModel order, {required bool fromServer}) {
+    _orderLoaded = true;
+    _serverConfirmed = fromServer;
+    _order = order;
+    _va = order.payment?.va;
+    _qris = order.payment?.qris;
+    _remainingSeconds = _computeRemaining(order);
     _startWatching();
     if (_order.isPaid) _scheduleSuccess();
     // Argumen rute bisa usang: segarkan dari server segera, lalu siapkan QRIS.
     Future.microtask(() async {
-      await _refresh();
+      if (!fromServer) await _refresh();
       _autoQris();
     });
   }
@@ -197,7 +243,7 @@ class _PaymentScreenState extends State<PaymentScreen>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Kembali dari aplikasi bank/e-wallet: cek status segera.
-    if (state == AppLifecycleState.resumed && _argsLoaded) _refresh();
+    if (state == AppLifecycleState.resumed && _orderLoaded) _refresh();
   }
 
   // Ambil status terbaru (GET /orders/:code) sekali; panggilan yang tumpang
@@ -863,9 +909,51 @@ class _PaymentScreenState extends State<PaymentScreen>
     );
   }
 
+  // Layar sebelum pesanan tersedia: memuat, atau pesan galat dengan tombol coba lagi.
+  Widget _loadingScaffold() {
+    final error = _error;
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: AppColors.surface,
+        elevation: 0,
+        title: Text('Pembayaran', style: AppTextStyles.h3),
+        iconTheme: IconThemeData(color: AppColors.textPrimary),
+      ),
+      body: Center(
+        child: error == null
+            ? const CircularProgressIndicator()
+            : Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      error,
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.bodyMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton(
+                      onPressed: () {
+                        setState(() {
+                          _loadingOrder = true;
+                          _error = null;
+                        });
+                        _loadOrderByCode();
+                      },
+                      child: const Text('Coba Lagi'),
+                    ),
+                  ],
+                ),
+              ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (!_argsLoaded) return const Scaffold();
+    if (!_orderLoaded) return _loadingScaffold();
     final ended = !_order.isPaid && _outcome != PaymentOutcome.waiting;
     return Scaffold(
       backgroundColor: AppColors.background,

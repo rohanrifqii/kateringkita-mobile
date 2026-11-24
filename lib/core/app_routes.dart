@@ -15,6 +15,7 @@ class AppRoutes {
   static const String productDetail = '/product-detail';
   static const String storeProfile = '/store-profile';
   static const String checkout = '/checkout';
+  /// Awalan alamat halaman Bayar; alamat lengkapnya dari [paymentFor].
   static const String payment = '/payment';
   static const String whatsappGenerator = '/whatsapp-generator';
   static const String aiAssistant = '/ai-assistant';
@@ -35,6 +36,11 @@ class AppRoutes {
   /// Alamat Chat pesanan untuk [orderCode], mis. `/order-chat/KK-1`.
   static String orderChatFor(String orderCode) =>
       '$orderChat/${Uri.encodeComponent(orderCode)}';
+
+  /// Alamat halaman Bayar untuk [orderCode], mis. `/payment/KK-1`; pesanan yang sudah
+  /// dimuat boleh ikut sebagai argumen rute supaya layar langsung terisi.
+  static String paymentFor(String orderCode) =>
+      '$payment/${Uri.encodeComponent(orderCode)}';
   static const String liked = '/liked';
   static const String profile = '/profile';
   static const String notifications = '/notifications';

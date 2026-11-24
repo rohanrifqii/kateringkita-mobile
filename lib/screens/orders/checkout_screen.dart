@@ -33,7 +33,7 @@ import 'pickup_point_picker_screen.dart';
 
 /// Layar checkout isi keranjang: data pemesan, titik temu, waktu ambil, metode bayar, dan total
 /// yang dihitung server (quote). Tombol "Proses Pembayaran" membuat pesanan dengan header
-/// Idempotency-Key lalu mengganti layar ini dengan layar Pembayaran (AppRoutes.payment).
+/// Idempotency-Key lalu mengganti layar ini dengan layar Pembayaran (AppRoutes.paymentFor).
 /// Bila pengguna batal login, layar langsung ditutup.
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key});
@@ -493,7 +493,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final order = await repo.create(body, idempotencyKey: key);
       if (!mounted) return;
       cart.clear();
-      Navigator.pushReplacementNamed(context, AppRoutes.payment,
+      Navigator.pushReplacementNamed(context, AppRoutes.paymentFor(order.code),
           arguments: order);
     } on ApiException catch (e) {
       if (!mounted) return;

@@ -1,5 +1,5 @@
 // Tabel rute aplikasi: memetakan nama rute di AppRoutes ke layar yang dibuka lewat Navigator.pushNamed.
-// Lacak Pesanan dan Chat pesanan (kode pesanan ada di alamat) dibuat oleh onGenerateRoute. Dipasang ke
+// Lacak Pesanan, Chat pesanan, dan Bayar (kode pesanan ada di alamat) dibuat oleh onGenerateRoute. Dipasang ke
 // MaterialApp di main.dart; juga menyediakan appNavigatorKey untuk navigasi tanpa BuildContext.
 import 'package:flutter/material.dart';
 
@@ -61,7 +61,6 @@ class AppRouter {
     AppRoutes.productDetail: (context) => const ProductDetailScreen(),
     AppRoutes.storeProfile: (context) => const StoreProfileScreen(),
     AppRoutes.checkout: (context) => const CheckoutScreen(),
-    AppRoutes.payment: (context) => const PaymentScreen(),
     AppRoutes.whatsappGenerator: (context) => const WhatsAppGeneratorScreen(),
     AppRoutes.aiAssistant: (context) => const AIAssistantScreen(),
     AppRoutes.orders: (context) {
@@ -74,7 +73,7 @@ class AppRouter {
     },
     AppRoutes.activeOrders: (context) => const ActiveOrdersScreen(),
     AppRoutes.completedOrders: (context) => const CompletedOrdersScreen(),
-    // Lacak Pesanan dan Chat dibuat di onGenerateRoute (kode di alamat).
+    // Lacak Pesanan, Chat, dan Bayar dibuat di onGenerateRoute (kode di alamat).
     AppRoutes.liked: (context) => const LikedScreen(),
     AppRoutes.profile: (context) => const ProfileScreen(),
     AppRoutes.notifications: (context) => const NotificationScreen(),
@@ -88,18 +87,19 @@ class AppRouter {
   /// Posisi tab Pesanan di [MainNavigationScreen].
   static const int ordersTabIndex = 1;
 
-  /// Rute yang alamatnya memuat kode pesanan: `/order-tracking/<kode>` dan
-  /// `/order-chat/<kode>`. Bentuk lama (alamat tanpa kode + kode sebagai
-  /// argumen String) tetap diterima.
+  /// Rute yang alamatnya memuat kode pesanan: `/order-tracking/<kode>`,
+  /// `/order-chat/<kode>`, dan `/payment/<kode>`. Bentuk lama Lacak Pesanan
+  /// dan Chat (alamat tanpa kode + kode sebagai argumen String) tetap diterima.
   ///
   /// @param settings nama rute dan argumennya dari [Navigator].
-  /// @returns halaman Lacak Pesanan atau Chat untuk kode itu; tab Pesanan bila
-  ///   kodenya kosong atau tidak sah; null untuk rute lain.
+  /// @returns halaman Lacak Pesanan, Chat, atau Bayar untuk kode itu; tab
+  ///   Pesanan bila kodenya kosong atau tidak sah; null untuk rute lain.
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     // 1. Cocokkan alamat dengan salah satu halaman pesanan.
     final trackingCode = orderCodeFromRoute(settings, AppRoutes.orderTracking);
     final chatCode = orderCodeFromRoute(settings, AppRoutes.orderChat);
-    final orderCode = trackingCode ?? chatCode;
+    final paymentCode = orderCodeFromRoute(settings, AppRoutes.payment);
+    final orderCode = trackingCode ?? chatCode ?? paymentCode;
     if (orderCode == null) return null;
     // 2. Kode kosong/tidak sah: ke tab Pesanan, bukan memanggil `/orders//`.
     if (orderCode.isEmpty) {
@@ -117,25 +117,28 @@ class AppRouter {
       settings: settings,
       builder: (_) => trackingCode != null
           ? OrderTrackingScreen(orderCode: orderCode)
-          : OrderChatScreen(orderCode: orderCode),
+          : chatCode != null
+          ? OrderChatScreen(orderCode: orderCode)
+          : PaymentScreen(orderCode: orderCode),
     );
   }
 
-  /// Kode pesanan pada alamat [routeName] milik Lacak Pesanan atau Chat.
+  /// Kode pesanan pada alamat [routeName] milik Lacak Pesanan, Chat, atau Bayar.
   ///
   /// @param routeName alamat rute, mis. alamat awal dari peramban.
   /// @returns kode pesanan; string kosong bila kodenya kosong atau tidak sah;
-  ///   null bila alamat itu bukan alamat Lacak Pesanan atau Chat.
+  ///   null bila alamat itu bukan alamat Lacak Pesanan, Chat, atau Bayar.
   static String? orderCodeInPath(String routeName) {
     final settings = RouteSettings(name: routeName);
     return orderCodeFromRoute(settings, AppRoutes.orderTracking) ??
-        orderCodeFromRoute(settings, AppRoutes.orderChat);
+        orderCodeFromRoute(settings, AppRoutes.orderChat) ??
+        orderCodeFromRoute(settings, AppRoutes.payment);
   }
 
   /// Kode pesanan dari rute [settings] bila rute itu milik [basePath].
   ///
   /// @param settings rute yang sedang dibuat.
-  /// @param basePath `AppRoutes.orderTracking` atau `AppRoutes.orderChat`.
+  /// @param basePath `AppRoutes.orderTracking`, `AppRoutes.orderChat`, atau `AppRoutes.payment`.
   /// @returns kode pesanan; string kosong bila kodenya kosong atau tidak sah
   ///   (mis. memuat "/"); null bila rute itu bukan milik [basePath].
   static String? orderCodeFromRoute(RouteSettings settings, String basePath) {

@@ -80,8 +80,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     final initialRoute =
         WidgetsBinding.instance.platformDispatcher.defaultRouteName;
     final orderCode = AppRouter.orderCodeInPath(initialRoute);
-    // 2. Beranda sendiri, atau /order-*/<kode> yang sudah punya tab Pesanan
-    //    di bawahnya: splash cukup menyingkir.
+    // 2. Beranda sendiri, atau /order-*/<kode> dan /payment/<kode> yang sudah
+    //    punya tab Pesanan di bawahnya: splash cukup menyingkir.
     if (initialRoute == AppRoutes.mainNav ||
         (orderCode != null && orderCode.isNotEmpty)) {
       Navigator.removeRoute(context, splashRoute);

@@ -226,7 +226,7 @@ Future<_Harness> _open(
     ],
     child: MaterialApp(
       routes: {
-        AppRoutes.payment: (_) => const _PaymentProbe(),
+        AppRoutes.paymentFor('KK-1'): (_) => const _PaymentProbe(),
         AppRoutes.login: (c) => Scaffold(
               body: TextButton(
                 onPressed: () => Navigator.pop(c, false),

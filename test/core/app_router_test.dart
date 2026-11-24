@@ -1,4 +1,4 @@
-// Test rute yang alamatnya memuat kode pesanan (Lacak Pesanan dan Chat):
+// Test rute yang alamatnya memuat kode pesanan (Lacak Pesanan, Chat, dan Bayar):
 // kode terbaca dari alamat supaya tahan muat ulang web, bentuk lama dengan
 // argumen tetap jalan, dan kode kosong jatuh ke tab Pesanan.
 import 'package:flutter/material.dart';
@@ -8,6 +8,7 @@ import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/screens/navigation/main_navigation_screen.dart';
 import 'package:kateringkita_pbl/screens/orders/order_chat_screen.dart';
 import 'package:kateringkita_pbl/screens/orders/order_tracking_screen.dart';
+import 'package:kateringkita_pbl/screens/orders/payment_screen.dart';
 
 void main() {
   /// Halaman yang dibuat [AppRouter.onGenerateRoute] untuk [name].
@@ -46,7 +47,17 @@ void main() {
     expect((page as OrderChatScreen).orderCode, 'KK-7');
   });
 
+  testWidgets('/payment/<kode> membuka Bayar untuk kode itu', (tester) async {
+    expect(AppRoutes.paymentFor('KK 1'), '/payment/KK%201');
+    final page = await pageFor(tester, AppRoutes.paymentFor('KK-1'));
+    expect((page as PaymentScreen).orderCode, 'KK-1');
+    expect(AppRouter.orderCodeInPath('/payment/KK-1'), 'KK-1');
+  });
+
   for (final name in [
+    '/payment/',
+    '/payment',
+    '/payment/a%2Fb',
     '/order-chat/',
     '/order-chat',
     '/order-tracking/%20',

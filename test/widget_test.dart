@@ -17,6 +17,7 @@ import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:kateringkita_pbl/providers/cart_provider.dart';
 import 'package:kateringkita_pbl/providers/favorites_provider.dart';
 import 'package:kateringkita_pbl/providers/notification_provider.dart';
+import 'package:kateringkita_pbl/screens/navigation/main_navigation_screen.dart';
 import 'package:kateringkita_pbl/widgets/phone_frame.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
@@ -123,6 +124,8 @@ void main() {
   for (final (initialRoute, label) in [
     (AppRoutes.mainNav, 'beranda'),
     ('/order-chat/', 'alamat Chat tanpa kode'),
+    ('/payment/', 'alamat Bayar tanpa kode'),
+    (AppRoutes.payment, 'alamat Bayar lama tanpa kode'),
   ]) {
     testWidgets('web dimuat ulang di $label: hanya satu beranda/tab', (
       tester,
@@ -152,6 +155,78 @@ void main() {
     await tester.pump(const Duration(milliseconds: 500));
     expect(_currentRoute(), AppRoutes.mainNav);
   });
+
+  testWidgets(
+    'web dimuat ulang di /payment/<kode>: langsung Bayar KK-1 tanpa splash, tab Pesanan di bawahnya',
+    (tester) async {
+      tester.binding.platformDispatcher.defaultRouteNameTestValue =
+          AppRoutes.paymentFor('KK-1');
+      addTearDown(
+        tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+      );
+      final order = {
+        'code': 'KK-1',
+        'status': 'holding',
+        'payment_method': 'va',
+        'payment_status': 'unpaid',
+        'seconds_left': 600,
+        'pickup_point': {'id': 2, 'name': 'Perpustakaan Pusat'},
+        'items': [
+          {
+            'menu_id': 7,
+            'menu_name': 'Nasi Box',
+            'qty': 2,
+            'unit_price': 45000,
+            'options': [],
+            'line_total': 90000,
+          },
+        ],
+        'subtotal': 90000,
+        'discount': 0,
+        'service_fee': 9000,
+        'total': 99000,
+        'created_at': '2026-11-12T03:00:00Z',
+        'updated_at': '2026-11-12T03:00:00Z',
+        'merchant': {'id': 1, 'business_name': 'Dapur A'},
+      };
+      await _pump(tester, (r) async {
+        if (r.url.path.endsWith('/orders/KK-1')) {
+          return http.Response(
+            jsonEncode({'data': order}),
+            200,
+            headers: {'content-type': 'application/json'},
+          );
+        }
+        return _err(401, 'UNAUTHORIZED', 'x');
+      });
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Jauh sebelum 2,5 detik: splash sudah hilang, Bayar KK-1 tampil.
+      expect(find.text('Menyiapkan Dapur Kampus...'), findsNothing);
+      expect(find.text('Pembayaran'), findsOneWidget);
+      expect(find.text('KK-1'), findsWidgets);
+      expect(find.text('Buat Nomor Virtual Account'), findsOneWidget);
+
+      // Kembali (pop sampai rute terbawah) dari Bayar mendarat di tab Pesanan.
+      final routeNames = <String?>[];
+      appNavigatorKey.currentState!.popUntil((route) {
+        routeNames.add(route.settings.name);
+        return route.isFirst;
+      });
+      expect(routeNames, ['/payment/KK-1', AppRoutes.mainNav]);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(stackNames(), [AppRoutes.mainNav]);
+      expect(appNavigatorKey.currentState!.canPop(), isFalse);
+      expect(
+        tester
+            .widget<MainNavigationScreen>(find.byType(MainNavigationScreen))
+            .initialIndex,
+        AppRouter.ordersTabIndex,
+      );
+    },
+  );
 
   testWidgets('expired token at splash: guest continues to main nav', (
     tester,
