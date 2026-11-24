@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/data/notification_repository.dart';
+import 'package:kateringkita_pbl/data/order_chat_repository.dart';
 import 'package:kateringkita_pbl/providers/notification_provider.dart';
 
 http.Response _meta(int unread) => http.Response(
@@ -77,6 +78,38 @@ void main() {
     final p = _provider((req) async => _meta(0));
     p.setUnread(-1);
     expect(p.unreadCount, 0);
+  });
+
+  test('refresh juga mengisi chatUnreadCount dari /me/chats/unread', () async {
+    var chatFails = false;
+    final api = ApiClient(
+        client: MockClient((req) async {
+          if (req.url.path.endsWith('/me/chats/unread')) {
+            if (chatFails) throw const _Boom();
+            return http.Response(
+                jsonEncode({
+                  'data': {'total': 4}
+                }),
+                200,
+                headers: {'content-type': 'application/json'});
+          }
+          return _meta(2);
+        }),
+        baseUrl: 'https://x.test/api/v1');
+    final p = NotificationProvider(NotificationRepository(api),
+        chatRepository: OrderChatRepository(api));
+    await p.refresh();
+    expect(p.unreadCount, 2);
+    expect(p.chatUnreadCount, 4);
+
+    // Badge chat gagal diambil: angka lama dan lonceng tetap.
+    chatFails = true;
+    await p.refresh();
+    expect(p.chatUnreadCount, 4);
+    expect(p.unreadCount, 2);
+
+    p.clear();
+    expect(p.chatUnreadCount, 0);
   });
 }
 

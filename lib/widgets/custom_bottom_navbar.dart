@@ -1,7 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../core/app_colors.dart';
 import '../core/app_text_styles.dart';
+import '../providers/notification_provider.dart';
 
 class CustomBottomNavbar extends StatelessWidget {
   final int currentIndex;
@@ -16,6 +18,9 @@ class CustomBottomNavbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Pesan chat penjual yang belum dibaca, ikut cek berkala lonceng beranda.
+    final chatUnreadCount = context.select<NotificationProvider, int>(
+        (notifications) => notifications.chatUnreadCount);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
@@ -66,6 +71,7 @@ class CustomBottomNavbar extends StatelessWidget {
                   isDark: isDark,
                   index: 1,
                   label: 'Orders',
+                  badgeCount: chatUnreadCount,
                   iconBuilder: (color, size) => Icon(
                     Icons.assignment_outlined,
                     color: color,
@@ -116,8 +122,16 @@ class CustomBottomNavbar extends StatelessWidget {
     required int index,
     required String label,
     required Widget Function(Color color, double size) iconBuilder,
+    int badgeCount = 0,
   }) {
     final isSelected = currentIndex == index;
+    // Ikon dengan badge angka merah bila [badgeCount] lebih dari nol.
+    Widget badgedIcon(Color color, double size) => Badge.count(
+          count: badgeCount,
+          isLabelVisible: badgeCount > 0,
+          backgroundColor: AppColors.danger,
+          child: iconBuilder(color, size),
+        );
     final inactiveColor = isDark
         ? AppColors.darkTextSecondary
         : const Color(0xFF2E2A27);
@@ -149,7 +163,7 @@ class CustomBottomNavbar extends StatelessWidget {
                         ],
                       ),
                       child: Center(
-                        child: iconBuilder(Colors.white, 20),
+                        child: badgedIcon(Colors.white, 20),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -168,7 +182,7 @@ class CustomBottomNavbar extends StatelessWidget {
               : Container(
                   height: 56,
                   alignment: Alignment.center,
-                  child: iconBuilder(inactiveColor, 24),
+                  child: badgedIcon(inactiveColor, 24),
                 ),
         ),
       ),

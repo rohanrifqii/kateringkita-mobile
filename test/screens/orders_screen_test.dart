@@ -8,11 +8,14 @@ import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/data/catalog_repository.dart';
+import 'package:kateringkita_pbl/data/notification_repository.dart';
+import 'package:kateringkita_pbl/data/order_chat_repository.dart';
 import 'package:kateringkita_pbl/data/order_repository.dart';
 import 'package:kateringkita_pbl/models/order_api_model.dart';
 import 'package:kateringkita_pbl/models/product_model.dart';
 import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:kateringkita_pbl/providers/cart_provider.dart';
+import 'package:kateringkita_pbl/providers/notification_provider.dart';
 import 'package:kateringkita_pbl/screens/orders/orders_screen.dart';
 import 'package:kateringkita_pbl/widgets/order_status_label.dart';
 import 'package:provider/provider.dart';
@@ -85,6 +88,7 @@ Widget _wrap(
   CartProvider? cart,
   Map<String, WidgetBuilder> routes = const {},
   Widget home = const OrdersScreen(),
+  NotificationProvider? notifications,
 }) {
   final api = ApiClient(
       baseUrl: 'https://x.test/api/v1', client: MockClient(handler));
@@ -95,6 +99,9 @@ Widget _wrap(
       ChangeNotifierProvider<CartProvider>.value(value: cart ?? CartProvider()),
       ChangeNotifierProvider<AuthProvider>.value(
           value: auth ?? _FakeAuth(loggedIn)),
+      if (notifications != null)
+        ChangeNotifierProvider<NotificationProvider>.value(
+            value: notifications),
     ],
     child: MaterialApp(home: home, routes: routes),
   );
@@ -112,6 +119,81 @@ void main() {
     expect(seen.first.queryParameters['tab'], 'cancelled');
     expect(seen.first.queryParameters['q'], 'KK-9');
     expect(find.widgetWithText(TextField, 'KK-9'), findsOneWidget);
+  });
+
+  testWidgets('memuat ulang daftar juga menyegarkan badge chat tab Pesanan',
+      (tester) async {
+    // Server badge terpisah: total chat belum dibaca bisa diubah test.
+    var chatUnreadTotal = 3;
+    final badgeApi = ApiClient(
+      baseUrl: 'https://x.test/api/v1',
+      client: MockClient((req) async => req.url.path.endsWith('/me/chats/unread')
+          ? _json({
+              'data': {'total': chatUnreadTotal}
+            })
+          : _json({}, 404)),
+    );
+    final notifications = NotificationProvider(
+      NotificationRepository(badgeApi),
+      chatRepository: OrderChatRepository(badgeApi),
+    );
+    await tester.pumpWidget(_wrap(
+      (req) async => _json({
+        'data': [_order('KK-1')],
+        'meta': {'total': 1}
+      }),
+      notifications: notifications,
+    ));
+    await tester.pumpAndSettle();
+    expect(notifications.chatUnreadCount, 3);
+
+    // Cek berkala daftar (15 detik) ikut memperbarui badge.
+    chatUnreadTotal = 5;
+    await tester.pump(const Duration(seconds: 15));
+    await tester.pumpAndSettle();
+    expect(notifications.chatUnreadCount, 5);
+  });
+
+  testWidgets('ketuk kartu pesanan membuka Lacak Pesanan dengan kodenya',
+      (tester) async {
+    await tester.pumpWidget(_wrap(
+      (req) async => _json({
+        'data': [_order('KK-1')],
+        'meta': {'total': 1}
+      }),
+      routes: {
+        // Kode pesanan ada di alamat rute.
+        AppRoutes.orderTrackingFor('KK-1'): (_) =>
+            const Scaffold(body: Text('layar-lacak')),
+      },
+    ));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Nasi Box +1 menu lain'));
+    await tester.pumpAndSettle();
+    expect(find.text('layar-lacak'), findsOneWidget);
+  });
+
+  testWidgets('kartu menampilkan jumlah chat belum dibaca dari chat.unread_count',
+      (tester) async {
+    Map<String, dynamic> withUnread(String code, int unread) => {
+          ..._order(code),
+          'chat': {
+            'available': true,
+            'is_open': true,
+            'closed_reason': null,
+            'unread_count': unread,
+            'other_party_last_read_id': null,
+            'reported_by_me': false,
+          },
+        };
+    await tester.pumpWidget(_wrap((req) async => _json({
+          'data': [withUnread('KK-1', 2), withUnread('KK-2', 0)],
+          'meta': {'total': 2}
+        })));
+    await tester.pumpAndSettle();
+    expect(find.text('2 pesan baru'), findsOneWidget);
+    expect(find.textContaining('pesan baru'), findsOneWidget);
   });
 
   testWidgets('tab Aktif memuat ?tab=active; tombol sesuai can_cancel/complete',

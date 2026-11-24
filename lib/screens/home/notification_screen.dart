@@ -16,16 +16,7 @@ import '../../models/app_notification.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/notification_provider.dart';
 
-/// Nama tab layar Pesanan ('active', 'completed', atau 'cancelled') yang memuat pesanan berstatus [status];
-/// status 'expired' ikut tab 'cancelled', status lain atau null jatuh ke 'active'.
-String orderTabForStatus(String? status) => switch (status) {
-      'completed' => 'completed',
-      'cancelled' || 'expired' => 'cancelled',
-      _ => 'active',
-    };
-
-/// Layar daftar notifikasi in-app milik pengguna yang login, diambil dari `GET /me/notifications` dengan paginasi
-/// 20 per halaman, filter chip per tipe, tandai dibaca satu per satu atau sekaligus, dan tarik-untuk-muat-ulang.
+/// Notifikasi in-app dari `GET /me/notifications`.
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({super.key});
 
@@ -226,7 +217,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
   }
 
   /// Ditandai dibaca langsung (dikembalikan bila server menolak), lalu
-  /// notifikasi pesanan membuka daftar Pesanan di tab & kode yang sesuai,
+  /// notifikasi status pesanan membuka Lacak Pesanan untuk kode pesanan itu,
   /// dan notifikasi tiket (`data.ticket_code`) membuka detail tiket itu.
   Future<void> _open(AppNotification n) async {
     // Tidak ditunggu: navigasi tidak perlu menunggu jawaban server.
@@ -239,10 +230,7 @@ class _NotificationScreenState extends State<NotificationScreen> {
     }
     final code = n.orderCode;
     if (n.isOrderStatus && code != null && code.isNotEmpty) {
-      await Navigator.pushNamed(context, AppRoutes.orders, arguments: {
-        'tab': orderTabForStatus(n.orderStatus),
-        'q': code,
-      });
+      await Navigator.pushNamed(context, AppRoutes.orderTrackingFor(code));
     }
   }
 

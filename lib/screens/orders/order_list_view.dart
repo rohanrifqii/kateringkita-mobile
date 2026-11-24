@@ -18,6 +18,7 @@ import '../../models/order_api_model.dart';
 import '../../models/product_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/notification_provider.dart';
 import '../../widgets/menu_image.dart';
 import '../../widgets/order_status_label.dart';
 import '../../widgets/review_sheet.dart';
@@ -156,6 +157,8 @@ class _OrderListViewState extends State<OrderListView>
         _error = null;
         _loading = false;
       });
+      // Badge chat di tab Pesanan ikut segar selama tab ini terbuka.
+      context.read<NotificationProvider?>()?.refresh();
     } catch (e) {
       if (!mounted || seq != _seq) return;
       setState(() {
@@ -335,7 +338,17 @@ class _OrderListViewState extends State<OrderListView>
         padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
         itemCount: _orders.length,
         separatorBuilder: (_, _) => const SizedBox(height: 14),
-        itemBuilder: (_, i) => _card(_orders[i]),
+        // Ketuk kartu (di luar tombolnya) untuk membuka Lacak Pesanan. Latar
+        // kartu digambar oleh Ink supaya efek ketuk tetap terlihat di atasnya.
+        itemBuilder: (_, i) => Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => Navigator.pushNamed(
+                context, AppRoutes.orderTrackingFor(_orders[i].code)),
+            borderRadius: BorderRadius.circular(16),
+            child: _card(_orders[i]),
+          ),
+        ),
       ),
     );
   }
@@ -441,10 +454,25 @@ class _OrderListViewState extends State<OrderListView>
     );
   }
 
-  // Kartu satu pesanan. Tombol mengikuti status: belum dibayar (`holding`)
-  // -> Lanjutkan Bayar; masih berjalan -> Buka WhatsApp; selesai / batal /
-  // kedaluwarsa -> Pesan Lagi. Ulasan, batal, dan selesai mengikuti flag
-  // dari server (canReview, canCancel, canComplete).
+  /// Penanda jumlah pesan penjual yang belum dibaca di chat pesanan ini.
+  Widget _chatUnreadChip(int unreadCount) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+            color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.chat_bubble_rounded, size: 11, color: Colors.white),
+            const SizedBox(width: 4),
+            Text('$unreadCount pesan baru',
+                style: AppTextStyles.bodySmall.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11)),
+          ],
+        ),
+      );
+
   Widget _card(OrderApiModel o) {
     final first = o.items.isEmpty ? null : o.items.first;
     final more = o.items.length - 1;
@@ -459,7 +487,7 @@ class _OrderListViewState extends State<OrderListView>
     final holding = o.status == 'holding' && !o.isPaid;
     final busy = _busy.contains(o.code);
 
-    return Container(
+    return Ink(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppColors.surface,
@@ -484,6 +512,10 @@ class _OrderListViewState extends State<OrderListView>
                         fontWeight: FontWeight.w700,
                         color: AppColors.textSecondary)),
               ),
+              if ((o.chat?.unreadCount ?? 0) > 0) ...[
+                _chatUnreadChip(o.chat!.unreadCount),
+                const SizedBox(width: 6),
+              ],
               _badge(o),
             ],
           ),

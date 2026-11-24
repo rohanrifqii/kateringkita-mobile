@@ -50,7 +50,35 @@ String formatWibDate(DateTime utc) {
   return '${_days[w.weekday - 1]}, ${w.day} ${_months[w.month - 1]} ${w.year}';
 }
 
-/// Tanggal dan jam WIB dari instan [utc], mis. "Sab, 14 Nov 2026 · 10:00 WIB".
+/// Jam dinding WIB berformat "HH:mm", mis. "09:05".
+///
+/// @param utc waktu yang ditampilkan; waktu lokal juga diterima karena
+///   diubah ke UTC lebih dulu.
+/// @returns jam dan menit WIB dua digit, dipisah titik dua, tanpa tanggal.
+String formatWibClock(DateTime utc) {
+  final wallClock = toWibWallClock(utc);
+  return '${_two(wallClock.hour)}:${_two(wallClock.minute)}';
+}
+
+/// Jam langkah pesanan dalam WIB: "09:15" bila terjadi hari ini (tanggal
+/// WIB), selain itu tanggal + jam, mis. "23 Nov 09:15".
+///
+/// @param utc waktu langkah itu terjadi.
+/// @param nowUtc waktu sekarang untuk menentukan "hari ini"; null berarti
+///   jam perangkat (diisi test supaya hasilnya tetap).
+/// @returns jam saja untuk hari ini, atau tanggal, bulan singkat, dan jam.
+String formatWibStepTime(DateTime utc, {DateTime? nowUtc}) {
+  final wallClock = toWibWallClock(utc);
+  final today = toWibWallClock(nowUtc ?? DateTime.now());
+  final isToday = wallClock.year == today.year &&
+      wallClock.month == today.month &&
+      wallClock.day == today.day;
+  final clock = formatWibClock(utc);
+  if (isToday) return clock;
+  return '${wallClock.day} ${_months[wallClock.month - 1]} $clock';
+}
+
+/// Mis. "Sab, 14 Nov 2026 · 10:00 WIB".
 String formatWib(DateTime utc) {
   final w = toWibWallClock(utc);
   return '${formatWibDate(utc)} · ${_two(w.hour)}:${_two(w.minute)} WIB';

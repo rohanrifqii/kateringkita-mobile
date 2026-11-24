@@ -63,7 +63,10 @@ Future<AuthProvider> _pump(WidgetTester tester, MockClientHandler handler,
 }
 
 Finder _networkImage() =>
-    find.byWidgetPredicate((w) => w is Image && w.image is NetworkImage);
+    find.byWidgetPredicate((w) =>
+        w is Image &&
+        (w.image is NetworkImage ||
+            (w.image is ResizeImage && (w.image as ResizeImage).imageProvider is NetworkImage)));
 
 void main() {
   testWidgets('hanya isian yang ada di server, tanpa lencana verifikasi',

@@ -139,4 +139,39 @@ void main() {
     expect(q.warnings.single.available, 3);
     expect(q.items.single.options, isEmpty);
   });
+
+  test('timeline: jam tiap langkah dibaca, tanpa timeline semuanya null', () {
+    final withTimeline = order()
+      ..['timeline'] = {
+        'confirmed_at': '2026-11-12T03:06:00.000Z',
+        'cooking_at': null,
+        'ready_at': null,
+        'completed_at': null,
+        'cancelled_at': null,
+      };
+    final parsed = OrderApiModel.fromJson(withTimeline).timeline;
+    expect(parsed.confirmedAt, DateTime.utc(2026, 11, 12, 3, 6));
+    expect(parsed.cookingAt, isNull);
+
+    final withoutTimeline = OrderApiModel.fromJson(order()).timeline;
+    expect(withoutTimeline.confirmedAt, isNull);
+    expect(withoutTimeline.cancelledAt, isNull);
+  });
+
+  test('chat: dibaca bila ada, null bila server tidak mengirimnya', () {
+    expect(OrderApiModel.fromJson(order()).chat, isNull);
+    final withChat = OrderApiModel.fromJson({
+      ...order(),
+      'chat': {
+        'available': true,
+        'is_open': true,
+        'closed_reason': null,
+        'unread_count': 2,
+        'other_party_last_read_id': null,
+        'reported_by_me': false,
+      },
+    });
+    expect(withChat.chat!.unreadCount, 2);
+    expect(withChat.chat!.isOpen, isTrue);
+  });
 }

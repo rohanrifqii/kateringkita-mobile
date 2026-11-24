@@ -21,6 +21,7 @@ import 'data/favorite_repository.dart';
 import 'data/voucher_repository.dart';
 import 'data/promo_content_repository.dart';
 import 'data/notification_repository.dart';
+import 'data/order_chat_repository.dart';
 import 'data/order_repository.dart';
 import 'data/ticket_repository.dart';
 import 'data/token_store.dart';
@@ -116,7 +117,9 @@ Widget buildAppProviders({
   final promoContentRepo = PromoContentRepository(api);
   final favorites = FavoritesProvider(favoriteRepo);
   final notificationRepo = NotificationRepository(api);
-  final notifications = NotificationProvider(notificationRepo);
+  final orderChatRepo = OrderChatRepository(api);
+  final notifications =
+      NotificationProvider(notificationRepo, chatRepository: orderChatRepo);
   final ticketRepo = TicketRepository(api);
   final ticketUnread = TicketUnreadProvider(ticketRepo);
   var wasLoggedIn = false;
@@ -139,6 +142,7 @@ Widget buildAppProviders({
       ChangeNotifierProvider<AuthProvider>.value(value: auth),
       Provider<CatalogRepository>.value(value: CatalogRepository(api)),
       Provider<OrderRepository>.value(value: OrderRepository(api)),
+      Provider<OrderChatRepository>.value(value: orderChatRepo),
       Provider<FavoriteRepository>.value(value: favoriteRepo),
       Provider<VoucherRepository>.value(value: voucherRepo),
       Provider<PromoContentRepository>.value(value: promoContentRepo),
@@ -177,6 +181,7 @@ class KateringKitaApp extends StatelessWidget {
       themeMode: themeProvider.themeMode,
       initialRoute: AppRouter.initialRoute,
       routes: AppRouter.routes,
+      onGenerateRoute: AppRouter.onGenerateRoute,
       builder: (context, child) => PhoneFrame(child: child ?? const SizedBox.shrink()),
     );
   }
