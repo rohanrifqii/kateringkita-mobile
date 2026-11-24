@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
+import '../../core/app_router.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../providers/auth_provider.dart';
@@ -29,14 +30,29 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       // Muat sesi tersimpan (bila ada), lalu selalu ke beranda: tamu boleh jelajah.
       await context.read<AuthProvider>().load();
       if (!mounted) return;
-      // Web dimuat ulang di alamat dalam (mis. /order-chat/<kode>): halaman
-      // itu sudah di atas splash, jadi splash cukup menyingkir dari tumpukan.
       final splashRoute = ModalRoute.of(context);
-      if (splashRoute != null && !splashRoute.isCurrent) {
+      if (splashRoute == null || splashRoute.isCurrent) {
+        Navigator.pushReplacementNamed(context, AppRoutes.mainNav);
+        return;
+      }
+      // Web dimuat ulang di alamat dalam: halaman itu sudah di atas splash.
+      // Untuk /order-*/<kode> tab Pesanan sudah ada di bawahnya, jadi splash
+      // cukup menyingkir; selain itu splash diganti beranda supaya tombol
+      // kembali tidak mengosongkan navigator.
+      final initialRoute =
+          WidgetsBinding.instance.platformDispatcher.defaultRouteName;
+      if (AppRouter.hasOrdersTabBelow(initialRoute)) {
         Navigator.removeRoute(context, splashRoute);
         return;
       }
-      Navigator.pushReplacementNamed(context, AppRoutes.mainNav);
+      Navigator.replace(
+        context,
+        oldRoute: splashRoute,
+        newRoute: MaterialPageRoute<void>(
+          settings: const RouteSettings(name: AppRoutes.mainNav),
+          builder: AppRouter.routes[AppRoutes.mainNav]!,
+        ),
+      );
     });
   }
 

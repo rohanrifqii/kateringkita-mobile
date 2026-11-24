@@ -59,7 +59,8 @@ class OrderChatRepository {
   /// @param imageUrl alamat publik foto hasil [uploadImage].
   /// @returns pesan yang tersimpan di server, lengkap dengan id dan jamnya.
   /// @throws ApiException misalnya 409 `CHAT_CLOSED` bila pesanan sudah
-  ///   selesai saat pesan dikirim, atau 422 bila teks/foto tidak valid.
+  ///   selesai saat pesan dikirim, atau 400 `VALIDATION_ERROR` bila teks
+  ///   atau foto tidak valid.
   Future<ChatMessage> send(
     String code, {
     String? body,

@@ -86,6 +86,30 @@ void main() {
     expect(find.text('ABC123'), findsOneWidget);
   });
 
+  testWidgets('web dimuat ulang di /notifications: beranda di bawahnya', (
+    tester,
+  ) async {
+    tester.binding.platformDispatcher.defaultRouteNameTestValue =
+        AppRoutes.notifications;
+    addTearDown(
+      tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+    );
+    await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Splash diganti beranda: [beranda, Notifikasi].
+    expect(_currentRoute(), AppRoutes.notifications);
+    expect(appNavigatorKey.currentState!.canPop(), isTrue);
+
+    // Kembali dari Notifikasi mendarat di beranda, navigator tidak kosong.
+    appNavigatorKey.currentState!.pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(_currentRoute(), AppRoutes.mainNav);
+    expect(appNavigatorKey.currentState!.canPop(), isFalse);
+  });
+
   testWidgets('expired token at splash: guest continues to main nav', (
     tester,
   ) async {

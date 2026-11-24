@@ -114,6 +114,19 @@ class AppRouter {
     );
   }
 
+  /// Benar bila tumpukan awal untuk alamat [initialRoute] sudah memuat tab
+  /// Pesanan di bawah halaman tujuan.
+  ///
+  /// Saat web dibuka di `/order-chat/<kode>`, Flutter juga membangun rute
+  /// `/order-chat` (tanpa kode), dan [onGenerateRoute] mengubahnya menjadi tab
+  /// Pesanan. Alamat dalam lain tidak punya rute seperti itu.
+  ///
+  /// @param initialRoute alamat saat aplikasi dibuka, mis. dari peramban.
+  /// @returns true untuk `/order-tracking/...` dan `/order-chat/...`.
+  static bool hasOrdersTabBelow(String initialRoute) =>
+      initialRoute.startsWith('${AppRoutes.orderTracking}/') ||
+      initialRoute.startsWith('${AppRoutes.orderChat}/');
+
   /// Kode pesanan dari rute [settings] bila rute itu milik [basePath].
   ///
   /// @param settings rute yang sedang dibuat.
