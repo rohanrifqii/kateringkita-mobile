@@ -184,9 +184,14 @@ void main() {
   testWidgets('pembuka biasa dari "/": splash tetap tampil ~2,5 detik', (
     tester,
   ) async {
-    await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
+    var meRequests = 0;
+    await _pump(tester, (r) async {
+      if (r.url.path.endsWith('/v1/me')) meRequests++;
+      return _err(401, 'UNAUTHORIZED', 'x');
+    }, secureValues: {'access_token': 'tok', 'session_email': 'a@x.com'});
     await tester.pump(const Duration(seconds: 1));
     expect(_currentRoute(), AppRoutes.splash);
+    expect(meRequests, 0); // GET /me baru dikirim setelah jeda 2,5 detik
     expect(find.text('Menyiapkan Dapur Kampus...'), findsOneWidget);
     await tester.pump(const Duration(seconds: 2));
     await tester.pump(const Duration(milliseconds: 500));
@@ -194,7 +199,7 @@ void main() {
   });
 
   testWidgets(
-    'web dimuat ulang di /payment/<kode>: langsung Bayar KK-1 tanpa splash, tab Pesanan di bawahnya',
+    'web dimuat ulang di /payment/<kode>: dalam 100 ms splash sudah dilewati, Bayar KK-1 di atas tab Pesanan',
     (tester) async {
       tester.binding.platformDispatcher.defaultRouteNameTestValue =
           AppRoutes.paymentFor('KK-1');
@@ -226,26 +231,41 @@ void main() {
         'updated_at': '2026-11-12T03:00:00Z',
         'merchant': {'id': 1, 'business_name': 'Dapur A'},
       };
+      var meRequests = 0;
       await _pump(tester, (r) async {
-        if (r.url.path.endsWith('/orders/KK-1')) {
-          return http.Response(
-            jsonEncode({'data': order}),
-            200,
-            headers: {'content-type': 'application/json'},
-          );
-        }
-        return _err(401, 'UNAUTHORIZED', 'x');
-      });
+        if (r.url.path.endsWith('/v1/me')) meRequests++;
+        final data = r.url.path.endsWith('/orders/KK-1')
+            ? order
+            : r.url.path.endsWith('/v1/me')
+            ? {
+                'user': {
+                  'id': 1,
+                  'role': 'customer',
+                  'full_name': 'Budi',
+                  'email': 'a@x.com',
+                  'phone': '0812345678901',
+                },
+              }
+            : [];
+        return http.Response(
+          jsonEncode({'data': data, 'meta': {'total': 0}}),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }, secureValues: {'access_token': 'tok', 'session_email': 'a@x.com'});
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Jauh sebelum 2,5 detik: splash sudah hilang, Bayar KK-1 tampil.
+      // Jauh sebelum 2,5 detik: GET /me sudah dikirim tanpa menunggu jeda dan
+      // Bayar KK-1 tampil.
+      expect(meRequests, 1);
       expect(find.text('Menyiapkan Dapur Kampus...'), findsNothing);
       expect(find.text('Pembayaran'), findsOneWidget);
       expect(find.text('KK-1'), findsWidgets);
       expect(find.text('Buat Nomor Virtual Account'), findsOneWidget);
 
-      // Kembali (pop sampai rute terbawah) dari Bayar mendarat di tab Pesanan.
+      // Masih di 100 ms: splash sudah dibuang dari riwayat Navigator, jadi
+      // kembali (pop sampai rute terbawah) dari Bayar mendarat di tab Pesanan.
       final routeNames = <String?>[];
       appNavigatorKey.currentState!.popUntil((route) {
         routeNames.add(route.settings.name);
