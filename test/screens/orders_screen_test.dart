@@ -21,6 +21,10 @@ import 'package:kateringkita_pbl/widgets/order_status_label.dart';
 import 'package:provider/provider.dart';
 
 class _FakeAuth extends ChangeNotifier implements AuthProvider {
+  /// Sesi palsu tidak pernah dimuat dari server: selalu siap.
+  @override
+  Future<void> get ready async {}
+
   _FakeAuth(this.loggedIn);
   bool loggedIn;
   @override

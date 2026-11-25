@@ -11,6 +11,10 @@ import 'package:provider/single_child_widget.dart';
 
 /// AuthProvider palsu: status login diatur langsung oleh tes.
 class FakeAuth extends ChangeNotifier implements AuthProvider {
+  /// Sesi palsu tidak pernah dimuat dari server: selalu siap.
+  @override
+  Future<void> get ready async {}
+
   FakeAuth({this.loggedIn = false, this.user});
 
   bool loggedIn;

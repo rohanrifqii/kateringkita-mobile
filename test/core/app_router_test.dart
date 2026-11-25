@@ -1,5 +1,5 @@
-// Test rute yang alamatnya memuat parameter (Lacak Pesanan dan Chat: kode
-// pesanan; profil toko: slug; detail menu: id): parameter terbaca dari alamat
+// Test rute yang alamatnya memuat parameter (Lacak Pesanan, Chat, dan Bayar:
+// kode pesanan; profil toko: slug; detail menu: id): parameter terbaca dari alamat
 // supaya tahan muat ulang web, bentuk lama dengan argumen tetap jalan, dan
 // parameter kosong jatuh ke tab Pesanan atau beranda.
 import 'package:flutter/material.dart';
@@ -12,6 +12,7 @@ import 'package:kateringkita_pbl/screens/home/store_profile_screen.dart';
 import 'package:kateringkita_pbl/screens/navigation/main_navigation_screen.dart';
 import 'package:kateringkita_pbl/screens/orders/order_chat_screen.dart';
 import 'package:kateringkita_pbl/screens/orders/order_tracking_screen.dart';
+import 'package:kateringkita_pbl/screens/orders/payment_screen.dart';
 
 void main() {
   /// Halaman yang dibuat [AppRouter.onGenerateRoute] untuk [name].
@@ -50,7 +51,23 @@ void main() {
     expect((page as OrderChatScreen).orderCode, 'KK-7');
   });
 
+  testWidgets('/payment/<kode> membuka Bayar untuk kode itu', (tester) async {
+    expect(AppRoutes.paymentFor('KK 1'), '/payment/KK%201');
+    final page = await pageFor(tester, AppRoutes.paymentFor('KK-1'));
+    expect((page as PaymentScreen).orderCode, 'KK-1');
+    expect(
+      AppRouter.paramFromRoute(
+        const RouteSettings(name: '/payment/KK-1'),
+        AppRoutes.payment,
+      ),
+      'KK-1',
+    );
+  });
+
   for (final name in [
+    '/payment/',
+    '/payment',
+    '/payment/a%2Fb',
     '/order-chat/',
     '/order-chat',
     '/order-tracking/%20',

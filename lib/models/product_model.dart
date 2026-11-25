@@ -24,6 +24,12 @@ class MenuOption {
         name: json['name'] as String,
         extraPrice: (json['extra_price'] as num?)?.toInt() ?? 0,
       );
+
+  /// Kebalikan [MenuOption.fromJson] (dipakai CartStore untuk menyimpan keranjang).
+  ///
+  /// @returns objek JSON berkolom sama dengan data dari backend.
+  Map<String, dynamic> toJson() =>
+      {'id': id, 'name': name, 'extra_price': extraPrice};
 }
 
 /// Ringkasan toko yang ikut di dalam data menu, cukup untuk kartu menu dan tombol menuju
@@ -62,6 +68,20 @@ class MerchantRef {
             .map((e) => PickupPoint.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
+
+  /// Kebalikan [MerchantRef.fromJson] (dipakai CartStore untuk menyimpan keranjang).
+  ///
+  /// @returns objek JSON berkolom sama dengan data dari backend.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'slug': slug,
+        'business_name': businessName,
+        'is_open': isOpen,
+        'logo_url': logoUrl,
+        'open_time': openTime,
+        'close_time': closeTime,
+        'pickup_points': [for (final point in pickupPoints) point.toJson()],
+      };
 }
 
 /// Satu menu makanan dari backend.
@@ -161,6 +181,32 @@ class ProductModel {
             (json['is_preorder'] as bool?) ?? json['badge'] == 'preorder',
         preorderDays: (json['preorder_days'] as num?)?.toInt() ?? 0,
       );
+
+  /// Kebalikan [ProductModel.fromJson] (dipakai CartStore untuk menyimpan keranjang);
+  /// `ProductModel.fromJson(menu.toJson())` menghasilkan menu yang sama.
+  ///
+  /// @returns objek JSON berkolom sama dengan data dari backend.
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'price': price,
+        'unit_label': unitLabel,
+        'image_url': imageUrl,
+        'gallery': gallery,
+        'category': category?.toJson(),
+        'merchant': merchant.toJson(),
+        'available': available,
+        'badge': badge,
+        'rating_avg': ratingAvg,
+        'rating_count': ratingCount,
+        'is_favorite': isFavorite,
+        'description': description,
+        'options': [for (final option in options) option.toJson()],
+        'min_order_qty': minOrderQty,
+        'prep_minutes': prepMinutes,
+        'is_preorder': isPreorder,
+        'preorder_days': preorderDays,
+      };
 
   /// Semua foto menu berurutan: foto utama [imageUrl] (dilewati bila null) lalu isi [gallery].
   /// Dipakai galeri geser di layar detail menu; daftar kosong bila menu tidak punya foto sama sekali.

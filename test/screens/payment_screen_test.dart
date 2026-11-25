@@ -15,6 +15,10 @@ import 'package:kateringkita_pbl/screens/orders/payment_screen.dart';
 import 'package:provider/provider.dart';
 
 class _FakeAuth extends ChangeNotifier implements AuthProvider {
+  /// Sesi palsu tidak pernah dimuat dari server: selalu siap.
+  @override
+  Future<void> get ready async {}
+
   @override
   ApiUser? get user => null;
   @override
@@ -109,9 +113,10 @@ class _H {
 
 Future<_H> _open(
   WidgetTester tester, {
-  required Map<String, dynamic> arg,
+  required Map<String, dynamic>? arg,
   required Future<http.Response> Function(http.Request r) handler,
   Future<void> Function()? opener,
+  String? orderCode,
 }) async {
   final h = _H();
   final api = ApiClient(
@@ -125,7 +130,7 @@ Future<_H> _open(
   tester.view.physicalSize = const Size(1080, 2400);
   tester.view.devicePixelRatio = 2;
   addTearDown(tester.view.reset);
-  final order = OrderApiModel.fromJson(arg);
+  final order = arg == null ? null : OrderApiModel.fromJson(arg);
   await tester.pumpWidget(
     MultiProvider(
       providers: [
@@ -145,6 +150,7 @@ Future<_H> _open(
                 MaterialPageRoute(
                   settings: RouteSettings(arguments: order),
                   builder: (_) => PaymentScreen(
+                    orderCode: orderCode,
                     snapOpener: (ctx, url) async {
                       h.snapUrl = url;
                       if (opener != null) await opener();
@@ -177,6 +183,37 @@ void _expectPaidBanner() {
 }
 
 void main() {
+  testWidgets('dibuka dari alamat /payment/<kode> tanpa argumen: pesanan dimuat dari server, gagal bisa dicoba lagi', (
+    tester,
+  ) async {
+    var orderGets = 0;
+    final h = await _open(
+      tester,
+      arg: null,
+      orderCode: 'KK-1',
+      handler: (r) async {
+        if (r.method == 'GET' && r.url.path.endsWith('/orders/KK-1')) {
+          orderGets++;
+          if (orderGets == 1) return _gagal(502, 'Server sibuk.');
+        }
+        return _json({'data': _order()});
+      },
+    );
+    // Percobaan pertama gagal: pesan dan tombol coba lagi.
+    expect(find.text('Server sibuk.'), findsOneWidget);
+    await tester.tap(find.text('Coba Lagi'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    // Percobaan kedua berhasil: rincian pesanan KK-1 tampil tanpa GET tambahan.
+    expect(find.text('Rp 99.000'), findsWidgets);
+    expect(find.text('Nasi Box'), findsOneWidget);
+    expect(find.text('Buat Nomor Virtual Account'), findsOneWidget);
+    expect(orderGets, 2);
+    expect(h.reqs.where((r) => r.method == 'POST'), isEmpty);
+    await _close(tester);
+  });
+
   testWidgets('VA tanpa nomor: pilih bank -> POST /va lalu tampil va_number', (
     tester,
   ) async {

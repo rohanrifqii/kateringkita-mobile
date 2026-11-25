@@ -15,4 +15,10 @@ class PickupPoint {
         name: json['name'] as String,
         description: json['description'] as String?,
       );
+
+  /// Kebalikan [PickupPoint.fromJson] (dipakai CartStore untuk menyimpan keranjang).
+  ///
+  /// @returns objek JSON berkolom sama dengan data dari backend.
+  Map<String, dynamic> toJson() =>
+      {'id': id, 'name': name, 'description': description};
 }

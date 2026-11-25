@@ -33,7 +33,7 @@ import 'pickup_point_picker_screen.dart';
 
 /// Layar checkout isi keranjang: data pemesan, titik temu, waktu ambil, metode bayar, dan total
 /// yang dihitung server (quote). Tombol "Proses Pembayaran" membuat pesanan dengan header
-/// Idempotency-Key lalu mengganti layar ini dengan layar Pembayaran (AppRoutes.payment).
+/// Idempotency-Key lalu mengganti layar ini dengan layar Pembayaran (AppRoutes.paymentFor).
 /// Bila pengguna batal login, layar langsung ditutup.
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key});
@@ -142,7 +142,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   // ---------- Alur ----------
 
-  /// Pastikan login (tutup layar bila batal), isi nama & nomor dari profil, lalu muat titik temu.
+  /// Pastikan login (tutup layar bila batal), isi nama & nomor dari profil, tunggu keranjang
+  /// selesai dipulihkan, lalu muat titik temu.
   Future<void> _start() async {
     if (!mounted) return;
     final ok = await requireLogin(context);
@@ -155,6 +156,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _nameController.text = user?.fullName ?? '';
     _phoneController.text = user?.phone ?? '';
     setState(() => _authorized = true);
+    // Muat ulang di /checkout: isi keranjang dari perangkat mungkin belum selesai dipulihkan.
+    await _cart.restored;
+    if (!mounted) return;
     await _loadPoints();
   }
 
@@ -493,7 +497,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final order = await repo.create(body, idempotencyKey: key);
       if (!mounted) return;
       cart.clear();
-      Navigator.pushReplacementNamed(context, AppRoutes.payment,
+      Navigator.pushReplacementNamed(context, AppRoutes.paymentFor(order.code),
           arguments: order);
     } on ApiException catch (e) {
       if (!mounted) return;

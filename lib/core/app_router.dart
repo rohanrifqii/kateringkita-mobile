@@ -1,5 +1,5 @@
 // Tabel rute aplikasi: memetakan nama rute di AppRoutes ke layar yang dibuka lewat Navigator.pushNamed.
-// Lacak Pesanan, Chat pesanan, profil toko, dan detail menu (kode/slug/id ada di alamat) dibuat oleh
+// Lacak Pesanan, Chat pesanan, Bayar, profil toko, dan detail menu (kode/slug/id ada di alamat) dibuat oleh
 // onGenerateRoute. Dipasang ke MaterialApp di main.dart; juga menyediakan appNavigatorKey untuk navigasi
 // tanpa BuildContext.
 import 'package:flutter/material.dart';
@@ -60,9 +60,8 @@ class AppRouter {
     },
     AppRoutes.home: (context) => const HomeScreen(),
     AppRoutes.search: (context) => const SearchScreen(),
-    // Detail menu dan profil toko dibuat di onGenerateRoute (id/slug di alamat).
+    // Detail menu, profil toko, dan Bayar dibuat di onGenerateRoute (id/slug/kode di alamat).
     AppRoutes.checkout: (context) => const CheckoutScreen(),
-    AppRoutes.payment: (context) => const PaymentScreen(),
     AppRoutes.whatsappGenerator: (context) => const WhatsAppGeneratorScreen(),
     AppRoutes.aiAssistant: (context) => const AIAssistantScreen(),
     AppRoutes.orders: (context) {
@@ -75,7 +74,7 @@ class AppRouter {
     },
     AppRoutes.activeOrders: (context) => const ActiveOrdersScreen(),
     AppRoutes.completedOrders: (context) => const CompletedOrdersScreen(),
-    // Lacak Pesanan dan Chat dibuat di onGenerateRoute (kode di alamat).
+    // Lacak Pesanan dan Chat juga dibuat di onGenerateRoute (kode di alamat).
     AppRoutes.liked: (context) => const LikedScreen(),
     AppRoutes.profile: (context) => const ProfileScreen(),
     AppRoutes.notifications: (context) => const NotificationScreen(),
@@ -94,12 +93,14 @@ class AppRouter {
   static const Map<String, int> _fallbackTabs = {
     AppRoutes.orderTracking: ordersTabIndex,
     AppRoutes.orderChat: ordersTabIndex,
+    AppRoutes.payment: ordersTabIndex,
     AppRoutes.storeProfile: 0,
     AppRoutes.productDetail: 0,
   };
 
   /// Rute yang alamatnya memuat parameter: `/order-tracking/<kode>`,
-  /// `/order-chat/<kode>`, `/store-profile/<slug>`, dan `/product-detail/<id>`.
+  /// `/order-chat/<kode>`, `/payment/<kode>`, `/store-profile/<slug>`, dan
+  /// `/product-detail/<id>`.
   /// Bentuk lama (alamat tanpa parameter + parameter sebagai argumen) tetap
   /// diterima; argumen ProductModel detail menu ikut diteruskan ke layarnya.
   ///
@@ -119,6 +120,7 @@ class AppRouter {
           : switch (basePath) {
               AppRoutes.orderTracking => OrderTrackingScreen(orderCode: param),
               AppRoutes.orderChat => OrderChatScreen(orderCode: param),
+              AppRoutes.payment => PaymentScreen(orderCode: param),
               AppRoutes.storeProfile => StoreProfileScreen(vendorName: param),
               _ => menuId == null ? null : ProductDetailScreen(menuId: menuId),
             };

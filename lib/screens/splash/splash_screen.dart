@@ -2,6 +2,7 @@
 // memuat sesi tersimpan lewat AuthProvider.load (GET /me bila ada token), lalu menyingkir: biasanya diganti MainNav,
 // tetapi di web yang dimuat ulang di alamat berparameter (/order-tracking/<kode>, /store-profile/<slug>,
 // /product-detail/<id>, dst.) halaman itu yang dipertahankan.
+// Saat dimuat ulang di alamat dalam atau sesi sudah ada, animasi dan jeda 2,5 detik dilewati.
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -28,14 +29,34 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   /// Timer 2,5 detik sebelum sesi dimuat dan splash ditinggalkan; dibatalkan di dispose.
   Timer? _navigationTimer;
 
+  /// True bila splash langsung menyingkir tanpa animasi dan jeda: aplikasi dibuka di alamat
+  /// selain `/` (halaman dalam yang dimuat ulang di web) atau sesi login sudah ada.
+  late final bool _skipIntro;
+
   @override
   void initState() {
     super.initState();
     _progressController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
-    )..forward();
+    );
+    // Alamat awal selain "/" hanya terjadi di web (aplikasi Android/iOS tidak memakai deep link).
+    final initialRoute =
+        WidgetsBinding.instance.platformDispatcher.defaultRouteName;
+    final auth = context.read<AuthProvider>();
+    _skipIntro = initialRoute != AppRoutes.splash || auth.isLoggedIn;
 
+    // Muat ulang halaman dalam / sesi sudah ada: sesi dimuat di belakang layar dan splash
+    // menyingkir pada frame berikutnya (Navigator belum boleh diubah di initState).
+    if (_skipIntro) {
+      if (!auth.isLoggedIn) auth.load();
+      _navigationTimer = Timer(Duration.zero, () {
+        if (mounted) _leaveSplash();
+      });
+      return;
+    }
+
+    _progressController.forward();
     // Setelah 2,5 detik: muat sesi lalu tinggalkan splash lewat _leaveSplash (tidak bisa kembali ke splash).
     _navigationTimer = Timer(const Duration(milliseconds: 2500), () async {
       // Muat sesi tersimpan (bila ada), lalu selalu ke beranda: tamu boleh jelajah.
@@ -65,8 +86,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
       RouteSettings(name: initialRoute),
     )?.settings;
     // 2. Beranda sendiri, atau alamat berparameter sah (mis. /order-*/<kode>,
-    //    /store-profile/<slug>) yang sudah punya tab Pesanan/beranda di
-    //    bawahnya: splash cukup menyingkir.
+    //    /payment/<kode>, /store-profile/<slug>) yang sudah punya tab
+    //    Pesanan/beranda di bawahnya: splash cukup menyingkir.
     if (initialRoute == AppRoutes.mainNav ||
         (deepLink != null && deepLink.name != AppRoutes.mainNav)) {
       Navigator.removeRoute(context, splashRoute);
@@ -104,6 +125,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    // Tanpa animasi: cukup latar polos selama satu frame sebelum splash menyingkir.
+    if (_skipIntro) return Scaffold(backgroundColor: AppColors.background);
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(

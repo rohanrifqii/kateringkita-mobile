@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/core/app_routes.dart';
+import 'package:kateringkita_pbl/data/cart_store.dart';
 import 'package:kateringkita_pbl/data/catalog_repository.dart';
 import 'package:kateringkita_pbl/data/order_repository.dart';
 import 'package:kateringkita_pbl/data/voucher_repository.dart';
@@ -18,6 +19,9 @@ import 'package:kateringkita_pbl/providers/cart_provider.dart';
 import 'package:kateringkita_pbl/screens/orders/checkout_screen.dart';
 import 'package:kateringkita_pbl/widgets/primary_button.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
 import '../support/quiet_map.dart';
 import '../models/voucher_test.dart' show voucherJson;
@@ -27,6 +31,10 @@ void _testWidgets(String description, WidgetTesterCallback body) =>
     testWidgets(description, (t) => withoutOsmTileNotice(() => body(t)));
 
 class _FakeAuth extends ChangeNotifier implements AuthProvider {
+  /// Sesi palsu tidak pernah dimuat dari server: selalu siap.
+  @override
+  Future<void> get ready async {}
+
   _FakeAuth(this._u);
   final ApiUser? _u;
 
@@ -157,7 +165,10 @@ Future<_Harness> _open(
   Future<http.Response> Function(http.Request req)? onQuoteReq,
 }) async {
   final h = _Harness();
-  h.cart = CartProvider();
+  // Keranjang memakai penyimpanan perangkat (di memori) seperti di aplikasi.
+  SharedPreferencesAsyncPlatform.instance =
+      InMemorySharedPreferencesAsync.empty();
+  h.cart = CartProvider(store: CartStore(SharedPreferencesAsync()));
   for (final (p, q) in lines) {
     h.cart.add(p, qty: q);
   }
@@ -219,7 +230,7 @@ Future<_Harness> _open(
     ],
     child: MaterialApp(
       routes: {
-        AppRoutes.payment: (_) => const _PaymentProbe(),
+        AppRoutes.paymentFor('KK-1'): (_) => const _PaymentProbe(),
         AppRoutes.login: (c) => Scaffold(
               body: TextButton(
                 onPressed: () => Navigator.pop(c, false),
@@ -353,6 +364,8 @@ void main() {
             'Koneksi lambat. Coba lagi. Cek tab Pesanan sebelum mencoba lagi.'),
         findsOneWidget);
     expect(h.cart.items, isNotEmpty);
+    expect(await SharedPreferencesAsync().getString(CartStore.storageKey),
+        isNotNull);
 
     await _pay(tester);
     await tester.pumpAndSettle();
@@ -369,6 +382,9 @@ void main() {
     expect(body['note'], isNull);
     expect(find.text('PAY KK-1 99000'), findsOneWidget);
     expect(h.cart.items, isEmpty);
+    // Pesanan berhasil: keranjang tersimpan ikut dihapus dari perangkat.
+    expect(await SharedPreferencesAsync().getString(CartStore.storageKey),
+        isNull);
   });
 
   _testWidgets('409 OUT_OF_STOCK shows field message on the first row, VA sent',

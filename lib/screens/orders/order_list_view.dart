@@ -257,7 +257,8 @@ class _OrderListViewState extends State<OrderListView>
   Future<void> _pay(OrderApiModel o) => _run(o, () async {
         final full = await context.read<OrderRepository>().get(o.code);
         if (!mounted) return;
-        await Navigator.pushNamed(context, AppRoutes.payment, arguments: full);
+        await Navigator.pushNamed(context, AppRoutes.paymentFor(full.code),
+            arguments: full);
         if (mounted) _load(silent: true);
       });
 

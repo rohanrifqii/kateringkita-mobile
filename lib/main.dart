@@ -16,6 +16,7 @@ import 'core/app_routes.dart';
 import 'data/ai_history_store.dart';
 import 'data/assistant_repository.dart';
 import 'data/auth_repository.dart';
+import 'data/cart_store.dart';
 import 'data/catalog_repository.dart';
 import 'data/favorite_repository.dart';
 import 'data/voucher_repository.dart';
@@ -79,6 +80,10 @@ Widget buildAppProviders({
   bool isDark = false,
 }) {
   late final AuthProvider auth;
+  // Isi keranjang disimpan di perangkat dan dipulihkan sejak awal (tahan muat ulang web).
+  // Keranjang milik sesi: dikosongkan saat logout / sesi tidak valid (juga saat
+  // halaman dimuat ulang dengan token yang sudah kedaluwarsa).
+  final cart = CartProvider(store: CartStore())..restore();
   // Penanda agar beberapa balasan 401 yang datang bersamaan hanya memicu satu pengalihan.
   var redirecting = false;
 
@@ -95,6 +100,7 @@ Widget buildAppProviders({
         if (token == null && !auth.isLoggedIn) return;
         await TokenStore.logout();
         auth.clear();
+        cart.clear();
         appNavigatorKey.currentState?.pushNamedAndRemoveUntil(
           AppRoutes.login,
           (_) => false,
@@ -104,14 +110,19 @@ Widget buildAppProviders({
       }
     },
   );
-  // Token dihapus oleh currentUser() (401): bersihkan status login tanpa
-  // navigasi, jadi splash tetap lanjut sebagai tamu.
-  final repo = AuthRepository(api, onSessionInvalid: () => auth.clear());
+  // Token dihapus oleh currentUser() (401): bersihkan status login dan
+  // keranjang tanpa navigasi, jadi splash tetap lanjut sebagai tamu.
+  final repo = AuthRepository(
+    api,
+    onSessionInvalid: () {
+      auth.clear();
+      cart.clear();
+    },
+  );
   auth = AuthProvider(repo);
 
   // Keranjang, favorit, lencana notifikasi & titik tiket milik sesi:
   // dikosongkan saat logout / sesi tidak valid.
-  final cart = CartProvider();
   final favoriteRepo = FavoriteRepository(api);
   final voucherRepo = VoucherRepository(api);
   final promoContentRepo = PromoContentRepository(api);

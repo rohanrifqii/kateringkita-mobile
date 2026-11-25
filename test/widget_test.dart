@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -9,16 +10,20 @@ import 'package:kateringkita_pbl/api/api_client.dart';
 import 'package:kateringkita_pbl/core/app_router.dart';
 import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/data/auth_repository.dart';
+import 'package:kateringkita_pbl/data/cart_store.dart';
 import 'package:kateringkita_pbl/data/catalog_repository.dart';
 import 'package:kateringkita_pbl/data/token_store.dart';
 import 'package:kateringkita_pbl/main.dart';
+import 'package:kateringkita_pbl/models/cart_item.dart';
 import 'package:kateringkita_pbl/models/product_model.dart';
 import 'package:kateringkita_pbl/providers/auth_provider.dart';
 import 'package:kateringkita_pbl/providers/cart_provider.dart';
 import 'package:kateringkita_pbl/providers/favorites_provider.dart';
 import 'package:kateringkita_pbl/providers/notification_provider.dart';
+import 'package:kateringkita_pbl/screens/navigation/main_navigation_screen.dart';
 import 'package:kateringkita_pbl/widgets/phone_frame.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 
@@ -30,10 +35,18 @@ http.Response _err(int status, String code, String msg) => http.Response(
   headers: {'content-type': 'application/json'},
 );
 
-Future<void> _pump(WidgetTester tester, MockClientHandler h) async {
-  FlutterSecureStorage.setMockInitialValues({});
+/// Memasang aplikasi lengkap. [secureValues] dan [savedPrefs] adalah isi
+/// penyimpanan perangkat sebelum aplikasi dibuka (mis. token dan keranjang
+/// tersimpan, seperti saat halaman web dimuat ulang).
+Future<void> _pump(
+  WidgetTester tester,
+  MockClientHandler h, {
+  Map<String, String> secureValues = const {},
+  Map<String, Object> savedPrefs = const {},
+}) async {
+  FlutterSecureStorage.setMockInitialValues(Map.of(secureValues));
   SharedPreferencesAsyncPlatform.instance =
-      InMemorySharedPreferencesAsync.empty();
+      InMemorySharedPreferencesAsync.withData(Map.of(savedPrefs));
   await tester.pumpWidget(
     buildAppProviders(client: MockClient(h), child: const KateringKitaApp()),
   );
@@ -146,6 +159,8 @@ void main() {
   for (final (initialRoute, label) in [
     (AppRoutes.mainNav, 'beranda'),
     ('/order-chat/', 'alamat Chat tanpa kode'),
+    ('/payment/', 'alamat Bayar tanpa kode'),
+    (AppRoutes.payment, 'alamat Bayar lama tanpa kode'),
     ('/store-profile', 'alamat toko tanpa slug'),
     ('/product-detail/', 'alamat menu tanpa id'),
   ]) {
@@ -165,6 +180,233 @@ void main() {
       expect(appNavigatorKey.currentState!.canPop(), isFalse);
     });
   }
+
+  testWidgets('pembuka biasa dari "/": splash tetap tampil ~2,5 detik', (
+    tester,
+  ) async {
+    var meRequests = 0;
+    await _pump(tester, (r) async {
+      if (r.url.path.endsWith('/v1/me')) meRequests++;
+      return _err(401, 'UNAUTHORIZED', 'x');
+    }, secureValues: {'access_token': 'tok', 'session_email': 'a@x.com'});
+    await tester.pump(const Duration(seconds: 1));
+    expect(_currentRoute(), AppRoutes.splash);
+    expect(meRequests, 0); // GET /me baru dikirim setelah jeda 2,5 detik
+    expect(find.text('Menyiapkan Dapur Kampus...'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(_currentRoute(), AppRoutes.mainNav);
+  });
+
+  testWidgets(
+    'web dimuat ulang di /payment/<kode>: dalam 100 ms splash sudah dilewati, Bayar KK-1 di atas tab Pesanan',
+    (tester) async {
+      tester.binding.platformDispatcher.defaultRouteNameTestValue =
+          AppRoutes.paymentFor('KK-1');
+      addTearDown(
+        tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+      );
+      final order = {
+        'code': 'KK-1',
+        'status': 'holding',
+        'payment_method': 'va',
+        'payment_status': 'unpaid',
+        'seconds_left': 600,
+        'pickup_point': {'id': 2, 'name': 'Perpustakaan Pusat'},
+        'items': [
+          {
+            'menu_id': 7,
+            'menu_name': 'Nasi Box',
+            'qty': 2,
+            'unit_price': 45000,
+            'options': [],
+            'line_total': 90000,
+          },
+        ],
+        'subtotal': 90000,
+        'discount': 0,
+        'service_fee': 9000,
+        'total': 99000,
+        'created_at': '2026-11-12T03:00:00Z',
+        'updated_at': '2026-11-12T03:00:00Z',
+        'merchant': {'id': 1, 'business_name': 'Dapur A'},
+      };
+      var meRequests = 0;
+      await _pump(tester, (r) async {
+        if (r.url.path.endsWith('/v1/me')) meRequests++;
+        final data = r.url.path.endsWith('/orders/KK-1')
+            ? order
+            : r.url.path.endsWith('/v1/me')
+            ? {
+                'user': {
+                  'id': 1,
+                  'role': 'customer',
+                  'full_name': 'Budi',
+                  'email': 'a@x.com',
+                  'phone': '0812345678901',
+                },
+              }
+            : [];
+        return http.Response(
+          jsonEncode({'data': data, 'meta': {'total': 0}}),
+          200,
+          headers: {'content-type': 'application/json'},
+        );
+      }, secureValues: {'access_token': 'tok', 'session_email': 'a@x.com'});
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Jauh sebelum 2,5 detik: GET /me sudah dikirim tanpa menunggu jeda dan
+      // Bayar KK-1 tampil.
+      expect(meRequests, 1);
+      expect(find.text('Menyiapkan Dapur Kampus...'), findsNothing);
+      expect(find.text('Pembayaran'), findsOneWidget);
+      expect(find.text('KK-1'), findsWidgets);
+      expect(find.text('Buat Nomor Virtual Account'), findsOneWidget);
+
+      // Masih di 100 ms: splash sudah dibuang dari riwayat Navigator, jadi
+      // kembali (pop sampai rute terbawah) dari Bayar mendarat di tab Pesanan.
+      final routeNames = <String?>[];
+      appNavigatorKey.currentState!.popUntil((route) {
+        routeNames.add(route.settings.name);
+        return route.isFirst;
+      });
+      expect(routeNames, ['/payment/KK-1', AppRoutes.mainNav]);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(stackNames(), [AppRoutes.mainNav]);
+      expect(appNavigatorKey.currentState!.canPop(), isFalse);
+      expect(
+        tester
+            .widget<MainNavigationScreen>(find.byType(MainNavigationScreen))
+            .initialIndex,
+        AppRouter.ordersTabIndex,
+      );
+    },
+  );
+
+  group('web dimuat ulang di /checkout', () {
+    const user = {
+      'id': 1,
+      'role': 'customer',
+      'full_name': 'Budi',
+      'email': 'a@x.com',
+      'phone': '0812345678901',
+    };
+    final menuJson = {
+      'id': 7,
+      'name': 'Nasi Box',
+      'price': 10000,
+      'merchant': {
+        'id': 1,
+        'slug': 'a',
+        'business_name': 'A',
+        'is_open': true,
+        'pickup_points': [
+          {'id': 2, 'name': 'Perpustakaan'},
+        ],
+      },
+      'options': [],
+    };
+    final savedCart = CartStore.encode([
+      CartItem(menu: ProductModel.fromJson(menuJson)),
+    ]);
+
+    http.Response ok(Object data) => http.Response(
+      jsonEncode({'data': data, 'meta': {'total': 0}}),
+      200,
+      headers: {'content-type': 'application/json'},
+    );
+
+    /// Membuka aplikasi di /checkout dengan token dan keranjang tersimpan;
+    /// GET /me baru menjawab setelah 300 ms ([sessionValid] menentukan isinya).
+    Future<void> reloadCheckout(
+      WidgetTester tester, {
+      required bool sessionValid,
+    }) async {
+      tester.binding.platformDispatcher.defaultRouteNameTestValue =
+          AppRoutes.checkout;
+      addTearDown(
+        tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+      );
+      await _pump(
+        tester,
+        (r) async {
+          final path = r.url.path;
+          if (path.endsWith('/v1/me')) {
+            await Future<void>.delayed(const Duration(milliseconds: 300));
+            return sessionValid
+                ? ok({'user': user})
+                : _err(401, 'UNAUTHORIZED', 'x');
+          }
+          if (path.endsWith('/menus/7')) return ok(menuJson);
+          return ok([]);
+        },
+        secureValues: {'access_token': 'tok', 'session_email': 'a@x.com'},
+        savedPrefs: {CartStore.storageKey: savedCart},
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      // GET /me belum kembali: Login belum boleh dibuka.
+      expect(_currentRoute(), AppRoutes.checkout);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+
+    testWidgets('token sah: checkout tampil tanpa Login', (tester) async {
+      await reloadCheckout(tester, sessionValid: true);
+      expect(_currentRoute(), AppRoutes.checkout);
+      expect(find.text('Checkout'), findsOneWidget);
+      expect(find.text('Nasi Box'), findsWidgets);
+      final ctx = appNavigatorKey.currentContext!;
+      expect(ctx.read<AuthProvider>().isLoggedIn, isTrue);
+    });
+
+    testWidgets('token tidak sah: Login dibuka, keranjang tersimpan dikosongkan', (
+      tester,
+    ) async {
+      await reloadCheckout(tester, sessionValid: false);
+      expect(_currentRoute(), AppRoutes.login);
+      final ctx = appNavigatorKey.currentContext!;
+      expect(ctx.read<CartProvider>().items, isEmpty);
+      expect(
+        await SharedPreferencesAsync().getString(CartStore.storageKey),
+        isNull,
+      );
+    });
+
+    testWidgets(
+      'dimuat ulang lalu permintaan lain kena 401 sebelum GET /me: keranjang dikosongkan',
+      (tester) async {
+        final meNeverAnswers = Completer<http.Response>();
+        await _pump(
+          tester,
+          (r) => r.url.path.endsWith('/v1/me')
+              ? meNeverAnswers.future
+              : Future.value(_err(401, 'UNAUTHORIZED', 'x')),
+          secureValues: {'access_token': 'tok', 'session_email': 'a@x.com'},
+          savedPrefs: {CartStore.storageKey: savedCart},
+        );
+        await tester.pump();
+        final ctx = appNavigatorKey.currentContext!;
+        final cart = ctx.read<CartProvider>();
+        expect(cart.items, isNotEmpty); // dipulihkan dari perangkat
+
+        // Token tersimpan ditolak server: sesi dihapus, keranjang ikut kosong.
+        await expectLater(
+          ctx.read<ApiClient>().get('/orders'),
+          throwsA(isA<Object>()),
+        );
+        await tester.pumpAndSettle();
+        expect(_currentRoute(), AppRoutes.login);
+        expect(cart.items, isEmpty);
+        expect(
+          await SharedPreferencesAsync().getString(CartStore.storageKey),
+          isNull,
+        );
+      },
+    );
+  });
 
   testWidgets('expired token at splash: guest continues to main nav', (
     tester,
