@@ -1,7 +1,12 @@
+// Kolom isian teks bergaya seragam (label di atas, sudut membulat), dipakai layar login, daftar, lupa sandi, dan reset sandi.
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/app_text_styles.dart';
 
+/// Kolom isian berlabel di atas [TextFormField] dengan gaya aplikasi.
+///
+/// [validator] dipakai bila kolom berada di dalam `Form`. [errorText] menampilkan pesan galat
+/// dari luar, misalnya galat per kolom dari backend (`ApiException.field`).
 class CustomTextField extends StatelessWidget {
   final String? label;
   final String? hint;
@@ -13,6 +18,7 @@ class CustomTextField extends StatelessWidget {
   final int maxLines;
   final ValueChanged<String>? onChanged;
   final String? Function(String?)? validator;
+  final String? errorText;
 
   const CustomTextField({
     super.key,
@@ -26,6 +32,7 @@ class CustomTextField extends StatelessWidget {
     this.maxLines = 1,
     this.onChanged,
     this.validator,
+    this.errorText,
   });
 
   @override
@@ -66,6 +73,7 @@ class CustomTextField extends StatelessWidget {
               filled: true,
               fillColor: AppColors.surface,
               hintText: hint,
+              errorText: errorText,
               hintStyle: AppTextStyles.bodyMedium.copyWith(
                 color: AppColors.textMuted,
               ),

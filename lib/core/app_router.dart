@@ -1,3 +1,5 @@
+// Tabel rute aplikasi: memetakan nama rute di AppRoutes ke layar yang dibuka lewat Navigator.pushNamed.
+// Dipasang ke MaterialApp di main.dart; juga menyediakan appNavigatorKey untuk navigasi tanpa BuildContext.
 import 'package:flutter/material.dart';
 
 import '../screens/ai/ai_assistant_screen.dart';
@@ -23,12 +25,19 @@ import '../screens/profile/profile_screen.dart';
 import '../screens/splash/splash_screen.dart';
 import 'app_routes.dart';
 
-/// Central route table for the app.
+/// Kunci Navigator global, dipasang di MaterialApp (main.dart). Dipakai untuk pindah layar
+/// dari luar widget, misalnya ke layar Login saat backend membalas 401 (sesi kedaluwarsa).
+final GlobalKey<NavigatorState> appNavigatorKey = GlobalKey<NavigatorState>();
+
+/// Tabel rute pusat aplikasi (hanya berisi anggota statis, tidak untuk dibuat objeknya).
 class AppRouter {
   AppRouter._();
 
+  /// Rute pertama saat aplikasi dibuka: layar splash.
   static const String initialRoute = AppRoutes.splash;
 
+  /// Nama rute → fungsi pembuat layarnya. Rute `mainNav` menerima argumen `int` opsional
+  /// berisi indeks tab awal (bawaan 0); layar lain membaca argumennya sendiri bila perlu.
   static final Map<String, WidgetBuilder> routes = {
     AppRoutes.splash: (context) => const SplashScreen(),
     AppRoutes.login: (context) => const LoginScreen(),
@@ -36,7 +45,10 @@ class AppRouter {
     AppRoutes.forgotPassword: (context) => const ForgotPasswordScreen(),
     AppRoutes.verifyCode: (context) => const VerifyCodeScreen(),
     AppRoutes.resetPassword: (context) => const ResetPasswordScreen(),
-    AppRoutes.mainNav: (context) => const MainNavigationScreen(),
+    AppRoutes.mainNav: (context) {
+      final a = ModalRoute.of(context)?.settings.arguments;
+      return MainNavigationScreen(initialIndex: a is int ? a : 0);
+    },
     AppRoutes.home: (context) => const HomeScreen(),
     AppRoutes.search: (context) => const SearchScreen(),
     AppRoutes.productDetail: (context) => const ProductDetailScreen(),

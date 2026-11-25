@@ -1,3 +1,5 @@
+// Layar Profil (tab terakhir MainNavigationScreen): kartu profil, keamanan akun, preferensi, bantuan, dan tombol keluar.
+// Data akun dari AuthRepository.currentUser (GET /me); preferensi & data tambahan profil disimpan lokal (SharedPreferences).
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -9,12 +11,14 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../data/app_database.dart';
+import '../../models/api_user.dart';
+import '../../providers/auth_provider.dart';
 import '../../data/auth_repository.dart';
 import '../../providers/theme_provider.dart';
 import '../../widgets/app_modal_dialog.dart';
 import 'edit_profile_screen.dart';
 
+/// Halaman profil & pengaturan. Untuk tamu (tanpa sesi) kartu profil memakai nilai contoh.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -25,7 +29,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   static final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
 
-  User? _user;
+  ApiUser? _user;
   UserProfileExtras _extras = const UserProfileExtras();
 
   // Pengaturan Preferensi & Notifikasi
@@ -44,9 +48,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _loadUserAndPreferences();
   }
 
+  /// Memuat akun (GET /me; null bila tamu), data tambahan profil per email, dan preferensi aplikasi
+  /// dari SharedPreferences. Tamu memakai email contoh sebagai kunci data tambahan.
   Future<void> _loadUserAndPreferences() async {
-    final db = context.read<AppDb>();
-    final user = await AuthRepository(db).currentUser();
+    final user = await context.read<AuthRepository>().currentUser();
     final email = user?.email ?? 'abdurrahim.workspace@gmail.com';
     final extras = await UserProfileExtras.load(email);
 
@@ -70,6 +75,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  /// Buka EditProfileScreen, lalu muat ulang data setelah kembali.
   Future<void> _openEditProfile() async {
     await Navigator.push<bool>(
       context,
@@ -83,6 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await _loadUserAndPreferences();
   }
 
+  /// SnackBar mengambang berikon centang.
   void _showToast(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -109,6 +116,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Buka chat WhatsApp CS lewat wa.me; bila gagal dibuka, nomor CS disalin ke clipboard.
   Future<void> _openCustomerSupportWhatsApp() async {
     const phone = '6285852157352';
     const message =
@@ -327,9 +335,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           return;
                         }
 
+                        // Ganti sandi ke server (PUT /me/password); changePassword mengembalikan pesan galat atau null.
                         final email =
                             _user?.email ?? 'abdurrahim.workspace@gmail.com';
-                        final repo = AuthRepository(context.read<AppDb>());
+                        final repo = context.read<AuthRepository>();
                         final err = await repo.changePassword(
                           email: email,
                           currentPassword: cur,
@@ -1228,9 +1237,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     AppModalDialog.showLogout(
                       context,
                       onConfirm: () async {
+                        // Keluar: POST /auth/logout + hapus sesi lokal, lalu ganti seluruh tumpukan rute dengan Login.
                         final nav = Navigator.of(context);
-                        final repo = AuthRepository(context.read<AppDb>());
-                        await repo.logout();
+                        await context.read<AuthProvider>().logout();
                         nav.pushNamedAndRemoveUntil(
                           AppRoutes.login,
                           (route) => false,

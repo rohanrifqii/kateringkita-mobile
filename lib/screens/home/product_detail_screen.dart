@@ -12,8 +12,10 @@ import '../../models/product_model.dart';
 import '../../data/catalog_repository.dart';
 import '../../widgets/primary_button.dart';
 import '../../widgets/menu_image.dart';
+import '../../widgets/add_to_cart.dart';
+import '../../widgets/cart_button.dart';
 
-/// Layar detail satu menu: galeri, harga, opsi, info toko, ulasan, dan tombol lanjut ke checkout.
+/// Layar detail satu menu: galeri, harga, opsi, info toko, ulasan, dan tombol tambah ke keranjang.
 class ProductDetailScreen extends StatefulWidget {
   /// Produk cadangan bila argumen rute bukan ProductModel.
   final ProductModel? product;
@@ -85,11 +87,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     } catch (_) {}
   }
 
-  /// Teks tombol bawah: "Toko sedang tutup", "Habis" (badge sold_out), atau "Add to Orders".
+  /// Teks tombol bawah: "Toko sedang tutup", "Habis" (badge sold_out), atau "Tambah ke Keranjang".
   String get _buttonText {
     if (!_product.merchant.isOpen) return 'Toko sedang tutup';
     if (_product.badge == 'sold_out') return 'Habis';
-    return 'Add to Orders';
+    return 'Tambah ke Keranjang';
   }
 
   @override
@@ -524,7 +526,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
           ),
 
-          // Top Floating Navigation Bar (Back & Favorite)
+          // Top Floating Navigation Bar (Back, keranjang, & Favorite)
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -551,6 +553,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       onPressed: () => Navigator.pop(context),
                     ),
                   ),
+                  const Spacer(),
+                  // Ikon keranjang dengan lencana jumlah item; diketuk membuka Checkout.
+                  const CartButton(),
+                  const SizedBox(width: 8),
                   // Favorite Button
                   Container(
                     width: 42,
@@ -601,8 +607,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
           ),
 
-          // Bottom Fixed Button: ke checkout dengan argumen _product (opsi terpilih belum ikut dikirim);
-          // nonaktif bila _product.canOrder false.
+          // Bottom Fixed Button: menambah _product beserta opsi terpilih ke keranjang lewat
+          // addToCartWithPrompt (bila keranjang berisi menu toko lain, pengguna ditanya dulu apakah
+          // keranjang diganti). Nonaktif bila _product.canOrder false.
           Positioned(
             left: 20,
             right: 20,
@@ -613,13 +620,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               backgroundColor: AppColors.textMuted,
               onPressed: !_product.canOrder
                   ? null
-                  : () {
-                      Navigator.pushNamed(
-                        context,
-                        AppRoutes.checkout,
-                        arguments: _product,
-                      );
-                    },
+                  : () => addToCartWithPrompt(context, _product,
+                      option: _selectedOption),
             ),
           ),
         ],

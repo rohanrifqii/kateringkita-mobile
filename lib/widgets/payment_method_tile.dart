@@ -1,10 +1,27 @@
+// Pilihan metode pembayaran (kartu dengan radio) di layar checkout. Nilai metode yang dipilih dikirim
+// ke backend sebagai `payment_method` saat membuat pesanan.
 import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
 import '../core/app_text_styles.dart';
 
-enum PaymentMethod { qris, virtualAccount, cod }
+/// Metode bayar yang didukung backend (tanpa tunai).
+enum PaymentMethod {
+  /// Midtrans Snap: QRIS / e-wallet.
+  online,
 
+  /// Virtual Account bank.
+  virtualAccount;
+
+  /// Nilai `payment_method` untuk API.
+  String get apiValue => switch (this) {
+        PaymentMethod.online => 'online',
+        PaymentMethod.virtualAccount => 'va',
+      };
+}
+
+/// Data tampilan satu pilihan metode bayar: [code] teks pendek di kotak ikon (mis. `QR`),
+/// [title], [subtitle], [badge] opsional, serta warna aksen dan latar ikonnya.
 class PaymentMethodOption {
   final PaymentMethod method;
   final String code;
@@ -25,6 +42,7 @@ class PaymentMethodOption {
   });
 }
 
+/// Kartu satu metode bayar; berbingkai warna utama bila [selected]. [onTap] dipanggil saat diketuk.
 class PaymentMethodTile extends StatelessWidget {
   final PaymentMethodOption option;
   final bool selected;

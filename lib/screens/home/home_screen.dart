@@ -12,6 +12,7 @@ import '../../data/catalog_repository.dart';
 import '../../data/settings_store.dart';
 import '../../models/category_model.dart';
 import '../../models/product_model.dart';
+import '../../widgets/cart_button.dart';
 import '../../widgets/food_card.dart';
 import '../orders/location_picker_screen.dart';
 
@@ -285,6 +286,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
+                  // Ikon keranjang dengan lencana jumlah item; diketuk membuka Checkout.
+                  const CartButton(),
+                  const SizedBox(width: 8),
                   // Notification icon with badge dot
                   GestureDetector(
                     behavior: HitTestBehavior.opaque,

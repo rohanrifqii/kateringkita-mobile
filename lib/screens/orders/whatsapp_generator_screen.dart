@@ -1,77 +1,103 @@
-// Layar Pembuat Pesan WhatsApp (rute AppRoutes.whatsappGenerator), dibuka dari PaymentScreen, OrdersScreen, atau ActiveOrdersScreen.
-// Teks konfirmasi pesanan disusun dari argumen rute (product, quantity, total, orderCode, dll.); tidak memanggil backend.
-import '../../widgets/menu_image.dart';
+// Layar pesan WhatsApp ke penjual untuk satu pesanan (argumen rute: kode pesanan). Dibuka dari lembar sukses
+// bayar atau tombol "Buka WhatsApp" di daftar pesanan. Teks dan tautan wa.me dibuat server
+// (GET /orders/:code/whatsapp); pengguna boleh mengedit teks sebelum membuka WhatsApp.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../../api/api_exception.dart';
 import '../../core/app_colors.dart';
-import '../../core/app_currency.dart';
-import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../models/product_model.dart';
+import '../../data/order_repository.dart';
 import '../../widgets/primary_button.dart';
 
-/// Layar yang menyusun teks konfirmasi pesanan untuk dikirim ke admin lewat WhatsApp.
-class WhatsAppGeneratorScreen extends StatefulWidget {
-  /// Rincian pesanan cadangan bila argumen rute tidak berupa Map.
-  final Map<String, dynamic>? orderDetails;
+/// URL wa.me untuk dibuka. Bila [text] sama dengan pesan server, pakai URL
+/// server apa adanya; bila diedit, pakai nomor dari URL server + teks baru.
+/// Nomor diambil dari segmen path terakhir URL server (`wa.me/<nomor>`).
+String buildWhatsAppUrl({
+  required String serverUrl,
+  required String serverMessage,
+  required String text,
+}) {
+  if (text == serverMessage) return serverUrl;
+  final uri = Uri.parse(serverUrl);
+  final number = uri.pathSegments.isNotEmpty ? uri.pathSegments.last : '';
+  return 'https://wa.me/$number?text=${Uri.encodeComponent(text)}';
+}
 
-  const WhatsAppGeneratorScreen({super.key, this.orderDetails});
+/// Layar pratinjau dan pengiriman pesan WhatsApp pesanan. Argumen rute wajib
+/// berupa kode pesanan (String); selain itu layar langsung ditutup.
+class WhatsAppGeneratorScreen extends StatefulWidget {
+  const WhatsAppGeneratorScreen({super.key});
 
   @override
-  State<WhatsAppGeneratorScreen> createState() => _WhatsAppGeneratorScreenState();
+  State<WhatsAppGeneratorScreen> createState() =>
+      _WhatsAppGeneratorScreenState();
 }
 
 class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
-  late TextEditingController _messageController;
-  bool _initialized = false;
-  ProductModel? _product;
-
-  @override
-  void initState() {
-    super.initState();
-    _messageController = TextEditingController();
-  }
+  final _messageController = TextEditingController();
+  final _messageFocus = FocusNode();
+  bool _started = false;
+  bool _loading = true;
+  String? _error;
+  String _code = '';
+  // Teks dan URL asli dari server, untuk tahu apakah pengguna mengedit teks.
+  String _serverMessage = '';
+  String _serverUrl = '';
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Hanya sekali: baca rincian pesanan dari argumen rute (atau widget.orderDetails), isi nilai
-    // bawaan untuk kunci yang tidak ada, lalu susun teks pesan WhatsApp ke dalam controller.
-    if (!_initialized) {
-      final args = ModalRoute.of(context)?.settings.arguments;
-      final map = (args is Map<String, dynamic>)
-          ? args
-          : (widget.orderDetails ?? <String, dynamic>{});
+    if (_started) return;
+    _started = true;
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is! String) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Navigator.pop(context);
+      });
+      return;
+    }
+    _code = args;
+    _load();
+  }
 
-      final prod = map['product'] as ProductModel?;
-      final qty = map['quantity'] as int? ?? 1;
-      final tot = (map['total'] as num?)?.toDouble() ?? (prod?.price.toDouble() ?? 0);
-      final code = map['orderCode'] as String? ?? '#KK-2026-089';
-      final name = map['name'] as String? ?? 'Mahasiswa UB';
-      final phone = map['phone'] as String? ?? '-';
-      final location = map['location'] as String? ?? 'Gedung Vokasi UB (Lt. 2)';
-      final note = map['note'] as String? ?? '-';
-
-      _product = prod;
-
-      _messageController.text =
-          'Halo Admin KateringKita! 👋\n\n'
-          'Saya ingin konfirmasi pesanan:\n'
-          '• Kode Pesanan: $code\n'
-          '• Menu: ${prod?.name ?? '-'} ($qty Porsi)\n'
-          '• Total: ${AppCurrency.format(tot)}\n'
-          '• Pemesan: $name ($phone)\n'
-          '• Titik Temu: $location\n'
-          '• Catatan: $note\n\n'
-          'Mohon segera diproses ya kak, terima kasih! 🙏';
-
-      _initialized = true;
+  /// Ambil teks + URL wa.me dari server (GET /orders/:code/whatsapp) dan isi
+  /// kolom teks; galat ditampilkan dengan tombol Coba lagi.
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final r = await context.read<OrderRepository>().whatsapp(_code);
+      if (!mounted) return;
+      setState(() {
+        _serverMessage = r.message;
+        _serverUrl = r.url;
+        _messageController.text = r.message;
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.message;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Terjadi kesalahan. Coba lagi.';
+        _loading = false;
+      });
     }
   }
 
   @override
   void dispose() {
     _messageController.dispose();
+    _messageFocus.dispose();
     super.dispose();
   }
 
@@ -86,50 +112,26 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
     );
   }
 
-  void _openWhatsApp() {
-    // Belum benar-benar membuka aplikasi WhatsApp (tidak ada url_launcher di sini): hanya menampilkan
-    // dialog sukses, lalu pengguna memilih ke Pesanan Aktif atau kembali ke navigasi utama.
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: const [
-            Icon(Icons.check_circle_rounded, color: AppColors.success, size: 28),
-            SizedBox(width: 8),
-            Text('Pesanan Terkirim!'),
-          ],
-        ),
-        content: const Text(
-          'WhatsApp dibuka dan pesanan Anda telah dicatat di tab Pesanan Aktif.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // close dialog
-              Navigator.pushNamed(context, AppRoutes.activeOrders);
-            },
-            child: const Text('Lihat Pesanan Aktif'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            onPressed: () {
-              Navigator.pop(context); // close dialog
-              Navigator.pushNamedAndRemoveUntil(
-                context,
-                AppRoutes.mainNav,
-                (route) => false,
-              );
-            },
-            child: const Text('Kembali ke Beranda'),
-          ),
-        ],
-      ),
+  /// Buka WhatsApp dengan teks di kolom (lihat [buildWhatsAppUrl]); SnackBar
+  /// bila tidak bisa dibuka.
+  Future<void> _openWhatsApp() async {
+    final url = buildWhatsAppUrl(
+      serverUrl: _serverUrl,
+      serverMessage: _serverMessage,
+      text: _messageController.text,
     );
+    var ok = false;
+    try {
+      ok = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {}
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tidak dapat membuka WhatsApp.')),
+      );
+    }
   }
 
   @override
@@ -147,216 +149,209 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
         ),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Success Alert Banner
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.successLight,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFFA7F3D0)),
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+            ? Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(_error!, textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      OutlinedButton(
+                        onPressed: _load,
+                        child: const Text('Coba lagi'),
+                      ),
+                    ],
+                  ),
                 ),
-                child: Row(
+              )
+            : SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Success Alert Banner
                     Container(
-                      width: 36,
-                      height: 36,
-                      decoration: const BoxDecoration(
-                        color: AppColors.success,
-                        shape: BoxShape.circle,
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.successLight,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFA7F3D0)),
                       ),
-                      child: const Icon(
-                        Icons.check_rounded,
-                        color: Colors.white,
-                        size: 22,
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
+                      child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Kuota Berhasil Diamankan!',
-                            style: AppTextStyles.h4.copyWith(
-                              color: const Color(0xFF065F46),
-                              fontSize: 15,
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: const BoxDecoration(
+                              color: AppColors.success,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                              size: 22,
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Pesanan siap dikirim langsung via WhatsApp penjual.',
-                            style: AppTextStyles.bodySmall.copyWith(
-                              color: const Color(0xFF047857),
-                              fontSize: 12,
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Kuota Berhasil Diamankan!',
+                                  style: AppTextStyles.h4.copyWith(
+                                    color: const Color(0xFF065F46),
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Pesanan siap dikirim langsung via WhatsApp penjual.',
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: const Color(0xFF047857),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
+                    const SizedBox(height: 20),
+
+                    // Preview Card
+                    Text(
+                      'Pratinjau Pesan Otomatis (wa.me)',
+                      style: AppTextStyles.h4.copyWith(fontSize: 15),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppColors.cardBorder.withValues(alpha: 0.8),
+                        ),
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: TextField(
+                          controller: _messageController,
+                          focusNode: _messageFocus,
+                          maxLines: null,
+                          decoration: const InputDecoration.collapsed(
+                            hintText: '',
+                          ),
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.textPrimary,
+                            height: 1.5,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Tombol Salin dan Edit (Edit hanya memfokuskan kolom teks)
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: Icon(
+                              Icons.copy_rounded,
+                              size: 16,
+                              color: AppColors.textPrimary,
+                            ),
+                            label: Text(
+                              'Salin Pesan',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor: AppColors.surface,
+                              side: BorderSide(color: AppColors.cardBorder),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            onPressed: _copyMessage,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: Icon(
+                              Icons.edit_note_rounded,
+                              size: 18,
+                              color: AppColors.textPrimary,
+                            ),
+                            label: Text(
+                              'Edit Pesan',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor: AppColors.surface,
+                              side: BorderSide(color: AppColors.cardBorder),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            onPressed: () {
+                              _messageFocus.requestFocus();
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Instruction Text
+                    Center(
+                      child: Text(
+                        '⏱ Tekan tombol di bawah untuk langsung membuka WhatsApp.',
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-
-              if (_product != null) ...[
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.cardBorder),
-                  ),
-                  child: Row(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: MenuImage(_product!.imageUrl,
-                          width: 48,
-                          height: 48,
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _product!.name,
-                              style: AppTextStyles.h4.copyWith(fontSize: 14),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Penjual: ${_product!.vendor}',
-                              style: AppTextStyles.bodySmall.copyWith(
-                                color: AppColors.textSecondary,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Preview Card
-              Text(
-                'Pratinjau Pesan Otomatis (wa.me)',
-                style: AppTextStyles.h4.copyWith(fontSize: 15),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppColors.cardBorder.withValues(alpha: 0.8)),
-                ),
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: AppColors.background,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    _messageController.text,
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.textPrimary,
-                      height: 1.5,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Action Buttons (Copy / Edit)
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: Icon(Icons.copy_rounded, size: 16, color: AppColors.textPrimary),
-                      label: Text(
-                        'Salin Pesan',
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: AppColors.surface,
-                        side: BorderSide(color: AppColors.cardBorder),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      onPressed: _copyMessage,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: Icon(Icons.edit_note_rounded, size: 18, color: AppColors.textPrimary),
-                      label: Text(
-                        'Edit Pesan',
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        backgroundColor: AppColors.surface,
-                        side: BorderSide(color: AppColors.cardBorder),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      onPressed: () {
-                        // Tombol Edit: pesan masih ditampilkan sebagai Text biasa (belum bisa diedit); tombol ini hanya menampilkan SnackBar.
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Pesan siap dikustomisasi.')),
-                        );
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-
-              // Instruction Text
-              Center(
-                child: Text(
-                  '⏱ Tekan tombol di bawah untuk langsung membuka WhatsApp.',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
       ),
-      bottomSheet: Container(
-        color: AppColors.background,
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
-        child: PrimaryButton(
-          text: 'Kirim via WhatsApp',
-          icon: Icons.chat_bubble_rounded,
-          backgroundColor: const Color(0xFF10B981),
-          gradient: null,
-          onPressed: _openWhatsApp,
-        ),
-      ),
+      bottomSheet: (_loading || _error != null)
+          ? null
+          : Container(
+              color: AppColors.background,
+              padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+              child: PrimaryButton(
+                text: 'Kirim via WhatsApp',
+                icon: Icons.chat_bubble_rounded,
+                backgroundColor: const Color(0xFF10B981),
+                gradient: null,
+                onPressed: _openWhatsApp,
+              ),
+            ),
     );
   }
 }

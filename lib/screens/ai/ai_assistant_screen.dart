@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
-import '../../data/app_database.dart';
 import '../../data/auth_repository.dart';
 import '../../models/ai_recommendation_model.dart';
 import '../../models/product_model.dart';
@@ -132,9 +131,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
-  /// Mengambil nama depan akun yang sedang login dari database lokal (AuthRepository).
+  /// Mengambil nama depan akun yang sedang login lewat AuthRepository.currentUser (GET /me);
+  /// tamu atau galat 401 menghasilkan null sehingga sapaan bawaan tetap dipakai.
   Future<void> _loadUserName() async {
-    final user = await AuthRepository(context.read<AppDb>()).currentUser();
+    final user = await context.read<AuthRepository>().currentUser();
     if (!mounted) return;
     if (user != null && user.fullName.isNotEmpty) {
       setState(() {
@@ -389,7 +389,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   }
 
   /// Membungkus paket rekomendasi menjadi satu ProductModel sementara (id 0, merchant "ai-package",
-  /// harga = total modal) lalu membuka CheckoutScreen dengan produk itu.
+  /// harga = total modal) lalu membuka rute checkout dengan produk itu sebagai argumen.
+  /// Catatan: CheckoutScreen kini hanya membaca isi keranjang (CartProvider) dan mengabaikan argumen ini,
+  /// jadi paket AI tidak ikut tampil di checkout.
   void _onOrderRecommendation() {
     final bundleProduct = ProductModel(
       id: 0,

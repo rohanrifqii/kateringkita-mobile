@@ -3,6 +3,10 @@
 // Status "suka toko" hanya disimpan di state layar (hilang saat layar ditutup).
 import '../../data/catalog_repository.dart';
 import '../../widgets/menu_image.dart';
+import '../../widgets/add_to_cart.dart';
+import '../../widgets/primary_button.dart';
+import '../../widgets/cart_button.dart';
+import '../../providers/cart_provider.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -183,6 +187,23 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      // Tombol "Lihat Keranjang (n)" ke Checkout, hanya tampil bila keranjang berisi.
+      bottomNavigationBar: Consumer<CartProvider>(
+        builder: (context, cart, _) {
+          if (cart.count == 0) return const SizedBox.shrink();
+          return SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+              child: PrimaryButton(
+                text: 'Lihat Keranjang (${cart.count})',
+                gradient: AppColors.primaryGradient,
+                onPressed: () =>
+                    Navigator.pushNamed(context, AppRoutes.checkout),
+              ),
+            ),
+          );
+        },
+      ),
       body: CustomScrollView(
         slivers: [
           // 1. Hero Cover + Overlapping Store Card (Gabungan GrabFood, GoFood, & ShopeeFood)
@@ -250,7 +271,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
           ],
         ),
 
-        // Top Floating Action Bar (Back, Search, Favorite, Share)
+        // Top Floating Action Bar (Back, Keranjang, Search, Favorite, Share)
         SafeArea(
           bottom: false,
           child: Padding(
@@ -262,6 +283,8 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                   onTap: () => Navigator.pop(context),
                 ),
                 const Spacer(),
+                // Ikon keranjang dengan lencana jumlah item; diketuk membuka Checkout.
+                const CartButton(),
                 const SizedBox(width: 8),
                 _buildCircleTopButton(
                   icon: _isSearching
@@ -838,17 +861,11 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                       ),
                                     ],
                                   ),
-                                  // Tombol + oranye: langsung ke checkout menu ini (nonaktif bila menu tidak bisa dipesan)
+                                  // Tombol + oranye: tambah 1 porsi menu ini ke keranjang tanpa opsi (nonaktif bila menu tidak bisa dipesan)
                                   GestureDetector(
                                     onTap: !menu.canOrder
                                         ? null
-                                        : () {
-                                            Navigator.pushNamed(
-                                              context,
-                                              AppRoutes.checkout,
-                                              arguments: menu,
-                                            );
-                                          },
+                                        : () => addToCartWithPrompt(context, menu),
                                     child: Container(
                                       width: 32,
                                       height: 32,
@@ -950,20 +967,14 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                                 ),
                               ),
                             ),
-                            // Tombol + Bulat di Pojok Kanan Atas Foto (Persis GrabFood)
+                            // Tombol + bulat di pojok kanan atas foto: tambah 1 porsi ke keranjang (nonaktif bila tidak bisa dipesan)
                             Positioned(
                               top: 8,
                               right: 8,
                               child: GestureDetector(
                                 onTap: !menu.canOrder
                                     ? null
-                                    : () {
-                                        Navigator.pushNamed(
-                                          context,
-                                          AppRoutes.checkout,
-                                          arguments: menu,
-                                        );
-                                      },
+                                    : () => addToCartWithPrompt(context, menu),
                                 child: Container(
                                   width: 32,
                                   height: 32,

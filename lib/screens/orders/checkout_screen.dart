@@ -1,265 +1,516 @@
-// Layar Checkout (rute AppRoutes.checkout), dibuka dari tombol pesan di ProductDetailScreen / StoreProfileScreen; argumen rute = ProductModel.
-// Data pemesan diambil lokal (AuthRepository: sesi + database Drift) dan titik temu dari SettingsStore; layar ini tidak memanggil backend,
-// hanya meneruskan rincian pesanan ke PaymentScreen.
-import '../../widgets/menu_image.dart';
+// Layar Checkout: dibuka dari keranjang (CartProvider) untuk memesan semua menu di keranjang dari satu toko.
+// Alur: wajib login → muat titik temu toko (CatalogRepository, GET /menus/{id}) → hitung total di server
+// (OrderRepository.quote, POST /orders/quote) → buat pesanan (POST /orders) → lanjut ke layar Pembayaran.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
-import '../../data/app_database.dart';
-import '../../data/auth_repository.dart';
-import '../../data/settings_store.dart';
+import '../../api/api_exception.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../models/product_model.dart';
+import '../../core/pickup_time.dart';
+import '../../core/require_login.dart';
+import '../../data/catalog_repository.dart';
+import '../../data/order_repository.dart';
+import '../../models/cart_item.dart';
+import '../../models/order_api_model.dart';
+import '../../models/pickup_point.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/cart_provider.dart';
 import '../../services/map_service.dart';
 import '../../widgets/app_modal_dialog.dart';
+import '../../widgets/menu_image.dart';
 import '../../widgets/payment_method_tile.dart';
 import '../../widgets/primary_button.dart';
-import 'location_picker_screen.dart';
+import 'pickup_point_picker_screen.dart';
 
-/// Layar checkout satu menu: jumlah porsi, data pemesan, lokasi titik temu, metode bayar, dan ringkasan harga.
+/// Layar checkout isi keranjang: data pemesan, titik temu, waktu ambil, metode bayar, dan total
+/// yang dihitung server (quote). Tombol "Proses Pembayaran" membuat pesanan dengan header
+/// Idempotency-Key lalu mengganti layar ini dengan layar Pembayaran (AppRoutes.payment).
+/// Bila pengguna batal login, layar langsung ditutup.
 class CheckoutScreen extends StatefulWidget {
-  /// Produk cadangan bila argumen rute bukan ProductModel.
-  final ProductModel? product;
-
-  const CheckoutScreen({super.key, this.product});
+  const CheckoutScreen({super.key});
 
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
+  // Angka berlebar sama agar harga tidak "bergoyang" saat nilainya berubah.
   static const List<FontFeature> _tabular = [FontFeature.tabularFigures()];
+  // Jeda sebelum meminta quote, supaya mengetik/menekan +/- beruntun hanya memicu satu permintaan.
+  static const Duration _quoteDebounce = Duration(milliseconds: 400);
 
   // Pilihan metode bayar yang ditampilkan (daftar tetap di aplikasi).
   static List<PaymentMethodOption> get _paymentOptions => [
-    PaymentMethodOption(
-      method: PaymentMethod.qris,
-      code: 'QR',
-      title: 'QRIS / Instant E-Wallet',
-      subtitle: 'GoPay, OVO, ShopeePay, AstraPay',
-      badge: 'Cepat',
-      accent: AppColors.primaryDark,
-      accentBg: AppColors.primarySoft,
-    ),
-    PaymentMethodOption(
-      method: PaymentMethod.virtualAccount,
-      code: 'VA',
-      title: 'Transfer Virtual Account',
-      subtitle: 'BCA, Mandiri, BRI, BNI',
-      accent: AppColors.blue,
-      accentBg: AppColors.blueLight,
-    ),
-    PaymentMethodOption(
-      method: PaymentMethod.cod,
-      code: 'COD',
-      title: 'Tunai saat Pengambilan',
-      subtitle: 'Bayar di booth Vokasi UB',
-      accent: const Color(0xFFD97706),
-      accentBg: AppColors.warningLight,
-    ),
-  ];
+        PaymentMethodOption(
+          method: PaymentMethod.online,
+          code: 'QR',
+          title: 'QRIS / E-Wallet',
+          subtitle: 'GoPay, ShopeePay & QRIS lewat Midtrans',
+          badge: 'Cepat',
+          accent: AppColors.primaryDark,
+          accentBg: AppColors.primarySoft,
+        ),
+        PaymentMethodOption(
+          method: PaymentMethod.virtualAccount,
+          code: 'VA',
+          title: 'Virtual Account',
+          subtitle: 'BCA, BNI, BRI',
+          accent: AppColors.blue,
+          accentBg: AppColors.blueLight,
+        ),
+      ];
 
-  late ProductModel _product;
-  // true bila tidak ada produk; layar langsung ditutup (pop) setelah frame pertama.
-  bool _missing = false;
-  int _quantity = 1;
-  PaymentMethod _selectedPayment = PaymentMethod.qris;
-
-  // ValueNotifier: hanya teks timer yang rebuild tiap detik,
-  // bukan seluruh layar (termasuk form).
-  final ValueNotifier<int> _secondsLeft = ValueNotifier<int>(299); // 04:59
-  Timer? _timer;
+  PaymentMethod _payment = PaymentMethod.online;
 
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _locationController = TextEditingController();
-  final TextEditingController _noteController =
-      TextEditingController(text: 'Sambal dipisah ya, diambil jam istirahat');
-  final MapController _miniMapController = MapController();
-  String _selectedLocationAddress =
-      'Dinoyo, Jalan Mt Haryono Gang 5 No 273B, LOWOKWARU, KOTA MALANG, JAWA TIMUR';
-  double _selectedLat = SettingsStore.defaultLat;
-  double _selectedLng = SettingsStore.defaultLng;
-  bool _userDataLoaded = false;
+  final TextEditingController _noteController = TextEditingController();
+  final TextEditingController _promoController = TextEditingController();
+
+  /// true setelah lolos requireLogin.
+  bool _authorized = false;
+
+  // Titik temu: daftar milik toko, status muat, pilihan saat ini, dan galat dari server.
+  List<PickupPoint> _points = const [];
+  bool _pointsLoading = false;
+  String? _pointsError;
+  PickupPoint? _point;
+  String? _pointError;
+
+  // Waktu ambil: "Secepatnya" atau tanggal-jam pilihan (disimpan dalam UTC).
+  bool _asap = true;
+  DateTime? _pickupAtUtc;
+  String? _pickupError;
+
+  // Quote (rincian total dari server). _quoteSeq naik tiap permintaan baru; jawaban dengan nomor
+  // lama diabaikan agar respons yang telat tidak menimpa hasil terbaru.
+  Timer? _debounce;
+  int _quoteSeq = 0;
+  bool _quoting = false;
+  Quote? _quote;
+  String? _quoteError;
+  String? _promoError;
+
+  // Galat kolom data pemesan dari server.
+  String? _nameError;
+  String? _phoneError;
+  String? _noteError;
+
+  // Buat pesanan: status kirim dan galat per baris keranjang (kunci = CartItem.key).
+  bool _submitting = false;
+  Map<String, String> _lineErrors = const {};
+
+  static const String _genericError = 'Terjadi kesalahan. Coba lagi.';
 
   @override
   void initState() {
     super.initState();
-    _startTimer();
-  }
-
-  /// Hitung mundur "Holding Timer" 5 menit (299 detik). Hanya tampilan: saat habis, timer berhenti
-  /// tanpa membatalkan atau mengunci checkout.
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_secondsLeft.value > 0) {
-        _secondsLeft.value--;
-      } else {
-        timer.cancel();
-      }
-    });
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Ambil produk dari argumen rute, kalau tidak ada dari widget.product; tanpa produk layar ditutup.
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is ProductModel) {
-      _product = args;
-    } else {
-      final p = widget.product;
-      if (p == null) {
-        _missing = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) Navigator.pop(context);
-        });
-        return;
-      }
-      _product = p;
-    }
-    // Data pemesan cukup dimuat sekali walau didChangeDependencies terpanggil lagi.
-    if (!_userDataLoaded) {
-      _loadUserData();
-      _userDataLoaded = true;
-    }
-  }
-
-  /// Mengisi form dari akun yang sedang login (nama & telepon; isian contoh bila belum login)
-  /// dan titik temu tersimpan di SettingsStore, lalu memindahkan peta mini ke koordinat itu.
-  Future<void> _loadUserData() async {
-    final repo = AuthRepository(context.read<AppDb>());
-    final user = await repo.currentUser();
-    final meeting = await SettingsStore.loadMeetingPoint();
-    final savedAddress = await SettingsStore.loadMeetingAddress();
-    final (lat, lng) = await SettingsStore.loadMeetingCoordinates();
-    if (!mounted) return;
-    if (user != null) {
-      _nameController.text = user.fullName;
-      _phoneController.text = user.phone;
-    } else {
-      _nameController.text = 'Mahasiswa UB';
-      _phoneController.text = '08xx-xxxx-xxxx';
-    }
-    setState(() {
-      _locationController.text = meeting;
-      _selectedLocationAddress = savedAddress;
-      _selectedLat = lat;
-      _selectedLng = lng;
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        try {
-          _miniMapController.move(LatLng(_selectedLat, _selectedLng), 15.8);
-        } catch (_) {}
-      }
-    });
-  }
-
-  /// Membuka LocationPickerScreen; lokasi yang dipilih ditampilkan, peta mini dipindah,
-  /// dan lokasi disimpan sebagai titik temu baru di SettingsStore.
-  Future<void> _openLocationPicker() async {
-    final result = await Navigator.push<DeliveryLocation>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => LocationPickerScreen(
-          currentLocationName: _locationController.text.trim(),
-          initialLat: _selectedLat,
-          initialLng: _selectedLng,
-        ),
-      ),
-    );
-
-    if (result != null) {
-      setState(() {
-        _locationController.text = result.name;
-        _selectedLocationAddress = result.fullAddress;
-        _selectedLat = result.latitude;
-        _selectedLng = result.longitude;
-      });
-      try {
-        _miniMapController.move(LatLng(_selectedLat, _selectedLng), 15.8);
-      } catch (_) {}
-      await SettingsStore.saveMeetingPoint(
-        result.name,
-        fullAddress: result.fullAddress,
-        latitude: result.latitude,
-        longitude: result.longitude,
-      );
-    }
+    // Ditunda ke setelah frame pertama karena _start bisa membuka layar login (butuh Navigator).
+    WidgetsBinding.instance.addPostFrameCallback((_) => _start());
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
-    _secondsLeft.dispose();
+    _debounce?.cancel();
     _nameController.dispose();
     _phoneController.dispose();
-    _locationController.dispose();
     _noteController.dispose();
-    _miniMapController.dispose();
+    _promoController.dispose();
     super.dispose();
   }
 
-  /// Mengubah detik menjadi teks mm:ss.
-  String _formatTimer(int seconds) {
-    final m = (seconds ~/ 60).toString().padLeft(2, '0');
-    final s = (seconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
+  CartProvider get _cart => context.read<CartProvider>();
+
+  /// Jumlah hari pre-order terbesar di keranjang (0 bila tidak ada menu pre-order).
+  int get _preorderDays => _cart.hasPreorder ? _cart.maxPreorderDays : 0;
+
+  /// Pre-order wajib memilih tanggal; "Secepatnya" hanya untuk non pre-order.
+  bool get _isAsap => _asap && !_cart.hasPreorder;
+
+  // ---------- Alur ----------
+
+  /// Pastikan login (tutup layar bila batal), isi nama & nomor dari profil, lalu muat titik temu.
+  Future<void> _start() async {
+    if (!mounted) return;
+    final ok = await requireLogin(context);
+    if (!mounted) return;
+    if (!ok) {
+      Navigator.pop(context);
+      return;
+    }
+    final user = context.read<AuthProvider>().user;
+    _nameController.text = user?.fullName ?? '';
+    _phoneController.text = user?.phone ?? '';
+    setState(() => _authorized = true);
+    await _loadPoints();
   }
 
-  String _price(double value) => AppCurrency.format(value);
-
-
-  /// Label metode bayar yang dikirim ke PaymentScreen.
-  String _paymentLabel(PaymentMethod method) {
-    switch (method) {
-      case PaymentMethod.qris:
-        return 'QRIS / Instant E-Wallet';
-      case PaymentMethod.virtualAccount:
-        return 'Transfer Virtual Account';
-      case PaymentMethod.cod:
-        return 'Tunai saat Pengambilan (COD)';
+  /// Memuat titik temu toko lewat detail menu pertama di keranjang (GET /menus/{id}), karena
+  /// semua menu di keranjang berasal dari satu toko. Titik favorit pengguna dipilih otomatis,
+  /// bila tidak ada dipakai titik pertama. Setelah itu quote dijadwalkan.
+  Future<void> _loadPoints() async {
+    final items = _cart.items;
+    if (items.isEmpty) return;
+    final catalog = context.read<CatalogRepository>();
+    final fav = context.read<AuthProvider>().user?.favoritePickupPointId;
+    setState(() {
+      _pointsLoading = true;
+      _pointsError = null;
+    });
+    try {
+      final menu = await catalog.menuDetail(items.first.menu.id);
+      if (!mounted) return;
+      final pts = menu.merchant.pickupPoints;
+      PickupPoint? pick;
+      for (final p in pts) {
+        if (p.id == fav) pick = p;
+      }
+      pick ??= pts.isEmpty ? null : pts.first;
+      setState(() {
+        _points = pts;
+        _point ??= pick;
+        _pointsLoading = false;
+      });
+      _scheduleQuote();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _pointsLoading = false;
+        _pointsError = e.message;
+      });
+    } catch (_) {
+      // Galat tak terduga (mis. respons rusak): jangan biarkan spinner macet.
+      if (!mounted) return;
+      setState(() {
+        _pointsLoading = false;
+        _pointsError = _genericError;
+      });
     }
   }
 
-  /// Menampilkan dialog konfirmasi; bila disetujui, membuat kode pesanan sementara (#KK-tahun-3 digit
-  /// dari waktu sekarang) lalu membuka PaymentScreen dengan seluruh isian form. Isian form belum divalidasi di sini.
-  void _confirmOrder(double total) {
+  /// Quote baru bisa diminta bila sudah login, keranjang berisi, titik temu dipilih, dan
+  /// (untuk pre-order) tanggal ambil sudah diisi.
+  bool get _canQuote =>
+      _authorized &&
+      _cart.items.isNotEmpty &&
+      _point != null &&
+      (!_cart.hasPreorder || _pickupAtUtc != null);
+
+  /// Menjadwalkan permintaan quote setelah jeda _quoteDebounce. Menaikkan _quoteSeq agar quote yang
+  /// sedang berjalan dianggap usang; bila syarat belum lengkap, total dikosongkan.
+  void _scheduleQuote() {
+    _debounce?.cancel();
+    _quoteSeq++;
+    if (!_canQuote) {
+      setState(() {
+        _quote = null;
+        _quoting = false;
+      });
+      return;
+    }
+    setState(() => _quoting = true);
+    _debounce = Timer(_quoteDebounce, _runQuote);
+  }
+
+  /// Meminta rincian total ke server (POST /orders/quote). Berhasil: semua galat kolom dihapus.
+  /// Gagal: galat yang menyebut kolom tertentu ditampilkan di kolom itu, sisanya di kartu ringkasan.
+  Future<void> _runQuote() async {
+    final seq = ++_quoteSeq;
+    final repo = context.read<OrderRepository>();
+    try {
+      final q = await repo.quote(_body());
+      if (!mounted || seq != _quoteSeq) return;
+      setState(() {
+        _quote = q;
+        _quoting = false;
+        _quoteError = null;
+        _promoError = null;
+        _pointError = null;
+        _pickupError = null;
+        _nameError = null;
+        _phoneError = null;
+        _noteError = null;
+      });
+    } on ApiException catch (e) {
+      if (!mounted || seq != _quoteSeq) return;
+      setState(() {
+        _quote = null;
+        _quoting = false;
+        final matched = _applyFieldErrors(e);
+        _quoteError = matched ? null : e.message;
+      });
+    } catch (_) {
+      if (!mounted || seq != _quoteSeq) return;
+      setState(() {
+        _quote = null;
+        _quoting = false;
+        _quoteError = _genericError;
+      });
+    }
+  }
+
+  /// Isi kolom tanpa spasi tepi; null bila kosong (agar server menganggapnya tidak diisi).
+  String? _opt(TextEditingController c) {
+    final t = c.text.trim();
+    return t.isEmpty ? null : t;
+  }
+
+  /// Badan permintaan yang sama untuk quote dan buat pesanan. `pickup_at` (UTC, ISO-8601) hanya
+  /// dikirim bila pengguna memilih tanggal-jam; tanpa itu server memakai "secepatnya".
+  Map<String, dynamic> _body() {
+    final at = _pickupAtUtc;
+    return {
+      'items': _cart.toQuoteItems(),
+      'pickup_point_id': _point?.id,
+      'note': _opt(_noteController),
+      'promo_code': _opt(_promoController),
+      'customer_name': _opt(_nameController),
+      'customer_phone': _opt(_phoneController),
+      if (!_isAsap && at != null) 'pickup_at': at.toUtc().toIso8601String(),
+    };
+  }
+
+  /// Memetakan `fields` galat validasi server ke tampilan: `items.N...` ke baris keranjang ke-N,
+  /// selebihnya ke kolom titik temu, waktu ambil, promo, nama, telepon, atau catatan.
+  /// Mengembalikan true bila ada yang terpetakan. Galat baris lama selalu diganti.
+  bool _applyFieldErrors(ApiException e) {
+    final items = _cart.items;
+    final lines = <String, String>{};
+    var matched = false;
+    e.fields.forEach((k, v) {
+      if (v.isEmpty) return;
+      final m = RegExp(r'^items\.(\d+)(\.|$)').firstMatch(k);
+      if (m != null) {
+        final i = int.parse(m.group(1)!);
+        if (i < items.length) {
+          lines.putIfAbsent(items[i].key, () => v.first);
+          matched = true;
+        }
+      } else if (k == 'pickup_at') {
+        _pickupError = v.first;
+        matched = true;
+      } else if (k == 'pickup_point_id') {
+        _pointError = v.first;
+        matched = true;
+      } else if (k == 'promo_code') {
+        _promoError = v.first;
+        matched = true;
+      } else if (k == 'customer_name') {
+        _nameError = v.first;
+        matched = true;
+      } else if (k == 'customer_phone') {
+        _phoneError = v.first;
+        matched = true;
+      } else if (k == 'note') {
+        _noteError = v.first;
+        matched = true;
+      }
+    });
+    _lineErrors = lines;
+    return matched;
+  }
+
+  /// Setelah isi keranjang berubah: hapus galat per baris dan hitung ulang total.
+  void _onCartChanged() {
+    setState(() => _lineErrors = const {});
+    _scheduleQuote();
+  }
+
+  /// Mengubah jumlah porsi satu baris keranjang.
+  void _setQty(CartItem item, int qty) {
+    _cart.setQty(item.key, qty);
+    _onCartChanged();
+  }
+
+  /// Menghapus satu baris dari keranjang.
+  void _remove(CartItem item) {
+    _cart.remove(item.key);
+    _onCartChanged();
+  }
+
+  /// Membuka PickupPointPickerScreen. Bila daftar titik masih kosong (mis. tadi gagal dimuat),
+  /// ketukan ini justru memuat ulang daftar.
+  Future<void> _openPointPicker() async {
+    if (_pointsLoading) return;
+    if (_points.isEmpty) {
+      await _loadPoints();
+      return;
+    }
+    final result = await Navigator.push<PickupPoint>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            PickupPointPickerScreen(points: _points, selectedId: _point?.id),
+      ),
+    );
+    if (result == null || !mounted) return;
+    setState(() {
+      _point = result;
+      _pointError = null;
+    });
+    _scheduleQuote();
+  }
+
+  /// Memilih "Secepatnya": tanggal-jam pilihan dihapus.
+  void _selectAsap() {
+    setState(() {
+      _asap = true;
+      _pickupAtUtc = null;
+      _pickupError = null;
+    });
+    _scheduleQuote();
+  }
+
+  /// Pemilih tanggal lalu jam, semuanya dalam waktu WIB. Rentang tanggal: paling cepat hari ini
+  /// (atau H-n untuk pre-order) dan paling lambat maxPickupAhead. Hasil dicek ulang dengan
+  /// isPickupAllowed; bila ditolak, pesan galat ditampilkan dan pilihan lama dipertahankan.
+  Future<void> _pickDateTime() async {
+    final po = _preorderDays;
+    final nowUtc = DateTime.now().toUtc();
+    final first =
+        toWibWallClock(po > 0 ? earliestPickupUtc(nowUtc, po) : nowUtc);
+    final last = toWibWallClock(nowUtc.add(maxPickupAhead));
+    final firstDate = DateTime(first.year, first.month, first.day);
+    final lastDate = DateTime(last.year, last.month, last.day);
+    if (firstDate.isAfter(lastDate)) {
+      setState(() =>
+          _pickupError = 'Menu pre-order harus diambil paling cepat H-$po.');
+      return;
+    }
+    final current =
+        _pickupAtUtc == null ? null : toWibWallClock(_pickupAtUtc!);
+    var initialDate = current == null
+        ? firstDate
+        : DateTime(current.year, current.month, current.day);
+    if (initialDate.isBefore(firstDate)) initialDate = firstDate;
+    if (initialDate.isAfter(lastDate)) initialDate = lastDate;
+
+    final date = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: firstDate,
+      lastDate: lastDate,
+      helpText: 'Tanggal ambil (WIB)',
+    );
+    if (date == null || !mounted) return;
+
+    // Jam awal pemilih: jam yang sudah dipilih, atau 1 jam dari sekarang (hari ini), atau 10.00.
+    final nowWib = toWibWallClock(DateTime.now().toUtc());
+    final isToday = date.year == nowWib.year &&
+        date.month == nowWib.month &&
+        date.day == nowWib.day;
+    final soon = nowWib.add(const Duration(hours: 1));
+    final initialTime = current != null
+        ? TimeOfDay(hour: current.hour, minute: current.minute)
+        : isToday
+            ? TimeOfDay(hour: soon.hour, minute: soon.minute)
+            : const TimeOfDay(hour: 10, minute: 0);
+    final time = await showTimePicker(
+      context: context,
+      initialTime: initialTime,
+      helpText: 'Jam ambil (WIB)',
+    );
+    if (time == null || !mounted) return;
+
+    final utc =
+        wibToUtc(date.year, date.month, date.day, time.hour, time.minute);
+    final now = DateTime.now().toUtc();
+    if (!isPickupAllowed(utc, now, po)) {
+      setState(() {
+        if (!utc.isAfter(now)) {
+          _pickupError = 'Waktu ambil sudah lewat. Pilih waktu lain.';
+        } else if (utc.isAfter(now.add(maxPickupAhead))) {
+          _pickupError = 'Waktu ambil paling lambat 7 hari ke depan.';
+        } else {
+          _pickupError = 'Menu pre-order harus diambil paling cepat H-$po.';
+        }
+      });
+      return;
+    }
+    setState(() {
+      _asap = false;
+      _pickupAtUtc = utc;
+      _pickupError = null;
+    });
+    _scheduleQuote();
+  }
+
+  /// Tombol bayar aktif hanya bila quote terbaru sudah ada dan tidak sedang menghitung/mengirim.
+  bool _canPay(CartProvider cart) =>
+      _authorized &&
+      cart.items.isNotEmpty &&
+      _point != null &&
+      _quote != null &&
+      !_quoting &&
+      !_submitting &&
+      (!cart.hasPreorder || _pickupAtUtc != null);
+
+  /// Menampilkan dialog konfirmasi dengan total dari quote; "ya" menjalankan _submit.
+  void _confirmOrder() {
+    final q = _quote;
+    if (q == null) return;
     AppModalDialog.showPaymentConfirmation(
       context,
-      total: total,
-      onConfirm: () {
-        final orderCode =
-            '#KK-${DateTime.now().year}-${(DateTime.now().millisecondsSinceEpoch % 900 + 100)}';
-
-        Navigator.pushNamed(
-          context,
-          AppRoutes.payment,
-          arguments: {
-            'product': _product,
-            'quantity': _quantity,
-            'total': total,
-            'orderCode': orderCode,
-            'paymentMethod': _selectedPayment,
-            'paymentLabel': _paymentLabel(_selectedPayment),
-            'name': _nameController.text.trim(),
-            'phone': _phoneController.text.trim(),
-            'location': _locationController.text.trim(),
-            'locationAddress': _selectedLocationAddress,
-            'note': _noteController.text.trim(),
-          },
-        );
-      },
+      total: q.total.toDouble(),
+      onConfirm: _submit,
     );
   }
+
+  /// Membuat pesanan (POST /orders) dengan metode bayar terpilih. Berhasil: keranjang dikosongkan
+  /// dan layar diganti layar Pembayaran dengan pesanan baru sebagai argumen. Gagal: galat kolom
+  /// ditampilkan dan pesan muncul di snackbar.
+  Future<void> _submit() async {
+    final cart = _cart;
+    final repo = context.read<OrderRepository>();
+    // Satu kunci per niat checkout, disimpan di CartProvider: dipakai ulang
+    // saat mengulang (mis. setelah timeout, juga setelah keluar-masuk
+    // checkout), baru diganti saat isi keranjang berubah atau dikosongkan.
+    final key = cart.idempotencyKey;
+    final body = {..._body(), 'payment_method': _payment.apiValue};
+    setState(() {
+      _submitting = true;
+      _lineErrors = const {};
+    });
+    try {
+      final order = await repo.create(body, idempotencyKey: key);
+      if (!mounted) return;
+      cart.clear();
+      Navigator.pushReplacementNamed(context, AppRoutes.payment,
+          arguments: order);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _submitting = false;
+        _applyFieldErrors(e);
+      });
+      // Pesanan mungkin sudah terbuat walau respons tidak sampai.
+      final uncertain = e.code == 'TIMEOUT' || e.code == 'NETWORK';
+      _showSnack(uncertain
+          ? '${e.message} Cek tab Pesanan sebelum mencoba lagi.'
+          : e.message);
+      // Stok/toko berubah: segarkan total & status bayar dari server.
+      if (e.code == 'OUT_OF_STOCK' || e.code == 'MERCHANT_CLOSED') {
+        _scheduleQuote();
+      }
+    } catch (_) {
+      // Galat tak terduga (mis. respons 201 rusak): tombol pulih, kunci tetap
+      // sama sehingga mengulang tidak membuat pesanan ganda.
+      if (!mounted) return;
+      setState(() => _submitting = false);
+      _showSnack(_genericError);
+    }
+  }
+
+  /// Menampilkan snackbar, mengganti snackbar yang sedang tampil.
+  void _showSnack(String text) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(text)));
 
   BoxDecoration get _cardDecoration => BoxDecoration(
         color: AppColors.surface,
@@ -269,9 +520,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_missing) return const Scaffold();
-    final subtotal = (_product.price * _quantity).toDouble();
-    final total = subtotal;
+    final cart = context.watch<CartProvider>();
+    final items = cart.items;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -283,65 +533,126 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         title: Text('Checkout', style: AppTextStyles.h3.copyWith(fontSize: 18)),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildTimerBanner(),
-              const SizedBox(height: 16),
-              _buildItemCard(),
-              const SizedBox(height: 22),
-              _sectionLabel('DATA PEMESAN'),
-              const SizedBox(height: 10),
-              _buildOrdererForm(),
-              const SizedBox(height: 22),
-              _buildPaymentHeader(),
-              const SizedBox(height: 10),
-              for (final option in _paymentOptions)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: PaymentMethodTile(
-                    option: option,
-                    selected: _selectedPayment == option.method,
-                    onTap: () => setState(() => _selectedPayment = option.method),
-                  ),
+        child: items.isEmpty
+            ? _buildEmpty()
+            : SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _sectionLabel(
+                        'PESANAN · ${items.first.menu.merchant.businessName}'),
+                    const SizedBox(height: 10),
+                    for (var i = 0; i < items.length; i++) ...[
+                      _buildItemCard(items[i], i),
+                      const SizedBox(height: 10),
+                    ],
+                    const SizedBox(height: 12),
+                    _sectionLabel('DATA PEMESAN'),
+                    const SizedBox(height: 10),
+                    _buildOrdererForm(cart),
+                    const SizedBox(height: 22),
+                    _buildPaymentHeader(),
+                    const SizedBox(height: 10),
+                    for (final option in _paymentOptions)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: PaymentMethodTile(
+                          option: option,
+                          selected: _payment == option.method,
+                          onTap: () =>
+                              setState(() => _payment = option.method),
+                        ),
+                      ),
+                    const SizedBox(height: 6),
+                    if (_quote != null && _quote!.warnings.isNotEmpty) ...[
+                      _buildWarnings(_quote!.warnings),
+                      const SizedBox(height: 10),
+                    ],
+                    _buildSummaryCard(cart),
+                  ],
                 ),
-              const SizedBox(height: 6),
-              _buildSummaryCard(subtotal, total),
-            ],
-          ),
-        ),
+              ),
       ),
       // bottomNavigationBar (bukan bottomSheet + padding manual) agar tinggi
       // area scroll otomatis menyesuaikan tinggi tombol di semua ukuran layar.
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: AppColors.background,
-          border: Border(
-            top: BorderSide(color: AppColors.cardBorder.withValues(alpha: 0.6)),
-          ),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-            child: PrimaryButton(
-              text: 'Proses Pembayaran',
-              onPressed: () => _confirmOrder(total),
+      bottomNavigationBar: items.isEmpty
+          ? null
+          : Container(
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                border: Border(
+                  top: BorderSide(
+                      color: AppColors.cardBorder.withValues(alpha: 0.6)),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
+                  child: Opacity(
+                    opacity: _canPay(cart) || _submitting ? 1 : 0.5,
+                    child: PrimaryButton(
+                      text: 'Proses Pembayaran',
+                      isLoading: _submitting,
+                      onPressed: _canPay(cart) ? _confirmOrder : null,
+                    ),
+                  ),
+                ),
+              ),
             ),
-          ),
+    );
+  }
+
+  // ---------- Bagian tampilan ----------
+
+  /// Tampilan saat keranjang kosong, dengan tombol kembali ke beranda (menu utama).
+  Widget _buildEmpty() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: AppColors.primarySoft,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.shopping_cart_outlined,
+                  color: AppColors.primaryDark, size: 34),
+            ),
+            const SizedBox(height: 16),
+            Text('Keranjang masih kosong',
+                style: AppTextStyles.h3.copyWith(fontSize: 17)),
+            const SizedBox(height: 6),
+            Text(
+              'Yuk pilih menu dulu dari beranda.',
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodyMedium
+                  .copyWith(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 20),
+            PrimaryButton(
+              text: 'Cari Menu',
+              onPressed: () => Navigator.pushNamedAndRemoveUntil(
+                  context, AppRoutes.mainNav, (_) => false),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // ---------- Sections ----------
-
   Widget _sectionLabel(String text) {
     return Text(
       text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       style: AppTextStyles.bodySmall.copyWith(
         color: AppColors.textSecondary,
         fontWeight: FontWeight.w700,
@@ -351,74 +662,47 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  Widget _buildTimerBanner() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.primarySoft,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFFFEDD5)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.timer_outlined,
-              color: AppColors.primaryDark,
-              size: 22,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ValueListenableBuilder<int>(
-                  valueListenable: _secondsLeft,
-                  builder: (context, seconds, _) {
-                    return Text(
-                      'Holding Timer: ${_formatTimer(seconds)}',
-                      style: AppTextStyles.h4.copyWith(
-                        color: AppColors.primaryDark,
-                        fontSize: 14,
-                        // Angka lebar-tetap agar teks tidak "bergetar".
-                        fontFeatures: _tabular,
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Kuota porsi dikunci 5 menit agar tidak diserobot.',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+  Widget _errorText(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Text(
+        text,
+        style: AppTextStyles.bodySmall.copyWith(
+          color: AppColors.danger,
+          fontWeight: FontWeight.w600,
+          fontSize: 11.5,
+        ),
       ),
     );
   }
 
-  Widget _buildItemCard() {
+  /// Total baris dari quote bila cocok; estimasi lokal hanya sebelum quote.
+  int _lineTotal(CartItem item, int index) {
+    final q = _quote;
+    if (q != null &&
+        index < q.items.length &&
+        q.items[index].menuId == item.menu.id) {
+      return q.items[index].lineTotal;
+    }
+    return item.estimatedLineTotal;
+  }
+
+  /// Kartu satu baris keranjang: gambar, nama, opsi, label pre-order, harga, galat baris,
+  /// tombol hapus, dan pengatur jumlah. Tombol dimatikan selama pesanan dikirim.
+  Widget _buildItemCard(CartItem item, int index) {
+    final error = _lineErrors[item.key];
+    final option = item.option;
     return Container(
+      key: ValueKey('cart-line-${item.key}'),
       padding: const EdgeInsets.all(14),
       decoration: _cardDecoration,
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: MenuImage(_product.imageUrl,
+            child: MenuImage(
+              item.menu.imageUrl,
               width: 64,
               height: 64,
               fit: BoxFit.cover,
@@ -430,39 +714,72 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _product.name,
+                  item.menu.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.h4.copyWith(fontSize: 15),
                 ),
+                if (option != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    option.extraPrice > 0
+                        ? '${option.name} (+ ${AppCurrency.format(option.extraPrice)})'
+                        : option.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.bodySmall.copyWith(fontSize: 11.5),
+                  ),
+                ],
+                if (item.menu.isPreorder) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Pre-order H-${item.menu.preorderDays}',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: AppColors.primaryDark,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 4),
-                Text.rich(
-                  TextSpan(
-                    children: [
-                      TextSpan(
-                        text: _price(_product.price.toDouble()),
-                        style: AppTextStyles.price.copyWith(fontSize: 14),
-                      ),
-                      TextSpan(
-                        text: ' / porsi',
-                        style: AppTextStyles.bodySmall.copyWith(fontSize: 11),
-                      ),
-                    ],
+                Text(
+                  AppCurrency.format(_lineTotal(item, index)),
+                  style: AppTextStyles.price.copyWith(
+                    fontSize: 14,
+                    fontFeatures: _tabular,
                   ),
                 ),
+                if (error != null) _errorText(error),
               ],
             ),
           ),
           const SizedBox(width: 8),
-          _buildStepper(),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              InkResponse(
+                onTap: _submitting ? null : () => _remove(item),
+                radius: 18,
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(Icons.delete_outline_rounded,
+                      size: 20, color: AppColors.textSecondary),
+                ),
+              ),
+              const SizedBox(height: 8),
+              _buildStepper(item),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  /// Tombol - / + jumlah porsi (minimal 1).
-  Widget _buildStepper() {
-    Widget button(String label, Color color, VoidCallback onTap) {
+  /// Pengatur jumlah (- / +); tombol "-" mati saat jumlah sudah di minimal pesan menu.
+  Widget _buildStepper(CartItem item) {
+    final minQty = item.menu.minOrderQty < 1 ? 1 : item.menu.minOrderQty;
+
+    Widget button(String label, Color color, VoidCallback? onTap) {
       return InkResponse(
         onTap: onTap,
         radius: 20,
@@ -473,7 +790,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.bold,
-              color: color,
+              color: onTap == null ? AppColors.textSecondary : color,
             ),
           ),
         ),
@@ -489,25 +806,53 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          button('-', AppColors.textPrimary, () {
-            if (_quantity > 1) setState(() => _quantity--);
-          }),
-          Text('$_quantity', style: AppTextStyles.h4.copyWith(fontSize: 14)),
-          button('+', AppColors.primary, () => setState(() => _quantity++)),
+          button(
+            '-',
+            AppColors.textPrimary,
+            _submitting || item.qty <= minQty
+                ? null
+                : () => _setQty(item, item.qty - 1),
+          ),
+          Text('${item.qty}', style: AppTextStyles.h4.copyWith(fontSize: 14)),
+          button(
+            '+',
+            AppColors.primary,
+            _submitting ? null : () => _setQty(item, item.qty + 1),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildOrdererForm() {
+  /// Formulir data pemesan. Mengubah kolom yang sedang bergalat menghapus galatnya dan meminta
+  /// quote ulang; kode promo selalu memicu quote ulang karena memengaruhi total.
+  Widget _buildOrdererForm(CartProvider cart) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _OrderField(label: 'Nama Lengkap', controller: _nameController),
+        _OrderField(
+          label: 'Nama Lengkap',
+          controller: _nameController,
+          hintText: 'Nama pemesan',
+          errorText: _nameError,
+          onChanged: (_) {
+            if (_nameError == null) return;
+            setState(() => _nameError = null);
+            _scheduleQuote();
+          },
+        ),
         const SizedBox(height: 12),
         _OrderField(
           label: 'Kontak Penerima',
           controller: _phoneController,
           keyboardType: TextInputType.phone,
+          hintText: '08xxxxxxxxxx',
+          errorText: _phoneError,
+          onChanged: (_) {
+            if (_phoneError == null) return;
+            setState(() => _phoneError = null);
+            _scheduleQuote();
+          },
           trailing: Text(
             '(WhatsApp Aktif)',
             style: AppTextStyles.bodySmall.copyWith(
@@ -519,30 +864,65 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         ),
         const SizedBox(height: 12),
         _buildLocationSelectorCard(),
+        if (_pointError != null) _errorText(_pointError!),
+        const SizedBox(height: 12),
+        _buildPickupTimeCard(cart),
         const SizedBox(height: 12),
         _OrderField(
           label: 'Catatan Khusus',
           controller: _noteController,
           fillColor: AppColors.secondaryBg,
           lines: 2,
+          hintText: 'Contoh: sambal dipisah, diambil jam istirahat',
+          errorText: _noteError,
+          onChanged: (_) {
+            if (_noteError == null) return;
+            setState(() => _noteError = null);
+            _scheduleQuote();
+          },
+        ),
+        const SizedBox(height: 12),
+        _OrderField(
+          label: 'Kode Promo (opsional)',
+          controller: _promoController,
+          hintText: 'Masukkan kode promo',
           action: TextInputAction.done,
+          textCapitalization: TextCapitalization.characters,
+          errorText: _promoError,
+          onChanged: (_) {
+            if (_promoError != null) setState(() => _promoError = null);
+            _scheduleQuote();
+          },
         ),
       ],
     );
   }
 
-  /// Kartu lokasi titik temu dengan peta mini OSM dan perkiraan waktu tiba (MapService.estimateEta);
-  /// diketuk untuk membuka pemilih lokasi.
+  /// Kartu titik temu: peta mini OSM sebagai latar, nama & keterangan titik terpilih, atau status
+  /// memuat/galat. Diketuk untuk membuka pemilih titik temu (atau memuat ulang bila gagal).
   Widget _buildLocationSelectorCard() {
-    final title = _locationController.text.trim().isEmpty
-        ? 'Pilih Lokasi Pengantaran'
-        : _locationController.text.trim();
-    final targetLatLng = LatLng(_selectedLat, _selectedLng);
-    final etaText = MapService.estimateEta(targetLatLng);
+    final point = _point;
+    final String title;
+    final String? subtitle;
+    if (_pointsLoading) {
+      title = 'Memuat titik temu…';
+      subtitle = null;
+    } else if (_pointsError != null) {
+      title = 'Gagal memuat titik temu';
+      subtitle = '$_pointsError Ketuk untuk coba lagi.';
+    } else if (point == null) {
+      title = _authorized && _points.isEmpty
+          ? 'Toko belum punya titik temu'
+          : 'Pilih Titik Temu';
+      subtitle = null;
+    } else {
+      title = point.name;
+      subtitle = point.description;
+    }
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: _openLocationPicker,
+      onTap: _submitting ? null : _openPointPicker,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -550,7 +930,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: AppColors.cardBorder,
+            color:
+                _pointError != null ? AppColors.danger : AppColors.cardBorder,
             width: 1,
           ),
           boxShadow: [
@@ -568,7 +949,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               children: [
                 Expanded(
                   child: Text(
-                    'Lokasi Pengambilan / Pengantaran',
+                    'Titik Temu Pengambilan',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTextStyles.bodySmall.copyWith(
@@ -612,7 +993,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ],
             ),
             const SizedBox(height: 10),
-            // Mini Live Map Preview di Halaman Checkout (OpenStreetMap Resmi)
+            // Peta mini sebagai latar (titik temu belum punya koordinat).
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: SizedBox(
@@ -622,9 +1003,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   children: [
                     IgnorePointer(
                       child: FlutterMap(
-                        mapController: _miniMapController,
-                        options: MapOptions(
-                          initialCenter: targetLatLng,
+                        options: const MapOptions(
+                          initialCenter: ubPickupMapCenter,
                           initialZoom: 16.0,
                         ),
                         children: [
@@ -633,46 +1013,38 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             userAgentPackageName:
                                 MapService.userAgentPackageName,
                           ),
-                          MarkerLayer(
-                            markers: [
-                              Marker(
-                                point: targetLatLng,
-                                width: 38,
-                                height: 38,
-                                alignment: Alignment.topCenter,
-                                child: const Icon(
-                                  Icons.location_on_rounded,
-                                  size: 34,
-                                  color: Color(0xFFE53935),
-                                ),
-                              ),
-                            ],
-                          ),
                         ],
                       ),
                     ),
-                    Positioned(
-                      left: 8,
-                      bottom: 6,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.92),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Estimasi Pengantaran $etaText',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: Color(0xFF1E293B),
+                    if (point != null)
+                      Positioned(
+                        left: 8,
+                        bottom: 6,
+                        right: 8,
+                        child: Align(
+                          alignment: Alignment.bottomLeft,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.92),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              point.name,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -708,11 +1080,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           fontSize: 13,
                         ),
                       ),
-                      if (_selectedLocationAddress.isNotEmpty) ...[
+                      if (subtitle != null && subtitle.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(
-                          _selectedLocationAddress,
-                          maxLines: 1,
+                          subtitle,
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: AppTextStyles.bodySmall.copyWith(
                             color: AppColors.textSecondary,
@@ -727,6 +1099,68 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Kartu waktu ambil: pilihan "Secepatnya" (mati bila ada menu pre-order) atau tanggal & jam,
+  /// plus info tanggal paling cepat untuk pre-order.
+  Widget _buildPickupTimeCard(CartProvider cart) {
+    final preorder = cart.hasPreorder;
+    final po = preorder ? cart.maxPreorderDays : 0;
+    final asap = _asap && !preorder;
+    final at = _pickupAtUtc;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color:
+              _pickupError != null ? AppColors.danger : AppColors.cardBorder,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Waktu Pengambilan',
+              style: AppTextStyles.bodySmall.copyWith(fontSize: 11)),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              ChoiceChip(
+                label: const Text('Secepatnya'),
+                selected: asap,
+                onSelected:
+                    preorder || _submitting ? null : (_) => _selectAsap(),
+              ),
+              ChoiceChip(
+                label: Text(at != null && !asap
+                    ? formatWib(at)
+                    : 'Pilih Tanggal & Jam'),
+                selected: !asap,
+                onSelected: _submitting ? null : (_) => _pickDateTime(),
+              ),
+            ],
+          ),
+          if (preorder) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Ada menu pre-order: ambil paling cepat '
+              '${formatWibDate(earliestPickupUtc(DateTime.now().toUtc(), po))}.',
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.primaryDark,
+                fontWeight: FontWeight.w600,
+                fontSize: 11,
+              ),
+            ),
+          ],
+          if (_pickupError != null) _errorText(_pickupError!),
+        ],
       ),
     );
   }
@@ -759,43 +1193,127 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  Widget _buildSummaryCard(double subtotal, double total) {
+  /// Kotak peringatan dari quote server (mis. info stok atau promo).
+  Widget _buildWarnings(List<QuoteWarning> warnings) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.warningLight,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final w in warnings)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.info_outline_rounded,
+                      size: 16, color: Color(0xFFD97706)),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      w.message,
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textPrimary,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryRow(String label, String value, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: AppTextStyles.bodyMedium),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: AppTextStyles.bodyLarge.copyWith(
+                fontWeight: FontWeight.w700,
+                color: color,
+                fontFeatures: _tabular,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Kartu ringkasan biaya. Angka hanya dari quote server; selama quote belum ada, tampil alasan
+  /// (menghitung, galat + "Coba lagi", atau data yang belum dipilih).
+  Widget _buildSummaryCard(CartProvider cart) {
+    final q = _quote;
+    final Widget body;
+    if (q != null) {
+      body = Column(
+        children: [
+          _summaryRow('Subtotal (${cart.count} Porsi)',
+              AppCurrency.format(q.subtotal)),
+          if (q.discount > 0)
+            _summaryRow('Diskon', '- ${AppCurrency.format(q.discount)}',
+                color: AppColors.success),
+          _summaryRow(
+            'Biaya Layanan',
+            q.serviceFee == 0 ? 'Gratis' : AppCurrency.format(q.serviceFee),
+            color: q.serviceFee == 0 ? AppColors.success : null,
+          ),
+        ],
+      );
+    } else {
+      final failed = _quoteError != null && !_quoting;
+      final String text;
+      if (_quoting || _pointsLoading || !_authorized) {
+        text = 'Menghitung total…';
+      } else if (failed) {
+        text = _quoteError!;
+      } else if (_point == null) {
+        text = 'Pilih titik temu untuk menghitung total.';
+      } else if (cart.hasPreorder && _pickupAtUtc == null) {
+        text = 'Pilih tanggal ambil untuk menghitung total.';
+      } else {
+        text = 'Total belum tersedia.';
+      }
+      body = Row(
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: failed ? AppColors.danger : AppColors.textSecondary,
+              ),
+            ),
+          ),
+          if (failed)
+            TextButton(
+              onPressed: _scheduleQuote,
+              child: const Text('Coba lagi'),
+            ),
+        ],
+      );
+    }
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: _cardDecoration,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Subtotal ($_quantity Porsi)', style: AppTextStyles.bodyMedium),
-              Text(
-                _price(subtotal),
-                style: AppTextStyles.bodyLarge.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontFeatures: _tabular,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Biaya Layanan', style: AppTextStyles.bodyMedium),
-              Flexible(
-                child: Text(
-                  'Rp 0 (Gratis Mahasiswa)',
-                  textAlign: TextAlign.end,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    color: AppColors.success,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          body,
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 12),
             child: Divider(color: AppColors.cardBorder, height: 1),
@@ -814,7 +1332,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Termasuk pajak & kemasan ramah lingkungan',
+                      'Dihitung oleh server saat checkout',
                       style: AppTextStyles.bodySmall.copyWith(fontSize: 10),
                     ),
                   ],
@@ -822,7 +1340,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ),
               const SizedBox(width: 8),
               Text(
-                _price(total),
+                q == null ? '–' : AppCurrency.format(q.total),
                 style: AppTextStyles.price.copyWith(
                   fontSize: 18,
                   fontFeatures: _tabular,
@@ -845,6 +1363,10 @@ class _OrderField extends StatefulWidget {
   final Widget? trailing;
   final Color? fillColor;
   final int lines;
+  final String hintText;
+  final String? errorText;
+  final ValueChanged<String>? onChanged;
+  final TextCapitalization textCapitalization;
 
   const _OrderField({
     required this.label,
@@ -854,6 +1376,10 @@ class _OrderField extends StatefulWidget {
     this.trailing,
     this.fillColor,
     this.lines = 1,
+    this.hintText = '',
+    this.errorText,
+    this.onChanged,
+    this.textCapitalization = TextCapitalization.none,
   });
 
   @override
@@ -878,69 +1404,97 @@ class _OrderFieldState extends State<_OrderField> {
   @override
   Widget build(BuildContext context) {
     final focused = _focusNode.hasFocus;
+    final error = widget.errorText;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: _focusNode.requestFocus,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
-        decoration: BoxDecoration(
-          color: widget.fillColor ?? AppColors.surface,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: focused ? AppColors.primary : AppColors.cardBorder,
-            width: focused ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.label,
-              style: AppTextStyles.bodySmall.copyWith(fontSize: 11),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: _focusNode.requestFocus,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.fromLTRB(14, 10, 14, 8),
+            decoration: BoxDecoration(
+              color: widget.fillColor ?? AppColors.surface,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: error != null
+                    ? AppColors.danger
+                    : focused
+                        ? AppColors.primary
+                        : AppColors.cardBorder,
+                width: focused ? 1.5 : 1,
+              ),
             ),
-            const SizedBox(height: 4),
-            Row(
-              crossAxisAlignment: widget.lines > 1
-                  ? CrossAxisAlignment.start
-                  : CrossAxisAlignment.center,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: widget.controller,
-                    focusNode: _focusNode,
-                    keyboardType: widget.keyboardType,
-                    textInputAction: widget.action,
-                    minLines: widget.lines,
-                    maxLines: widget.lines,
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                    ),
-                    decoration: const InputDecoration(
-                      isDense: true,
-                      filled: false,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      errorBorder: InputBorder.none,
-                      disabledBorder: InputBorder.none,
-                      contentPadding: EdgeInsets.zero,
-                      hintText: '',
-                    ),
-                  ),
+                Text(
+                  widget.label,
+                  style: AppTextStyles.bodySmall.copyWith(fontSize: 11),
                 ),
-                if (widget.trailing != null) ...[
-                  const SizedBox(width: 8),
-                  widget.trailing!,
-                ],
+                const SizedBox(height: 4),
+                Row(
+                  crossAxisAlignment: widget.lines > 1
+                      ? CrossAxisAlignment.start
+                      : CrossAxisAlignment.center,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: widget.controller,
+                        focusNode: _focusNode,
+                        keyboardType: widget.keyboardType,
+                        textInputAction: widget.action,
+                        textCapitalization: widget.textCapitalization,
+                        onChanged: widget.onChanged,
+                        minLines: widget.lines,
+                        maxLines: widget.lines,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                        decoration: InputDecoration(
+                          isDense: true,
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          errorBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                          contentPadding: EdgeInsets.zero,
+                          hintText: widget.hintText,
+                          hintStyle: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (widget.trailing != null) ...[
+                      const SizedBox(width: 8),
+                      widget.trailing!,
+                    ],
+                  ],
+                ),
               ],
             ),
-          ],
+          ),
         ),
-      ),
+        if (error != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text(
+              error,
+              style: AppTextStyles.bodySmall.copyWith(
+                color: AppColors.danger,
+                fontWeight: FontWeight.w600,
+                fontSize: 11.5,
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

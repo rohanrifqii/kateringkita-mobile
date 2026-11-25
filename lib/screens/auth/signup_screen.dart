@@ -1,13 +1,20 @@
+// Layar Daftar akun pelanggan: nama, email, No. HP, sandi. Dibuka dari Login ("Create New Account").
+// Daftar lewat AuthRepository -> POST /auth/customer/register, lalu langsung login lewat AuthProvider (POST /auth/login).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+
 import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../data/app_database.dart';
+import '../../core/password_rules.dart';
+import '../../api/api_exception.dart';
 import '../../data/auth_repository.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/primary_button.dart';
 
+/// Formulir pendaftaran pelanggan. Tombol Sign Up aktif hanya bila kotak syarat & ketentuan dicentang
+/// (centangnya tidak dikirim ke server). Sukses: masuk MainNav dalam keadaan sudah login.
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
 
@@ -24,6 +31,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _agreeToTerms = false;
   bool _obscurePassword = true;
   bool _loading = false;
+  // Galat per kolom dari server, kuncinya nama field API (full_name, email, phone, password).
+  Map<String, String?> _errors = {};
 
   @override
   void dispose() {
@@ -34,10 +43,14 @@ class _SignUpScreenState extends State<SignUpScreen> {
     super.dispose();
   }
 
+  /// Tampilkan pesan singkat di SnackBar.
   void _showMessage(String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  /// Validasi lokal (semua terisi, format email, HP 08 + 10–13 digit, aturan sandi), daftar ke server,
+  /// lalu login otomatis. Bila daftar ditolak, galat ditaruh per kolom (atau SnackBar bila bukan galat kolom).
+  /// Bila daftar berhasil tetapi login otomatis gagal, pengguna diarahkan ke Login dengan email terisi.
   Future<void> _onSignUp() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -52,34 +65,62 @@ class _SignUpScreenState extends State<SignUpScreen> {
       _showMessage('Format email tidak valid.');
       return;
     }
-    if (password.length < 6) {
-      _showMessage('Password minimal 6 karakter.');
+    if (!RegExp(r'^08\d{8,11}$').hasMatch(phone)) {
+      _showMessage('Nomor HP harus diawali 08 dan 10–13 digit.');
+      return;
+    }
+    final passwordError = validatePasswordRules(password);
+    if (passwordError != null) {
+      _showMessage(passwordError);
       return;
     }
 
-    setState(() => _loading = true);
-    final repo = AuthRepository(context.read<AppDb>());
-    final error = await repo.register(
-      fullName: name,
-      email: email,
-      phone: phone,
-      password: password,
-    );
+    setState(() {
+      _loading = true;
+      _errors = {};
+    });
+    final repo = context.read<AuthRepository>();
+    final auth = context.read<AuthProvider>();
+    try {
+      await repo.register(
+        fullName: name,
+        email: email,
+        phone: phone,
+        password: password,
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _errors = {
+          'full_name': e.field('full_name'),
+          'email': e.field('email'),
+          'phone': e.field('phone'),
+          'password': e.field('password'),
+        };
+      });
+      if (_errors.values.every((v) => v == null)) _showMessage(e.message);
+      return;
+    }
+
+    // Backend tidak mengembalikan token saat daftar, jadi login langsung dengan email + sandi yang sama.
+    try {
+      await auth.login(email, password);
+    } on ApiException {
+      if (!mounted) return;
+      setState(() => _loading = false);
+      _showMessage('Akun berhasil dibuat! Silakan login.');
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.login,
+        (route) => false,
+        arguments: email,
+      );
+      return;
+    }
     if (!mounted) return;
     setState(() => _loading = false);
-
-    if (error != null) {
-      _showMessage(error);
-      return;
-    }
-    _showMessage('Akun berhasil dibuat! Silakan login.');
-    // Ke halaman Login (bukan dashboard), email langsung terisi.
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      AppRoutes.login,
-      (route) => false,
-      arguments: email,
-    );
+    Navigator.pushNamedAndRemoveUntil(context, AppRoutes.mainNav, (r) => false);
   }
 
   @override
@@ -107,6 +148,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 label: 'Full Name',
                 hint: 'Masukkan nama lengkap',
                 controller: _nameController,
+                errorText: _errors['full_name'],
               ),
               const SizedBox(height: 16),
               // Email Field
@@ -114,6 +156,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 label: 'Email Address',
                 hint: 'Masukkan email student UB',
                 controller: _emailController,
+                errorText: _errors['email'],
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 16),
@@ -122,6 +165,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 label: 'Phone Number',
                 hint: '08xx-xxxx-xxxx',
                 controller: _phoneController,
+                errorText: _errors['phone'],
                 keyboardType: TextInputType.phone,
               ),
               const SizedBox(height: 16),
@@ -130,10 +174,13 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 label: 'Password',
                 hint: 'Buat kata sandi aman',
                 controller: _passwordController,
+                errorText: _errors['password'],
                 obscureText: _obscurePassword,
                 suffixIcon: IconButton(
                   icon: Icon(
-                    _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                    _obscurePassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
                     color: AppColors.textMuted,
                     size: 20,
                   ),
@@ -161,12 +208,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
                         color: _agreeToTerms ? AppColors.primary : Colors.white,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: _agreeToTerms ? AppColors.primary : AppColors.cardBorder,
+                          color: _agreeToTerms
+                              ? AppColors.primary
+                              : AppColors.cardBorder,
                           width: 1.5,
                         ),
                       ),
                       child: _agreeToTerms
-                          ? const Icon(Icons.check, size: 16, color: Colors.white)
+                          ? const Icon(
+                              Icons.check,
+                              size: 16,
+                              color: Colors.white,
+                            )
                           : null,
                     ),
                   ),

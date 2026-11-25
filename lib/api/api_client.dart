@@ -1,5 +1,6 @@
-// Klien HTTP tunggal untuk backend REST KateringKita: semua repository (misalnya CatalogRepository)
-// memanggil backend lewat kelas ApiClient di sini. Alur: layar → provider → repository → ApiClient → backend.
+// Klien HTTP tunggal untuk backend REST KateringKita: semua repository (CatalogRepository, AuthRepository,
+// OrderRepository) memanggil backend lewat kelas ApiClient di sini. Alur: layar → provider → repository →
+// ApiClient → backend. Satu objek ApiClient dibuat di main.dart lalu dibagikan lewat Provider.
 // Berkas ini juga mengubah balasan JSON backend menjadi ApiResponse, atau menjadi ApiException bila gagal.
 import 'dart:async';
 import 'dart:convert';
@@ -36,7 +37,7 @@ class ApiResponse {
 /// - `readToken`: fungsi pembaca token login; bila mengembalikan token, token dikirim
 ///   sebagai header `Authorization: Bearer <token>`.
 /// - `onUnauthorized`: fungsi yang dipanggil saat backend membalas 401 (belum login / token
-///   kedaluwarsa), misalnya untuk keluar dari sesi.
+///   kedaluwarsa). Di main.dart fungsi ini menghapus sesi lalu membuka layar Login.
 /// - `timeout`: batas waktu tunggu respons, bawaan 15 detik.
 ///
 /// Setiap metode melempar [ApiException] bila koneksi gagal, waktu habis,
@@ -63,34 +64,44 @@ class ApiClient {
   final Future<void> Function()? _onUnauthorized;
   final Duration _timeout;
 
-  /// Mengirim permintaan GET ke [path] (misalnya `'/menus'`).
+  /// Mengirim permintaan GET ke [path]; [query] ditambahkan sebagai parameter URL (`?kunci=nilai`).
   ///
-  /// [query] berisi parameter URL (`?kunci=nilai`) yang ditambahkan ke alamat.
-  /// Mengembalikan [ApiResponse]; melempar [ApiException] bila gagal.
-  Future<ApiResponse> get(String path, {Map<String, String>? query}) =>
-      _send('GET', path, query: query);
+  /// [handleUnauthorized] false: 401 tidak memicu onUnauthorized global
+  /// (login, register, logout, dsb. menangani 401 sendiri). Parameter yang sama ada di
+  /// semua metode di bawah. Mengembalikan [ApiResponse]; melempar [ApiException] bila gagal.
+  Future<ApiResponse> get(String path,
+          {Map<String, String>? query, bool handleUnauthorized = true}) =>
+      _send('GET', path, query: query, handleUnauthorized: handleUnauthorized);
 
   /// Mengirim permintaan POST ke [path] dengan [body] yang diubah menjadi JSON.
   ///
   /// [headers] adalah header tambahan, misalnya kunci idempotensi (lihat `idempotency.dart`).
   /// Mengembalikan [ApiResponse]; melempar [ApiException] bila gagal.
   Future<ApiResponse> post(String path,
-          {Object? body, Map<String, String>? headers}) =>
-      _send('POST', path, body: body, headers: headers);
+          {Object? body,
+          Map<String, String>? headers,
+          bool handleUnauthorized = true}) =>
+      _send('POST', path,
+          body: body,
+          headers: headers,
+          handleUnauthorized: handleUnauthorized);
 
-  /// Mengirim permintaan PUT (mengganti data) ke [path] dengan [body] berformat JSON.
+  /// Mengirim permintaan PUT ke [path] dengan [body] JSON (misalnya ganti sandi di `/me/password`).
   /// Mengembalikan [ApiResponse]; melempar [ApiException] bila gagal.
-  Future<ApiResponse> put(String path, {Object? body}) =>
-      _send('PUT', path, body: body);
+  Future<ApiResponse> put(String path,
+          {Object? body, bool handleUnauthorized = true}) =>
+      _send('PUT', path, body: body, handleUnauthorized: handleUnauthorized);
 
-  /// Mengirim permintaan PATCH (mengubah sebagian data) ke [path] dengan [body] berformat JSON.
-  /// Mengembalikan [ApiResponse]; melempar [ApiException] bila gagal.
-  Future<ApiResponse> patch(String path, {Object? body}) =>
-      _send('PATCH', path, body: body);
+  /// Mengirim permintaan PATCH ke [path] dengan [body] JSON berisi kolom yang diubah saja
+  /// (misalnya ubah profil di `/me`). Mengembalikan [ApiResponse]; melempar [ApiException] bila gagal.
+  Future<ApiResponse> patch(String path,
+          {Object? body, bool handleUnauthorized = true}) =>
+      _send('PATCH', path, body: body, handleUnauthorized: handleUnauthorized);
 
-  /// Mengirim permintaan DELETE ke [path].
+  /// Mengirim permintaan DELETE ke [path] tanpa body.
   /// Mengembalikan [ApiResponse]; melempar [ApiException] bila gagal.
-  Future<ApiResponse> delete(String path) => _send('DELETE', path);
+  Future<ApiResponse> delete(String path, {bool handleUnauthorized = true}) =>
+      _send('DELETE', path, handleUnauthorized: handleUnauthorized);
 
   /// Inti semua metode di atas: menyusun URL dan header, mengirim permintaan,
   /// lalu membaca balasan JSON.
@@ -104,6 +115,7 @@ class ApiClient {
     Map<String, String>? query,
     Object? body,
     Map<String, String>? headers,
+    bool handleUnauthorized = true,
   }) async {
     var uri = Uri.parse('$_baseUrl$path');
     if (query != null && query.isNotEmpty) {
@@ -111,7 +123,8 @@ class ApiClient {
     }
     final h = <String, String>{'Accept': 'application/json'};
     final token = await _readToken?.call();
-    if (token != null && token.isNotEmpty) h['Authorization'] = 'Bearer $token';
+    final hasToken = token != null && token.isNotEmpty;
+    if (hasToken) h['Authorization'] = 'Bearer $token';
     if (body != null) h['Content-Type'] = 'application/json';
     if (headers != null) h.addAll(headers);
 
@@ -126,15 +139,14 @@ class ApiClient {
       throw const ApiException(
           status: 0, code: 'TIMEOUT', message: 'Koneksi lambat. Coba lagi.');
     } on SocketException {
-      throw const ApiException(
-          status: 0,
-          code: 'NETWORK',
-          message: 'Tidak ada koneksi internet.');
+      throw _network;
     } on http.ClientException {
-      throw const ApiException(
-          status: 0,
-          code: 'NETWORK',
-          message: 'Tidak ada koneksi internet.');
+      throw _network;
+    } on TlsException {
+      // Termasuk HandshakeException (sertifikat/jabat tangan TLS gagal).
+      throw _network;
+    } on HttpException {
+      throw _network;
     }
 
     dynamic decoded;
@@ -158,15 +170,21 @@ class ApiClient {
       return ApiResponse(status: res.statusCode);
     }
 
-    if (res.statusCode == 401) await _onUnauthorized?.call();
+    // Juga tanpa token: sesi lokal bisa saja masih dianggap aktif meski token
+    // sudah terhapus. Handler global yang memutuskan perlu bertindak atau tidak.
+    if (res.statusCode == 401 && handleUnauthorized) {
+      await _onUnauthorized?.call();
+    }
     throw _toException(res.statusCode, decoded);
   }
 
-  /// Mengubah balasan galat backend menjadi [ApiException].
-  ///
-  /// Bentuk galat yang diharapkan: `{"error": {"code", "message", "fields"}}`, dengan `fields`
-  /// berisi pesan per kolom formulir. Bila bentuknya lain, dipakai kode `INTERNAL_ERROR`
-  /// dan pesan umum.
+  // Galat bersama untuk semua kegagalan koneksi (tanpa sinyal, DNS, TLS, koneksi terputus).
+  static const _network = ApiException(
+      status: 0, code: 'NETWORK', message: 'Tidak ada koneksi internet.');
+
+  /// Membaca bentuk galat backend `{"error": {"code", "message", "fields"}}` menjadi [ApiException].
+  /// `fields` (galat per kolom formulir) diseragamkan menjadi daftar teks. Bila balasan tidak
+  /// berbentuk seperti itu, dipakai kode `INTERNAL_ERROR` dengan pesan umum.
   ApiException _toException(int status, dynamic decoded) {
     if (decoded is Map && decoded['error'] is Map) {
       final e = decoded['error'] as Map;
