@@ -35,6 +35,8 @@
 </head>
 <body>
   <!--
+    flutter_bootstrap.js dimuat oleh skrip di bawah setelah sisa service worker/cache versi lama dibersihkan.
+    Templatnya ada di web/flutter_bootstrap.js (tanpa service worker).
     You can customize the "flutter_bootstrap.js" script.
     This is useful to provide a custom configuration to the Flutter loader
     or to give the user feedback during the initialization process.
@@ -42,6 +44,35 @@
     For more details:
     * https://docs.flutter.dev/platform-integration/web/initialization
   -->
-  <script src="flutter_bootstrap.js" async></script>
+  <script>
+    // Bersihkan sisa versi lama sebelum Flutter dimuat. Versi lama aplikasi ini memasang service worker Flutter
+    // yang menyimpan salinan berkas di Cache Storage; browser yang pernah membukanya bisa terus memakai salinan basi
+    // itu sehingga aplikasi error sampai data situs dihapus manual. Di sini semua service worker dicabut dan cache
+    // dihapus; bila halaman ini masih dikendalikan service worker lama, muat ulang sekali (dijaga sessionStorage
+    // supaya tidak berulang). Sesudah itu flutter_bootstrap.js dimuat seperti biasa.
+    (async function () {
+      try {
+        if ('serviceWorker' in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(registrations.map((registration) => registration.unregister()));
+        }
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((key) => caches.delete(key)));
+        }
+        if (navigator.serviceWorker && navigator.serviceWorker.controller && !sessionStorage.getItem('kk_sw_dibersihkan')) {
+          sessionStorage.setItem('kk_sw_dibersihkan', '1');
+          location.reload();
+          return;
+        }
+      } catch (error) {
+        console.warn('Gagal membersihkan service worker/cache lama:', error);
+      }
+      const script = document.createElement('script');
+      script.src = 'flutter_bootstrap.js';
+      script.async = true;
+      document.body.appendChild(script);
+    })();
+  </script>
 </body>
 </html>
