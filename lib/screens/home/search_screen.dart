@@ -1,10 +1,20 @@
+// Layar Pencarian menu, dibuka dari kolom/ikon cari di Beranda (AppRoutes.search).
+// Hasil diambil lewat CatalogRepository.menus(q: ...) dari backend REST KateringKita (GET /menus).
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../api/api_exception.dart';
+import '../../data/catalog_repository.dart';
+import '../../models/product_model.dart';
+import '../../widgets/menu_image.dart';
+
 import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../models/product_model.dart';
 
+/// Layar pencarian menu: mengetik kata kunci lalu menampilkan menu yang cocok dari backend.
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -13,49 +23,61 @@ class SearchScreen extends StatefulWidget {
 }
 
 class _SearchScreenState extends State<SearchScreen> {
-  final TextEditingController _searchController =
-      TextEditingController(text: 'Lumpia Diego, Martabak...');
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _debounce;
+  List<ProductModel> _results = const [];
+  bool _loading = true;
+  String? _error;
+  // Nomor urut permintaan: jawaban pencarian lama yang datang terlambat diabaikan.
+  int _seq = 0;
 
-  final List<Map<String, dynamic>> _searchResults = [
-    {
-      'name': 'Martabak Pecenongan',
-      'price': 35000.0,
-      'rating': 4.8,
-      'image': 'assets/images/martabak.png',
-      'product': ProductData.mockProducts[1],
-    },
-    {
-      'name': 'Nasi Kuning Slamet',
-      'price': 20000.0,
-      'rating': 4.9,
-      'image': 'assets/images/nasi_kuning.png',
-      'product': ProductData.mockProducts[2],
-    },
-    {
-      'name': 'Donat Surgawi',
-      'price': 15000.0,
-      'rating': 4.7,
-      'image': 'assets/images/donat_surgawi.png',
-      'product': ProductData.mockProducts[3],
-    },
-    {
-      'name': 'Risoles Bu Tima',
-      'price': 18000.0,
-      'rating': 4.8,
-      'image': 'assets/images/risoles.png',
-      'product': ProductData.mockProducts[4],
-    },
-    {
-      'name': 'Lumpia Diego',
-      'price': 25000.0,
-      'rating': 4.6,
-      'image': 'assets/images/lumpia_diego.png',
-      'product': ProductData.mockProducts[0],
-    },
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // Pencarian awal dengan kata kunci kosong (menampilkan semua menu) setelah frame pertama.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _search());
+  }
+
+  /// Debounce 400 ms: pencarian baru dikirim setelah pengguna berhenti mengetik.
+  void _onChanged(String _) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), _search);
+  }
+
+  /// Mengirim kata kunci ke backend; ApiException menampilkan pesan server, galat lain pesan umum.
+  Future<void> _search() async {
+    if (!mounted) return;
+    final repo = context.read<CatalogRepository>();
+    final seq = ++_seq;
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final page = await repo.menus(q: _searchController.text.trim());
+      if (!mounted || seq != _seq) return;
+      setState(() {
+        _results = page.items;
+        _loading = false;
+      });
+    } on ApiException catch (e) {
+      if (!mounted || seq != _seq) return;
+      setState(() {
+        _error = e.message;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted || seq != _seq) return;
+      setState(() {
+        _error = 'Terjadi kesalahan. Coba lagi.';
+        _loading = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -107,9 +129,15 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
                 child: TextField(
                   controller: _searchController,
+                  onChanged: _onChanged,
                   style: AppTextStyles.bodyLarge.copyWith(fontSize: 14),
                   decoration: InputDecoration(
-                    prefixIcon: const Icon(Icons.search, color: AppColors.primary, size: 22),
+                    hintText: 'Cari menu, katering, danus...',
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: AppColors.primary,
+                      size: 22,
+                    ),
                     suffixIcon: Container(
                       margin: const EdgeInsets.all(8),
                       padding: const EdgeInsets.all(6),
@@ -117,7 +145,11 @@ class _SearchScreenState extends State<SearchScreen> {
                         color: AppColors.secondaryBg,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(Icons.tune_rounded, size: 16, color: AppColors.textPrimary),
+                      child: Icon(
+                        Icons.tune_rounded,
+                        size: 16,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
@@ -125,7 +157,10 @@ class _SearchScreenState extends State<SearchScreen> {
                     errorBorder: InputBorder.none,
                     disabledBorder: InputBorder.none,
                     filled: false,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
                   ),
                 ),
               ),
@@ -133,18 +168,44 @@ class _SearchScreenState extends State<SearchScreen> {
             const SizedBox(height: 16),
             // Results List
             Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                itemCount: _searchResults.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 12),
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(_error!),
+                              TextButton(
+                                onPressed: _search,
+                                child: const Text('Coba lagi'),
+                              ),
+                            ],
+                          ),
+                        )
+                      : _results.isEmpty
+                          ? Center(
+                              child: Text(
+                                'Menu tidak ditemukan.',
+                                style: AppTextStyles.bodyMedium,
+                              ),
+                            )
+                          : ListView.separated(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 8,
+                ),
+                itemCount: _results.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 12),
                 itemBuilder: (context, index) {
-                  final item = _searchResults[index];
+                  final item = _results[index];
                   return GestureDetector(
                     onTap: () {
                       Navigator.pushNamed(
                         context,
                         AppRoutes.productDetail,
-                        arguments: item['product'],
+                        arguments: item,
                       );
                     },
                     child: Container(
@@ -152,7 +213,9 @@ class _SearchScreenState extends State<SearchScreen> {
                       decoration: BoxDecoration(
                         color: AppColors.surface,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.cardBorder.withValues(alpha: 0.7)),
+                        border: Border.all(
+                          color: AppColors.cardBorder.withValues(alpha: 0.7),
+                        ),
                         boxShadow: [
                           BoxShadow(
                             color: Colors.black.withValues(alpha: 0.02),
@@ -165,11 +228,10 @@ class _SearchScreenState extends State<SearchScreen> {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: Image.asset(
-                              item['image'],
+                            child: SizedBox(
                               width: 60,
                               height: 60,
-                              fit: BoxFit.cover,
+                              child: MenuImage(item.imageUrl),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -178,22 +240,31 @@ class _SearchScreenState extends State<SearchScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  item['name'],
-                                  style: AppTextStyles.h4.copyWith(fontSize: 15),
+                                  item.name,
+                                  style: AppTextStyles.h4.copyWith(
+                                    fontSize: 15,
+                                  ),
                                 ),
                                 const SizedBox(height: 4),
                                 Row(
                                   children: [
                                     Text(
-                                      AppCurrency.format(item['price'] as double),
-                                      style: AppTextStyles.price.copyWith(fontSize: 14),
+                                      AppCurrency.format(
+                                        item.price,
+                                      ),
+                                      style: AppTextStyles.price.copyWith(
+                                        fontSize: 14,
+                                      ),
                                     ),
                                     const SizedBox(width: 12),
-                                    const Icon(Icons.star_rounded,
-                                        color: AppColors.warning, size: 16),
+                                    const Icon(
+                                      Icons.star_rounded,
+                                      color: AppColors.warning,
+                                      size: 16,
+                                    ),
                                     const SizedBox(width: 2),
                                     Text(
-                                      '${item['rating']}',
+                                      item.ratingAvg.toStringAsFixed(1),
                                       style: AppTextStyles.bodySmall.copyWith(
                                         color: AppColors.textSecondary,
                                         fontWeight: FontWeight.w600,

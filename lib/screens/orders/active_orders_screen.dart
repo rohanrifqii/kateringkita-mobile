@@ -1,3 +1,6 @@
+// Layar Pesanan Aktif (rute AppRoutes.activeOrders), dibuka dari WhatsAppGeneratorScreen setelah pesan dikirim.
+// Data lokal: pesanan berstatus 'active' dari database Drift di perangkat (AppDb.watchOrders), belum dari backend.
+import '../../widgets/menu_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -8,6 +11,7 @@ import '../../core/app_text_styles.dart';
 import '../../data/app_database.dart';
 import '../../models/product_model.dart';
 
+/// Layar daftar pesanan berstatus 'active' yang tersimpan di database lokal; ikut diperbarui saat tabel berubah.
 class ActiveOrdersScreen extends StatelessWidget {
   const ActiveOrdersScreen({super.key});
 
@@ -85,6 +89,8 @@ class ActiveOrdersScreen extends StatelessWidget {
               separatorBuilder: (context, index) => const SizedBox(height: 14),
               itemBuilder: (context, index) {
                 final order = activeOrders[index];
+                // Mencari data produk lokal berdasarkan nama; getProductByName masih shim yang selalu
+                // mengembalikan null, jadi gambar memakai placeholder MenuImage.
                 final product = ProductData.getProductByName(order.productName);
 
                 return Container(
@@ -144,18 +150,10 @@ class ActiveOrdersScreen extends StatelessWidget {
                         children: [
                           ClipRRect(
                             borderRadius: BorderRadius.circular(12),
-                            child: Image.asset(
-                              product.image,
+                            child: MenuImage(product?.imageUrl,
                               width: 68,
                               height: 68,
                               fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => Container(
-                                width: 68,
-                                height: 68,
-                                color: AppColors.secondaryBg,
-                                child: Icon(Icons.fastfood,
-                                    color: AppColors.textMuted),
-                              ),
                             ),
                           ),
                           const SizedBox(width: 14),
@@ -196,6 +194,7 @@ class ActiveOrdersScreen extends StatelessWidget {
                               ),
                               elevation: 0,
                             ),
+                            // Membuka ulang pembuat pesan WhatsApp dengan rincian pesanan ini.
                             onPressed: () {
                               Navigator.pushNamed(
                                 context,

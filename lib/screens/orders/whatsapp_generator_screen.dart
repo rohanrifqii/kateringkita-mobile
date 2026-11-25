@@ -1,14 +1,18 @@
+// Layar Pembuat Pesan WhatsApp (rute AppRoutes.whatsappGenerator), dibuka dari PaymentScreen, OrdersScreen, atau ActiveOrdersScreen.
+// Teks konfirmasi pesanan disusun dari argumen rute (product, quantity, total, orderCode, dll.); tidak memanggil backend.
+import '../../widgets/menu_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../models/cart_item.dart';
 import '../../models/product_model.dart';
 import '../../widgets/primary_button.dart';
 
+/// Layar yang menyusun teks konfirmasi pesanan untuk dikirim ke admin lewat WhatsApp.
 class WhatsAppGeneratorScreen extends StatefulWidget {
+  /// Rincian pesanan cadangan bila argumen rute tidak berupa Map.
   final Map<String, dynamic>? orderDetails;
 
   const WhatsAppGeneratorScreen({super.key, this.orderDetails});
@@ -21,7 +25,6 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
   late TextEditingController _messageController;
   bool _initialized = false;
   ProductModel? _product;
-  List<CartItem> _items = [];
 
   @override
   void initState() {
@@ -32,15 +35,17 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Hanya sekali: baca rincian pesanan dari argumen rute (atau widget.orderDetails), isi nilai
+    // bawaan untuk kunci yang tidak ada, lalu susun teks pesan WhatsApp ke dalam controller.
     if (!_initialized) {
       final args = ModalRoute.of(context)?.settings.arguments;
       final map = (args is Map<String, dynamic>)
           ? args
           : (widget.orderDetails ?? <String, dynamic>{});
 
-      final prod = map['product'] as ProductModel? ?? ProductData.defaultProduct;
+      final prod = map['product'] as ProductModel?;
       final qty = map['quantity'] as int? ?? 1;
-      final tot = (map['total'] as num?)?.toDouble() ?? prod.price;
+      final tot = (map['total'] as num?)?.toDouble() ?? (prod?.price.toDouble() ?? 0);
       final code = map['orderCode'] as String? ?? '#KK-2026-089';
       final name = map['name'] as String? ?? 'Mahasiswa UB';
       final phone = map['phone'] as String? ?? '-';
@@ -48,20 +53,12 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
       final note = map['note'] as String? ?? '-';
 
       _product = prod;
-      _items = (map['items'] is List<CartItem> && (map['items'] as List).isNotEmpty)
-          ? map['items'] as List<CartItem>
-          : [CartItem(product: prod, quantity: qty)];
-      final menuText = _items.length == 1
-          ? '${prod.name} ($qty Porsi)'
-          : '\n${_items
-                  .map((i) => '   - ${i.product.name} (${i.quantity} Porsi)')
-                  .join('\n')}';
 
       _messageController.text =
           'Halo Admin KateringKita! 👋\n\n'
           'Saya ingin konfirmasi pesanan:\n'
           '• Kode Pesanan: $code\n'
-          '• Menu: $menuText\n'
+          '• Menu: ${prod?.name ?? '-'} ($qty Porsi)\n'
           '• Total: ${AppCurrency.format(tot)}\n'
           '• Pemesan: $name ($phone)\n'
           '• Titik Temu: $location\n'
@@ -78,6 +75,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
     super.dispose();
   }
 
+  /// Menyalin teks pesan ke clipboard dan menampilkan SnackBar konfirmasi.
   void _copyMessage() {
     Clipboard.setData(ClipboardData(text: _messageController.text));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -89,7 +87,8 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
   }
 
   void _openWhatsApp() {
-    // Show confirmation dialog then navigate to Active Orders or Orders
+    // Belum benar-benar membuka aplikasi WhatsApp (tidak ada url_launcher di sini): hanya menampilkan
+    // dialog sukses, lalu pengguna memilih ke Pesanan Aktif atau kembali ke navigasi utama.
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -218,17 +217,10 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(10),
-                        child: Image.asset(
-                          _product!.image,
+                        child: MenuImage(_product!.imageUrl,
                           width: 48,
                           height: 48,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            width: 48,
-                            height: 48,
-                            color: AppColors.secondaryBg,
-                            child: Icon(Icons.fastfood, size: 24, color: AppColors.textMuted),
-                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -237,9 +229,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              _items.length > 1
-                                  ? '${_items.length} menu pesanan'
-                                  : _product!.name,
+                              _product!.name,
                               style: AppTextStyles.h4.copyWith(fontSize: 14),
                             ),
                             const SizedBox(height: 2),
@@ -331,7 +321,7 @@ class _WhatsAppGeneratorScreenState extends State<WhatsAppGeneratorScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       onPressed: () {
-                        // Allow user to edit message
+                        // Tombol Edit: pesan masih ditampilkan sebagai Text biasa (belum bisa diedit); tombol ini hanya menampilkan SnackBar.
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(content: Text('Pesan siap dikustomisasi.')),
                         );

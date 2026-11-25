@@ -1,14 +1,15 @@
+// Pemformat harga ke teks Rupiah, dipakai layar dan widget (misalnya FoodGridCard)
+// untuk menampilkan harga dari backend, yang dikirim sebagai angka bulat.
+
 /// Utility pemformat mata uang Rupiah (IDR)
 class AppCurrency {
   /// Memformat angka ke format Rupiah Indonesia, contoh: Rp 25.000
+  ///
+  /// [amount] dibulatkan ke bilangan bulat terdekat (tanpa sen), lalu diberi titik
+  /// setiap tiga digit dari kanan. Nilai 0 menghasilkan `Rp 0`.
   static String format(num amount) {
     if (amount == 0) return 'Rp 0';
-    num val = amount;
-    // Jika nilai pecahan/kecil dari data dummy lama (< 500), kalikan 1000 agar menjadi Rupiah wajar
-    if (val > 0 && val < 500) {
-      val = (val * 1000).round();
-    }
-    final int rounded = val.round();
+    final int rounded = amount.round();
     final String s = rounded.toString();
     final buffer = StringBuffer();
     int count = 0;

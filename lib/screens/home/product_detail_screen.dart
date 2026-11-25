@@ -1,3 +1,6 @@
+// Layar Detail Produk (rute AppRoutes.productDetail), dibuka saat kartu menu diketuk; argumen rute = ProductModel.
+// Detail menu, ulasan, dan profil toko dimuat lewat CatalogRepository dari backend REST KateringKita;
+// status favorit disimpan lokal di LikedStore.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/app_colors.dart';
@@ -5,13 +8,14 @@ import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../data/liked_store.dart';
-import '../../models/cart_item.dart';
 import '../../models/product_model.dart';
-import '../../models/vendor_model.dart';
-import '../../providers/cart_provider.dart';
-import '../../widgets/cart_actions.dart';
+import '../../data/catalog_repository.dart';
+import '../../widgets/primary_button.dart';
+import '../../widgets/menu_image.dart';
 
+/// Layar detail satu menu: galeri, harga, opsi, info toko, ulasan, dan tombol lanjut ke checkout.
 class ProductDetailScreen extends StatefulWidget {
+  /// Produk cadangan bila argumen rute bukan ProductModel.
   final ProductModel? product;
 
   const ProductDetailScreen({super.key, this.product});
@@ -22,36 +26,70 @@ class ProductDetailScreen extends StatefulWidget {
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
   late ProductModel _product;
-  int _selectedOptionIndex = 0;
+  // true bila tidak ada produk sama sekali; layar langsung ditutup (pop) setelah frame pertama.
+  bool _missing = false;
+  bool _initialized = false;
+  MenuOption? _selectedOption; // null = tanpa opsi
+  MerchantProfile? _merchant;
+  List<MenuReview> _reviews = const [];
   int _currentImageIndex = 0;
-  int _selectedQty = 1;
   final PageController _imagePageController = PageController();
 
-  List<String> get _galleryImages {
-    final allImages = [
-      'assets/images/lumpia_diego.png',
-      'assets/images/nasi_kuning.png',
-      'assets/images/martabak.png',
-      'assets/images/donat_surgawi.png',
-      'assets/images/risoles.png',
-    ];
-    final others = allImages.where((img) => img != _product.image).toList();
-    return [
-      _product.image,
-      if (others.isNotEmpty) others[0],
-      if (others.length > 1) others[1],
-    ];
-  }
+  // Galeri saat ini hanya berisi satu gambar utama produk.
+  List<String?> get _galleryImages => [_product.imageUrl];
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Hanya sekali: ambil produk dari argumen rute, kalau tidak ada dari widget.product.
+    if (_initialized) return;
     final args = ModalRoute.of(context)?.settings.arguments;
     if (args is ProductModel) {
       _product = args;
     } else {
-      _product = widget.product ?? ProductData.defaultProduct;
+      final p = widget.product;
+      if (p == null) {
+        _missing = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) Navigator.pop(context);
+        });
+        return;
+      }
+      _product = p;
     }
+    _initialized = true;
+    _load();
+  }
+
+  /// Memuat detail menu, ulasan, dan profil toko dari backend secara berurutan. Tiap permintaan
+  /// berdiri sendiri: bila gagal, galatnya diabaikan dan layar tetap memakai data yang sudah ada.
+  Future<void> _load() async {
+    final repo = context.read<CatalogRepository>();
+    final card = _product;
+    try {
+      final detail = await repo.menuDetail(card.id);
+      if (!mounted) return;
+      setState(() => _product = detail);
+    } catch (_) {
+      // Tetap menampilkan data kartu bila detail gagal dimuat.
+    }
+    try {
+      final reviews = await repo.reviews(card.id);
+      if (!mounted) return;
+      setState(() => _reviews = reviews);
+    } catch (_) {}
+    try {
+      final merchant = await repo.merchant(card.merchant.slug);
+      if (!mounted) return;
+      setState(() => _merchant = merchant);
+    } catch (_) {}
+  }
+
+  /// Teks tombol bawah: "Toko sedang tutup", "Habis" (badge sold_out), atau "Add to Orders".
+  String get _buttonText {
+    if (!_product.merchant.isOpen) return 'Toko sedang tutup';
+    if (_product.badge == 'sold_out') return 'Habis';
+    return 'Add to Orders';
   }
 
   @override
@@ -60,50 +98,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     super.dispose();
   }
 
-  Future<void> _addToCart() async {
-    final added = await CartActions.addProduct(
-      context,
-      _product,
-      count: _selectedQty,
-    );
-    if (!added || !mounted) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(
-            '$_selectedQty porsi ${_product.name} masuk keranjang',
-          ),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-          action: SnackBarAction(
-            label: 'Lihat Dapur',
-            onPressed: () {
-              Navigator.pushNamed(
-                context,
-                AppRoutes.storeProfile,
-                arguments: _product.vendor,
-              );
-            },
-          ),
-        ),
-      );
-  }
-
-  Future<void> _promptDetailQuantity() async {
-    final newQty = await CartActions.showQuantityDialog(
-      context,
-      product: _product,
-      initialQuantity: _selectedQty,
-      allowZeroRemove: false,
-    );
-    if (newQty != null && newQty >= 1 && mounted) {
-      setState(() => _selectedQty = newQty);
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    if (_missing) return const Scaffold();
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
@@ -126,16 +123,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           setState(() => _currentImageIndex = index);
                         },
                         itemBuilder: (context, index) {
-                          return Image.asset(
+                          return MenuImage(
                             _galleryImages[index],
                             width: double.infinity,
                             height: 340,
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => Container(
-                              height: 340,
-                              color: AppColors.secondaryBg,
-                              child: Icon(Icons.fastfood, size: 64, color: AppColors.textMuted),
-                            ),
                           );
                         },
                       ),
@@ -203,7 +195,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         const SizedBox(height: 6),
                         // Price
                         Text(
-                          '${AppCurrency.format(_product.price)} / porsi (isi 5)',
+                          '${AppCurrency.format(_product.price)} / ${_product.unitLabel}',
                           style: AppTextStyles.price.copyWith(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
@@ -216,9 +208,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             Row(
                               children: List.generate(
                                 5,
-                                (i) => const Icon(
+                                (i) => Icon(
                                   Icons.star_rounded,
-                                  color: AppColors.warning,
+                                  color: i < _product.rating.round()
+                                      ? AppColors.warning
+                                      : AppColors.cardBorder,
                                   size: 18,
                                 ),
                               ),
@@ -226,7 +220,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                '${_product.rating} (${_product.reviewCount} reviews) • Terlaris Danus UB',
+                                '${_product.rating} (${_product.reviewCount} ulasan)',
                                 overflow: TextOverflow.ellipsis,
                                 maxLines: 1,
                                 style: AppTextStyles.bodySmall.copyWith(
@@ -240,39 +234,47 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                         const SizedBox(height: 16),
 
-                        // Quota Warning Card
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: AppColors.primarySoft,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: AppColors.primary.withValues(alpha: 0.28),
+                        // Status Card (toko tutup / stok)
+                        if (!_product.merchant.isOpen ||
+                            (_product.badgeText != null &&
+                                _product.badge != 'available')) ...[
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: AppColors.primarySoft,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color:
+                                    AppColors.primary.withValues(alpha: 0.28),
+                              ),
+                            ),
+                            child: Text(
+                              !_product.merchant.isOpen
+                                  ? 'Toko sedang tutup'
+                                  : _product.badgeText!,
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: AppColors.primaryDark,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
-                          child: Text(
-                            '🔥 Hanya tersisa 14 porsi untuk kuota hari ini!',
-                            style: AppTextStyles.bodySmall.copyWith(
-                              color: AppColors.primaryDark,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
+                          const SizedBox(height: 16),
+                        ],
 
                         // Store / Dapur Profile Card (Clickable -> StoreProfileScreen)
                         Builder(
                           builder: (context) {
-                            final vendorProfile =
-                                VendorData.getByVendorName(_product.vendor);
+                            final m = _product.merchant;
+                            final mp = _merchant;
                             return GestureDetector(
                               onTap: () {
                                 Navigator.pushNamed(
                                   context,
                                   AppRoutes.storeProfile,
-                                  arguments: _product.vendor,
+                                  arguments: _product.merchant.slug,
                                 );
                               },
                               child: Container(
@@ -289,20 +291,11 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                   children: [
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(12),
-                                      child: Image.asset(
-                                        vendorProfile.logoImage,
+                                      child: MenuImage(
+                                        m.logoUrl,
                                         width: 48,
                                         height: 48,
                                         fit: BoxFit.cover,
-                                        errorBuilder: (_, _, _) => Container(
-                                          width: 48,
-                                          height: 48,
-                                          color: AppColors.primarySoft,
-                                          child: const Icon(
-                                            Icons.storefront_rounded,
-                                            color: AppColors.primary,
-                                          ),
-                                        ),
                                       ),
                                     ),
                                     const SizedBox(width: 12),
@@ -321,7 +314,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                               const SizedBox(width: 4),
                                               Flexible(
                                                 child: Text(
-                                                  vendorProfile.name,
+                                                  m.businessName,
                                                   maxLines: 1,
                                                   overflow:
                                                       TextOverflow.ellipsis,
@@ -346,7 +339,12 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                               const SizedBox(width: 3),
                                               Expanded(
                                                 child: Text(
-                                                  '${vendorProfile.rating} (${vendorProfile.reviewCountLabel}) • ${vendorProfile.area}',
+                                                  [
+                                                    if (mp != null)
+                                                      '${mp.ratingAvg} (${mp.ratingCount})',
+                                                    if (m.openTime != null && m.closeTime != null)
+                                                      '${m.openTime}–${m.closeTime} WIB',
+                                                  ].join(' • '),
                                                   maxLines: 1,
                                                   overflow:
                                                       TextOverflow.ellipsis,
@@ -415,7 +413,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          _product.description,
+                          _product.description ?? '',
                           style: AppTextStyles.bodyMedium.copyWith(
                             color: AppColors.textSecondary,
                             height: 1.5,
@@ -428,13 +426,17 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                         Wrap(
                           spacing: 10,
                           runSpacing: 8,
-                          children: List.generate(_product.options.length, (index) {
-                            final isSelected = _selectedOptionIndex == index;
-                            final opt = _product.options[index];
+                          children: _product.options.map((option) {
+                            final isSelected =
+                                _selectedOption?.id == option.id;
+                            final label = option.extraPrice > 0
+                                ? '${option.name} (+ ${AppCurrency.format(option.extraPrice)})'
+                                : option.name;
                             return GestureDetector(
                               onTap: () {
                                 setState(() {
-                                  _selectedOptionIndex = index;
+                                  _selectedOption =
+                                      isSelected ? null : option;
                                 });
                               },
                               child: Container(
@@ -450,7 +452,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                   ),
                                 ),
                                 child: Text(
-                                  isSelected ? '✓ $opt' : opt,
+                                  isSelected ? '✓ $label' : label,
                                   style: AppTextStyles.bodySmall.copyWith(
                                     color: isSelected ? AppColors.primary : AppColors.textSecondary,
                                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
@@ -459,8 +461,61 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                                 ),
                               ),
                             );
-                          }),
+                          }).toList(),
                         ),
+
+                        // Ulasan
+                        if (_reviews.isNotEmpty) ...[
+                          const SizedBox(height: 24),
+                          Text(
+                            'Ulasan',
+                            style: AppTextStyles.h3.copyWith(fontSize: 16),
+                          ),
+                          const SizedBox(height: 8),
+                          for (final r in _reviews)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        r.customerName,
+                                        style: AppTextStyles.bodySmall.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 12.5,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Icon(
+                                        Icons.star_rounded,
+                                        color: AppColors.warning,
+                                        size: 14,
+                                      ),
+                                      Text(
+                                        '${r.rating}',
+                                        style: AppTextStyles.bodySmall
+                                            .copyWith(fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                  if (r.comment != null &&
+                                      r.comment!.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Text(
+                                        r.comment!,
+                                        style: AppTextStyles.bodySmall.copyWith(
+                                          color: AppColors.textSecondary,
+                                          fontSize: 12.5,
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ],
                     ),
                   ),
@@ -513,7 +568,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                     child: ValueListenableBuilder<Set<String>>(
                       valueListenable: LikedStore.likedNotifier,
                       builder: (context, likedIds, child) {
-                        final isLiked = likedIds.contains(_product.id);
+                        final isLiked = likedIds.contains(_product.id.toString());
                         return IconButton(
                           icon: Icon(
                             isLiked
@@ -526,7 +581,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           ),
                           onPressed: () async {
                             final nowLiked =
-                                await LikedStore.toggleLike(_product.id);
+                                await LikedStore.toggleLike(_product.id.toString());
                             if (!context.mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
@@ -546,199 +601,28 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             ),
           ),
 
-          // Bottom Bar: Stepper (bisa diketik) + Tambah ke Keranjang + Ringkasan Keranjang
+          // Bottom Fixed Button: ke checkout dengan argumen _product (opsi terpilih belum ikut dikirim);
+          // nonaktif bila _product.canOrder false.
           Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: _buildBottomActionArea(),
+            left: 20,
+            right: 20,
+            bottom: 24,
+            child: PrimaryButton(
+              text: _buttonText,
+              gradient: _product.canOrder ? AppColors.primaryGradient : null,
+              backgroundColor: AppColors.textMuted,
+              onPressed: !_product.canOrder
+                  ? null
+                  : () {
+                      Navigator.pushNamed(
+                        context,
+                        AppRoutes.checkout,
+                        arguments: _product,
+                      );
+                    },
+            ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildBottomActionArea() {
-    final cart = context.watch<CartProvider>();
-    final hasSameVendorCart =
-        !cart.isEmpty && cart.vendorName == _product.vendor;
-
-    Widget stepBtn(IconData icon, VoidCallback onTap, {bool filled = false}) {
-      return GestureDetector(
-        onTap: onTap,
-        child: Container(
-          width: 38,
-          height: 38,
-          decoration: BoxDecoration(
-            color: filled ? AppColors.primary : AppColors.background,
-            borderRadius: BorderRadius.circular(11),
-            border: filled
-                ? null
-                : Border.all(color: AppColors.primary, width: 1.3),
-          ),
-          child: Icon(
-            icon,
-            size: 20,
-            color: filled ? Colors.white : AppColors.primary,
-          ),
-        ),
-      );
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.cardBorder)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 12,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (hasSameVendorCart) ...[
-                GestureDetector(
-                  onTap: () {
-                    Navigator.pushNamed(
-                      context,
-                      AppRoutes.checkout,
-                      arguments: CheckoutRequest(
-                        items: cart.items.map((i) => i.copy()).toList(),
-                        fromCart: true,
-                      ),
-                    );
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 9,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primarySoft,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: AppColors.primary.withValues(alpha: 0.35),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.shopping_basket_rounded,
-                          color: AppColors.primary,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Keranjang: ${cart.items.length} menu (${cart.itemCount} porsi) • ${AppCurrency.format(cart.totalPrice)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.primary,
-                            ),
-                          ),
-                        ),
-                        const Text(
-                          'Checkout >',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-              Row(
-                children: [
-                  stepBtn(
-                    Icons.remove_rounded,
-                    () {
-                      if (_selectedQty > 1) {
-                        setState(() => _selectedQty--);
-                      }
-                    },
-                  ),
-                  GestureDetector(
-                    onTap: _promptDetailQuantity,
-                    behavior: HitTestBehavior.opaque,
-                    child: Container(
-                      constraints: const BoxConstraints(minWidth: 50),
-                      margin: const EdgeInsets.symmetric(horizontal: 6),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 8,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primarySoft,
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: AppColors.primary.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Text(
-                        '$_selectedQty',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                  ),
-                  stepBtn(
-                    Icons.add_rounded,
-                    () {
-                      if (_selectedQty < CartProvider.maxQuantityPerItem) {
-                        setState(() => _selectedQty++);
-                      }
-                    },
-                    filled: true,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 13),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(13),
-                        ),
-                      ),
-                      onPressed: _addToCart,
-                      child: Text(
-                        'Tambah • ${AppCurrency.format(_product.price * _selectedQty)}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 13.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

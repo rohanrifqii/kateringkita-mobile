@@ -1,3 +1,6 @@
+// Layar Pesanan Selesai (rute AppRoutes.completedOrders): riwayat pesanan berstatus 'completed'.
+// Data lokal: dibaca dari database Drift di perangkat (AppDb.watchOrders), belum dari backend.
+import '../../widgets/menu_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -8,6 +11,7 @@ import '../../core/app_text_styles.dart';
 import '../../data/app_database.dart';
 import '../../models/product_model.dart';
 
+/// Layar daftar pesanan berstatus 'completed' yang tersimpan di database lokal; ikut diperbarui saat tabel berubah.
 class CompletedOrdersScreen extends StatelessWidget {
   const CompletedOrdersScreen({super.key});
 
@@ -85,6 +89,8 @@ class CompletedOrdersScreen extends StatelessWidget {
               separatorBuilder: (context, index) => const SizedBox(height: 12),
               itemBuilder: (context, index) {
                 final order = completedOrders[index];
+                // Mencari data produk lokal berdasarkan nama; getProductByName masih shim yang selalu
+                // mengembalikan null, jadi gambar memakai placeholder MenuImage.
                 final product = ProductData.getProductByName(order.productName);
 
                 return Container(
@@ -106,18 +112,10 @@ class CompletedOrdersScreen extends StatelessWidget {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Image.asset(
-                          product.image,
+                        child: MenuImage(product?.imageUrl,
                           width: 58,
                           height: 58,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            width: 58,
-                            height: 58,
-                            color: AppColors.secondaryBg,
-                            child: Icon(Icons.fastfood,
-                                color: AppColors.textMuted),
-                          ),
                         ),
                       ),
                       const SizedBox(width: 14),
@@ -141,6 +139,8 @@ class CompletedOrdersScreen extends StatelessWidget {
                         ),
                       ),
                       GestureDetector(
+                        // Pesan lagi: membuka detail produk. Karena product masih null (lihat di atas),
+                        // ProductDetailScreen saat ini langsung menutup diri kembali.
                         onTap: () {
                           Navigator.pushNamed(
                             context,

@@ -1,3 +1,6 @@
+// Layar Asisten AI (tab ketiga MainNavigationScreen, juga rute AppRoutes.aiAssistant): rekomendasi paket danusan dan chat.
+// Rekomendasi & chat lewat GeminiService (langsung ke Google Gemini bila API key tersedia, kalau tidak dihitung lokal);
+// riwayat sesi disimpan lokal (SharedPreferences), bukan di backend KateringKita.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -9,6 +12,7 @@ import '../../models/ai_recommendation_model.dart';
 import '../../models/product_model.dart';
 import '../../services/gemini_service.dart';
 
+/// Satu pilihan jenis produk di bottom sheet (judul, contoh menu, ikon).
 class _ProductCategoryOption {
   final String title;
   final String subtitle;
@@ -21,6 +25,7 @@ class _ProductCategoryOption {
   });
 }
 
+/// Layar asisten AI: form modal/target porsi/jenis produk, hasil paket rekomendasi, chat lanjutan, dan sidebar riwayat.
 class AIAssistantScreen extends StatefulWidget {
   const AIAssistantScreen({super.key});
 
@@ -38,6 +43,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   final TextEditingController _chatController = TextEditingController();
   final FocusNode _chatFocusNode = FocusNode();
 
+  // Nama sapaan bawaan; diganti nama depan akun yang login oleh _loadUserName.
   String _userName = 'Abdurrahim';
   String _selectedProductType = 'Snack Basah';
   int _selectedPriority = 0; // 0: Profit Maksimal, 1: Variasi Menu
@@ -46,6 +52,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   bool _isLoadingRecommendation = false;
   bool _isLoadingChat = false;
 
+  // ID sesi chat aktif ("session-<millis>"), dipakai untuk menimpa entri yang sama di riwayat.
   String _currentSessionId = '';
   List<AIChatSession> _chatSessions = [];
 
@@ -88,6 +95,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     _initDefaultPackage();
     _loadChatHistory();
 
+    // Saat kolom chat difokuskan, gulir ke bawah setelah keyboard muncul (jeda 250 ms).
     _chatFocusNode.addListener(() {
       if (_chatFocusNode.hasFocus) {
         Future.delayed(const Duration(milliseconds: 250), () {
@@ -102,6 +110,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     });
   }
 
+  /// Mengisi paket rekomendasi contoh (statis) yang dipakai sebelum ada hasil AI atau setelah sesi direset.
   void _initDefaultPackage() {
     _currentPackage = const AIRecommendationPackage(
       items: [
@@ -123,6 +132,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
+  /// Mengambil nama depan akun yang sedang login dari database lokal (AuthRepository).
   Future<void> _loadUserName() async {
     final user = await AuthRepository(context.read<AppDb>()).currentUser();
     if (!mounted) return;
@@ -133,6 +143,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     }
   }
 
+  /// Memuat daftar sesi riwayat dari penyimpanan lokal; bila kosong/gagal, GeminiService memberi sesi contoh.
   Future<void> _loadChatHistory() async {
     final loaded = await GeminiService.loadSessions();
     if (!mounted) return;
@@ -141,6 +152,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     });
   }
 
+  /// Menyimpan sesi aktif ke riwayat (menimpa bila ID sama, atau menambah di urutan teratas), lalu
+  /// menulis seluruh riwayat ke penyimpanan lokal. Tidak melakukan apa pun bila sesi masih kosong.
+  /// Judul: customTitle, atau 34 karakter pertama pesan pengguna pertama, atau mode + modal.
   Future<void> _syncCurrentSessionToHistory({String? customTitle}) async {
     if (!_hasRecommendation && _chatMessages.isEmpty) return;
 
@@ -183,6 +197,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     await GeminiService.saveSessions(_chatSessions);
   }
 
+  /// Menyimpan sesi saat ini, lalu mengosongkan form, chat, dan paket untuk sesi baru.
   void _startNewConversation() {
     _syncCurrentSessionToHistory();
     setState(() {
@@ -205,6 +220,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     }
   }
 
+  /// Memuat kembali isi form, paket, dan pesan dari sesi riwayat yang dipilih.
   void _restoreSession(AIChatSession session) {
     setState(() {
       _currentSessionId = session.id;
@@ -220,6 +236,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     });
   }
 
+  /// Menghapus satu sesi dari riwayat; bila itu sesi aktif, layar direset ke sesi baru.
   Future<void> _deleteSession(String sessionId) async {
     setState(() {
       _chatSessions.removeWhere((s) => s.id == sessionId);
@@ -233,6 +250,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     await GeminiService.saveSessions(_chatSessions);
   }
 
+  /// Menghapus seluruh riwayat sesi dan mereset sesi aktif.
   Future<void> _clearAllSessions() async {
     setState(() {
       _chatSessions.clear();
@@ -254,6 +272,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     super.dispose();
   }
 
+  /// Membaca modal & target porsi dari form (hanya digit; bawaan 500.000 dan 50 bila kosong), meminta
+  /// paket ke GeminiService, menampilkan hasilnya, menyimpan sesi, lalu menggulir ke bagian rekomendasi.
+  /// Katalog yang dikirim masih ProductData.mockProducts (shim kosong).
   Future<void> _generateRecommendation() async {
     FocusScope.of(context).unfocus();
     setState(() {
@@ -295,6 +316,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     });
   }
 
+  /// Mengirim pesan chat: tambahkan pesan pengguna, minta balasan GeminiService dengan konteks paket
+  /// dan form, perbarui paket bila balasan membawa paket baru, lalu simpan sesi ke riwayat.
   Future<void> _handleSendChatMessage() async {
     final query = _chatController.text.trim();
     if (query.isEmpty || _isLoadingChat) return;
@@ -365,17 +388,22 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     });
   }
 
+  /// Membungkus paket rekomendasi menjadi satu ProductModel sementara (id 0, merchant "ai-package",
+  /// harga = total modal) lalu membuka CheckoutScreen dengan produk itu.
   void _onOrderRecommendation() {
     final bundleProduct = ProductModel(
-      id: 'ai-package-50',
+      id: 0,
       name:
           'Paket Rekomendasi AI (${_selectedPriority == 0 ? "Profit Maksimal" : "Variasi Menu"})',
-      category: _selectedProductType,
-      price: _currentPackage.totalModalValue,
-      vendor: _currentPackage.items.map((e) => e.vendor).toSet().join(' & '),
-      image: _currentPackage.items.first.imagePath,
-      rating: 4.9,
-      reviewCount: 50,
+      price: _currentPackage.totalModalValue.round(),
+      merchant: MerchantRef(
+        id: 0,
+        slug: 'ai-package',
+        businessName: _currentPackage.items.map((e) => e.vendor).toSet().join(' & '),
+        isOpen: true,
+      ),
+      ratingAvg: 4.9,
+      ratingCount: 50,
       description:
           'Paket rekomendasi cerdas AI: ${_currentPackage.items.map((e) => e.title).join(' + ')}. Estimasi profit ${_currentPackage.estimasiProfit.replaceAll("\n", " ")}.',
     );
@@ -1065,7 +1093,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
-  /// Kartu Sapaan: "Halo Abdurrahim!"
+  /// Kartu sapaan "Halo <nama>!" memakai _userName.
   Widget _buildGreetingCard() {
     return Container(
       width: double.infinity,

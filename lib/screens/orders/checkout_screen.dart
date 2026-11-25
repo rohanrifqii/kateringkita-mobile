@@ -1,3 +1,7 @@
+// Layar Checkout (rute AppRoutes.checkout), dibuka dari tombol pesan di ProductDetailScreen / StoreProfileScreen; argumen rute = ProductModel.
+// Data pemesan diambil lokal (AuthRepository: sesi + database Drift) dan titik temu dari SettingsStore; layar ini tidak memanggil backend,
+// hanya meneruskan rincian pesanan ke PaymentScreen.
+import '../../widgets/menu_image.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -12,17 +16,16 @@ import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../models/cart_item.dart';
 import '../../models/product_model.dart';
-import '../../providers/cart_provider.dart';
 import '../../services/map_service.dart';
 import '../../widgets/app_modal_dialog.dart';
-import '../../widgets/cart_actions.dart';
 import '../../widgets/payment_method_tile.dart';
 import '../../widgets/primary_button.dart';
 import 'location_picker_screen.dart';
 
+/// Layar checkout satu menu: jumlah porsi, data pemesan, lokasi titik temu, metode bayar, dan ringkasan harga.
 class CheckoutScreen extends StatefulWidget {
+  /// Produk cadangan bila argumen rute bukan ProductModel.
   final ProductModel? product;
 
   const CheckoutScreen({super.key, this.product});
@@ -34,6 +37,7 @@ class CheckoutScreen extends StatefulWidget {
 class _CheckoutScreenState extends State<CheckoutScreen> {
   static const List<FontFeature> _tabular = [FontFeature.tabularFigures()];
 
+  // Pilihan metode bayar yang ditampilkan (daftar tetap di aplikasi).
   static List<PaymentMethodOption> get _paymentOptions => [
     PaymentMethodOption(
       method: PaymentMethod.qris,
@@ -62,14 +66,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     ),
   ];
 
-  /// Daftar menu yang di-checkout (bisa lebih dari satu, selalu dari 1 dapur).
-  List<CartItem> _lines = [];
-  bool _fromCart = false;
-  bool _itemsLoaded = false;
-
-  int get _totalQuantity => _lines.fold<int>(0, (s, l) => s + l.quantity);
-  double get _subtotal => _lines.fold<double>(0, (s, l) => s + l.subtotal);
-  String get _vendorName => _lines.isEmpty ? '' : _lines.first.product.vendor;
+  late ProductModel _product;
+  // true bila tidak ada produk; layar langsung ditutup (pop) setelah frame pertama.
+  bool _missing = false;
+  int _quantity = 1;
   PaymentMethod _selectedPayment = PaymentMethod.qris;
 
   // ValueNotifier: hanya teks timer yang rebuild tiap detik,
@@ -95,6 +95,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _startTimer();
   }
 
+  /// Hitung mundur "Holding Timer" 5 menit (299 detik). Hanya tampilan: saat habis, timer berhenti
+  /// tanpa membatalkan atau mengunci checkout.
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_secondsLeft.value > 0) {
@@ -108,26 +110,30 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (!_itemsLoaded) {
-      final args = ModalRoute.of(context)?.settings.arguments;
-      if (args is CheckoutRequest) {
-        _lines = args.items.map((i) => i.copy()).toList();
-        _fromCart = args.fromCart;
-      } else if (args is ProductModel) {
-        _lines = [CartItem(product: args)];
-      } else {
-        _lines = [
-          CartItem(product: widget.product ?? ProductData.defaultProduct),
-        ];
+    // Ambil produk dari argumen rute, kalau tidak ada dari widget.product; tanpa produk layar ditutup.
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is ProductModel) {
+      _product = args;
+    } else {
+      final p = widget.product;
+      if (p == null) {
+        _missing = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) Navigator.pop(context);
+        });
+        return;
       }
-      _itemsLoaded = true;
+      _product = p;
     }
+    // Data pemesan cukup dimuat sekali walau didChangeDependencies terpanggil lagi.
     if (!_userDataLoaded) {
       _loadUserData();
       _userDataLoaded = true;
     }
   }
 
+  /// Mengisi form dari akun yang sedang login (nama & telepon; isian contoh bila belum login)
+  /// dan titik temu tersimpan di SettingsStore, lalu memindahkan peta mini ke koordinat itu.
   Future<void> _loadUserData() async {
     final repo = AuthRepository(context.read<AppDb>());
     final user = await repo.currentUser();
@@ -157,6 +163,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     });
   }
 
+  /// Membuka LocationPickerScreen; lokasi yang dipilih ditampilkan, peta mini dipindah,
+  /// dan lokasi disimpan sebagai titik temu baru di SettingsStore.
   Future<void> _openLocationPicker() async {
     final result = await Navigator.push<DeliveryLocation>(
       context,
@@ -200,6 +208,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     super.dispose();
   }
 
+  /// Mengubah detik menjadi teks mm:ss.
   String _formatTimer(int seconds) {
     final m = (seconds ~/ 60).toString().padLeft(2, '0');
     final s = (seconds % 60).toString().padLeft(2, '0');
@@ -209,6 +218,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String _price(double value) => AppCurrency.format(value);
 
 
+  /// Label metode bayar yang dikirim ke PaymentScreen.
   String _paymentLabel(PaymentMethod method) {
     switch (method) {
       case PaymentMethod.qris:
@@ -220,6 +230,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  /// Menampilkan dialog konfirmasi; bila disetujui, membuat kode pesanan sementara (#KK-tahun-3 digit
+  /// dari waktu sekarang) lalu membuka PaymentScreen dengan seluruh isian form. Isian form belum divalidasi di sini.
   void _confirmOrder(double total) {
     AppModalDialog.showPaymentConfirmation(
       context,
@@ -232,10 +244,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           context,
           AppRoutes.payment,
           arguments: {
-            'items': _lines.map((l) => l.copy()).toList(),
-            'fromCart': _fromCart,
-            'product': _lines.first.product,
-            'quantity': _totalQuantity,
+            'product': _product,
+            'quantity': _quantity,
             'total': total,
             'orderCode': orderCode,
             'paymentMethod': _selectedPayment,
@@ -259,7 +269,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final subtotal = _subtotal;
+    if (_missing) return const Scaffold();
+    final subtotal = (_product.price * _quantity).toDouble();
     final total = subtotal;
 
     return Scaffold(
@@ -280,7 +291,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             children: [
               _buildTimerBanner(),
               const SizedBox(height: 16),
-              _buildItemsSection(),
+              _buildItemCard(),
               const SizedBox(height: 22),
               _sectionLabel('DATA PEMESAN'),
               const SizedBox(height: 10),
@@ -399,52 +410,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  Widget _buildItemsSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(
-              Icons.storefront_rounded,
-              size: 16,
-              color: AppColors.primary,
-            ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: Text(
-                _vendorName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        for (final line in _lines) ...[
-          _buildItemCard(line),
-          const SizedBox(height: 10),
-        ],
-        Align(
-          alignment: Alignment.centerLeft,
-          child: TextButton.icon(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-            label: const Text(
-              'Tambah menu lain',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12.5),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildItemCard(CartItem line) {
+  Widget _buildItemCard() {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: _cardDecoration,
@@ -452,17 +418,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.asset(
-              line.product.image,
+            child: MenuImage(_product.imageUrl,
               width: 64,
               height: 64,
               fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
-                width: 64,
-                height: 64,
-                color: AppColors.secondaryBg,
-                child: const Icon(Icons.image_not_supported_outlined),
-              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -471,7 +430,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  line.product.name,
+                  _product.name,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: AppTextStyles.h4.copyWith(fontSize: 15),
@@ -481,7 +440,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   TextSpan(
                     children: [
                       TextSpan(
-                        text: _price(line.product.price),
+                        text: _price(_product.price.toDouble()),
                         style: AppTextStyles.price.copyWith(fontSize: 14),
                       ),
                       TextSpan(
@@ -495,55 +454,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          _buildStepper(line),
+          _buildStepper(),
         ],
       ),
     );
   }
 
-  void _changeQuantity(CartItem line, int delta) {
-    final next = line.quantity + delta;
-    if (next > CartProvider.maxQuantityPerItem) return;
-    if (next <= 0) {
-      _removeLine(line);
-      return;
-    }
-    setState(() => line.quantity = next);
-    if (_fromCart) {
-      context.read<CartProvider>().setQuantity(line.id, next);
-    }
-  }
-
-  void _removeLine(CartItem line) {
-    setState(() => _lines.removeWhere((l) => l.id == line.id));
-    if (_fromCart) context.read<CartProvider>().remove(line.id);
-    if (_lines.isEmpty && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Keranjang kosong. Pilih menu dulu ya.')),
-      );
-      Navigator.pop(context);
-    }
-  }
-
-  Future<void> _promptLineQuantity(CartItem line) async {
-    final newQty = await CartActions.showQuantityDialog(
-      context,
-      product: line.product,
-      initialQuantity: line.quantity,
-      allowZeroRemove: true,
-    );
-    if (newQty == null || !mounted) return;
-    if (newQty <= 0) {
-      _removeLine(line);
-      return;
-    }
-    setState(() => line.quantity = newQty);
-    if (_fromCart) {
-      context.read<CartProvider>().setQuantity(line.id, newQty);
-    }
-  }
-
-  Widget _buildStepper(CartItem line) {
+  /// Tombol - / + jumlah porsi (minimal 1).
+  Widget _buildStepper() {
     Widget button(String label, Color color, VoidCallback onTap) {
       return InkResponse(
         onTap: onTap,
@@ -571,32 +489,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          button(
-            line.quantity == 1 ? '×' : '-',
-            AppColors.textPrimary,
-            () => _changeQuantity(line, -1),
-          ),
-          GestureDetector(
-            onTap: () => _promptLineQuantity(line),
-            behavior: HitTestBehavior.opaque,
-            child: Container(
-              constraints: const BoxConstraints(minWidth: 36),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.35),
-                ),
-              ),
-              child: Text(
-                '${line.quantity}',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.h4.copyWith(fontSize: 14),
-              ),
-            ),
-          ),
-          button('+', AppColors.primary, () => _changeQuantity(line, 1)),
+          button('-', AppColors.textPrimary, () {
+            if (_quantity > 1) setState(() => _quantity--);
+          }),
+          Text('$_quantity', style: AppTextStyles.h4.copyWith(fontSize: 14)),
+          button('+', AppColors.primary, () => setState(() => _quantity++)),
         ],
       ),
     );
@@ -634,6 +531,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
+  /// Kartu lokasi titik temu dengan peta mini OSM dan perkiraan waktu tiba (MapService.estimateEta);
+  /// diketuk untuk membuka pemilih lokasi.
   Widget _buildLocationSelectorCard() {
     final title = _locationController.text.trim().isEmpty
         ? 'Pilih Lokasi Pengantaran'
@@ -870,7 +769,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Subtotal ($_totalQuantity Porsi)', style: AppTextStyles.bodyMedium),
+              Text('Subtotal ($_quantity Porsi)', style: AppTextStyles.bodyMedium),
               Text(
                 _price(subtotal),
                 style: AppTextStyles.bodyLarge.copyWith(

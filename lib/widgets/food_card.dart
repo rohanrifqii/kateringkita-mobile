@@ -1,3 +1,6 @@
+// Kartu menu untuk tampilan grid katalog. Layar mengambil data menu lewat CatalogRepository
+// (backend REST KateringKita) lalu menggambar tiap ProductModel dengan widget di berkas ini.
+import 'menu_image.dart';
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
 import '../core/app_currency.dart';
@@ -5,8 +8,16 @@ import '../core/app_routes.dart';
 import '../core/app_text_styles.dart';
 import '../models/product_model.dart';
 
+/// Kartu satu menu: gambar dengan label status ([ProductModel.badgeText]), nama menu,
+/// nama toko, harga, dan rating.
+///
+/// Mengetuk kartu menjalankan [onTap] (biasanya membuka detail menu). Mengetuk baris nama
+/// toko membuka profil toko (rute `AppRoutes.storeProfile`) dengan slug toko sebagai argumen.
 class FoodGridCard extends StatelessWidget {
+  /// Menu yang ditampilkan.
   final ProductModel product;
+
+  /// Dipanggil saat kartu diketuk.
   final VoidCallback onTap;
 
   const FoodGridCard({
@@ -42,16 +53,10 @@ class FoodGridCard extends StatelessWidget {
                   Positioned.fill(
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                      child: Image.asset(
-                        product.image,
+                      child: MenuImage(product.imageUrl,
                         width: double.infinity,
                         height: double.infinity,
                         fit: BoxFit.cover,
-                        alignment: Alignment.center,
-                        errorBuilder: (context, error, stackTrace) => Container(
-                          color: AppColors.secondaryBg,
-                          child: Icon(Icons.fastfood, color: AppColors.textMuted),
-                        ),
                       ),
                     ),
                   ),
@@ -107,7 +112,7 @@ class FoodGridCard extends StatelessWidget {
                       Navigator.pushNamed(
                         context,
                         AppRoutes.storeProfile,
-                        arguments: product.vendor,
+                        arguments: product.merchant.slug,
                       );
                     },
                     behavior: HitTestBehavior.opaque,

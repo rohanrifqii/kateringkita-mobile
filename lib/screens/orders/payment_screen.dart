@@ -1,3 +1,6 @@
+// Layar Pembayaran (rute AppRoutes.payment), dibuka dari CheckoutScreen setelah pesanan dikonfirmasi; argumen rute = Map rincian pesanan.
+// Pembayaran QRIS/VA/COD masih simulasi (tidak ada gateway atau backend); saat dikonfirmasi pesanan disimpan ke database Drift lokal (AppDb.addOrder).
+import '../../widgets/menu_image.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,12 +11,10 @@ import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../data/app_database.dart';
-import '../../models/cart_item.dart';
 import '../../models/product_model.dart';
-import '../../providers/cart_provider.dart';
 import '../../widgets/payment_method_tile.dart';
 
-/// Halaman Gateway Pembayaran Mandiri (QRIS, Virtual Account, & COD)
+/// Halaman pembayaran simulasi untuk QRIS, Virtual Account, dan COD; isi layar menyesuaikan metode yang dipilih di checkout.
 class PaymentScreen extends StatefulWidget {
   const PaymentScreen({super.key});
 
@@ -25,8 +26,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
   bool _argsLoaded = false;
   late ProductModel _product;
   late int _quantity;
-  late List<CartItem> _items;
-  bool _fromCart = false;
   late double _total;
   late String _orderCode;
   late PaymentMethod _paymentMethod;
@@ -46,7 +45,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     'BNI': '9880',
   };
 
-  // State Timer Hitung Mundur (15 menit untuk QRIS, 24 jam untuk VA)
+  // State timer hitung mundur: 1 jam untuk QRIS & VA, tidak ada timer untuk COD.
   late int _remainingSeconds;
   Timer? _countdownTimer;
   bool _isProcessing = false;
@@ -54,19 +53,22 @@ class _PaymentScreenState extends State<PaymentScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    // Hanya sekali: baca rincian pesanan dari argumen rute dan isi nilai bawaan untuk kunci yang kosong.
+    // Tanpa 'product' layar ditutup (pop); selama itu build menampilkan indikator muat.
     if (!_argsLoaded) {
       final args =
           ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>? ??
               {};
-      _product = args['product'] as ProductModel? ?? ProductData.defaultProduct;
+      final p = args['product'] as ProductModel?;
+      if (p == null) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) Navigator.pop(context);
+        });
+        return;
+      }
+      _product = p;
       _quantity = args['quantity'] as int? ?? 1;
-      final rawItems = args['items'];
-      _items = rawItems is List<CartItem> && rawItems.isNotEmpty
-          ? rawItems
-          : [CartItem(product: _product, quantity: _quantity)];
-      _fromCart = args['fromCart'] as bool? ?? false;
-      _quantity = _items.fold<int>(0, (s, i) => s + i.quantity);
-      _total = args['total'] as double? ?? _product.price * _quantity;
+      _total = args['total'] as double? ?? (_product.price * _quantity).toDouble();
       _orderCode = args['orderCode'] as String? ??
           '#KK-${DateTime.now().year}-${DateTime.now().millisecondsSinceEpoch % 900 + 100}';
       _paymentMethod =
@@ -90,6 +92,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  /// Mengurangi _remainingSeconds tiap detik sampai 0. Saat habis tidak ada tindakan lain (pesanan tidak dibatalkan).
   void _startTimer() {
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
@@ -107,6 +110,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     super.dispose();
   }
 
+  /// Mengubah detik menjadi teks jj:mm:dd.
   String _formatTimer(int sec) {
     final hours = sec ~/ 3600;
     final minutes = (sec % 3600) ~/ 60;
@@ -114,12 +118,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
     return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
+  /// Nomor VA simulasi: kode bank terpilih + digit nomor telepon pemesan.
   String _getVirtualAccountNumber() {
     final prefix = _bankCodes[_selectedBank] ?? '8808';
     final cleanPhone = _phone.replaceAll(RegExp(r'[^0-9]'), '');
     return '$prefix $cleanPhone';
   }
 
+  /// Menyalin teks (mis. nomor VA atau total) ke clipboard dan menampilkan SnackBar.
   void _copyToClipboard(String text, String label) {
     Clipboard.setData(ClipboardData(text: text));
     ScaffoldMessenger.of(context).showSnackBar(
@@ -144,35 +150,26 @@ class _PaymentScreenState extends State<PaymentScreen> {
   Future<void> _handleConfirmPayment() async {
     setState(() => _isProcessing = true);
 
-    // Simulasi verifikasi gateway (1.2 detik)
+    // Simulasi verifikasi gateway (1.2 detik); belum ada pengecekan pembayaran sungguhan.
     await Future.delayed(const Duration(milliseconds: 1200));
 
     if (!mounted) return;
     final db = context.read<AppDb>();
-    final cart = context.read<CartProvider>();
-
-    // Ringkas nama menu untuk riwayat pesanan: "Lumpia Diego + 2 menu lain".
-    final summaryName = _items.length == 1
-        ? _items.first.product.name
-        : '${_items.first.product.name} + ${_items.length - 1} menu lain';
 
     // Simpan pesanan ke database SQLite lokal
     await db.addOrder(
       orderCode: _orderCode,
-      productName: summaryName,
+      productName: _product.name,
       quantity: _quantity,
       totalPrice: _total,
     );
-
-    if (!mounted) return;
-    // Pesanan dari keranjang sudah dibayar -> kosongkan keranjang.
-    if (_fromCart) cart.clear();
 
     setState(() => _isProcessing = false);
     _showPaymentSuccessSheet();
   }
 
-  // Bottom Sheet Sukses Pembayaran
+  // Bottom Sheet Sukses Pembayaran: lanjut ke WhatsAppGeneratorScreen (menggantikan layar ini)
+  // atau kembali ke navigasi utama.
   void _showPaymentSuccessSheet() {
     showModalBottomSheet(
       context: context,
@@ -319,7 +316,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         context,
                         AppRoutes.whatsappGenerator,
                         arguments: {
-                          'items': _items,
                           'product': _product,
                           'quantity': _quantity,
                           'total': _total,
@@ -465,6 +461,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
+  /// Judul AppBar sesuai metode bayar.
   String _getAppBarTitle() {
     switch (_paymentMethod) {
       case PaymentMethod.qris:
@@ -476,6 +473,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
   }
 
+  /// Teks tombol konfirmasi bawah sesuai metode bayar.
   String _getConfirmButtonLabel() {
     switch (_paymentMethod) {
       case PaymentMethod.qris:
@@ -1124,75 +1122,44 @@ class _PaymentScreenState extends State<PaymentScreen> {
             ],
           ),
           const SizedBox(height: 12),
-          for (final item in _items) ...[
-            Row(
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: Image.asset(
-                    item.product.image,
-                    width: 50,
-                    height: 50,
-                    fit: BoxFit.cover,
-                    errorBuilder: (ctx, err, stack) => Container(
-                      width: 50,
-                      height: 50,
-                      color: AppColors.secondaryBg,
-                      child: const Icon(Icons.image_not_supported_outlined),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item.product.name,
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 13,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${item.quantity} Porsi x ${AppCurrency.format(item.product.price)}',
-                        style: AppTextStyles.bodySmall.copyWith(
-                          color: AppColors.textSecondary,
-                          fontSize: 11.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  AppCurrency.format(item.subtotal),
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-          ],
-          Divider(height: 1, color: AppColors.cardBorder),
-          const SizedBox(height: 12),
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Total ($_quantity Porsi)',
-                style: AppTextStyles.bodyMedium.copyWith(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: MenuImage(_product.imageUrl,
+                  width: 50,
+                  height: 50,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _product.name,
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$_quantity Porsi x ${AppCurrency.format(_product.price)}',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: AppColors.textSecondary,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               Text(
                 AppCurrency.format(_total),
                 style: AppTextStyles.bodyMedium.copyWith(
                   fontWeight: FontWeight.w800,
-                  color: AppColors.primary,
+                  color: AppColors.textPrimary,
                 ),
               ),
             ],
@@ -1294,7 +1261,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 }
 
-/// Custom Painter untuk menggambar pola QR Code yang rapi dan presisi
+/// Custom Painter yang menggambar pola hiasan mirip QR. Ini bukan kode QR asli dan tidak bisa dipindai.
 class _QrisPatternPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
