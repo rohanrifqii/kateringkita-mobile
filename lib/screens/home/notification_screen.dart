@@ -232,6 +232,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
     final code = n.orderCode;
     if (n.isOrderStatus && code != null && code.isNotEmpty) {
       await Navigator.pushNamed(context, AppRoutes.orderTrackingFor(code));
+    } else if (n.type == 'chat_message' && code != null && code.isNotEmpty) {
+      await Navigator.pushNamed(context, AppRoutes.orderChatFor(code));
     }
   }
 
@@ -486,6 +488,8 @@ class _NotificationScreenState extends State<NotificationScreen> {
         };
       case 'promo':
         return (Icons.local_offer_outlined, AppColors.primary);
+      case 'chat_message':
+        return (Icons.chat_bubble_outline_rounded, AppColors.primary);
       case _ when n.ticketCode != null:
         return (Icons.support_agent_rounded, AppColors.primary);
       default:
