@@ -1,10 +1,15 @@
 // Layar profil toko (merchant): dibuka dengan slug toko sebagai argumen rute, misalnya dari kartu menu atau Dapur
 // Favorit. Profil dan menu toko diambil lewat CatalogRepository (GET /merchants/:slug dan GET /menus?merchant=...);
 // tab Penilaian menggabungkan ulasan beberapa menu (GET /menus/:id/reviews) karena backend belum punya ulasan per toko.
+// Voucher toko ikut dalam profil toko dan bisa diklaim ke Voucher Saya (POST /me/vouchers/:id/claim).
 import '../../api/api_exception.dart';
 import '../../core/relative_time.dart';
 import '../../data/catalog_repository.dart';
 import '../../data/store_reviews.dart';
+import '../../data/voucher_repository.dart';
+import '../../models/voucher.dart';
+import '../../core/require_login.dart';
+import '../../widgets/voucher_card.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/favorites_provider.dart';
 import '../../widgets/favorite_button.dart';
@@ -14,10 +19,10 @@ import '../../widgets/primary_button.dart';
 import '../../widgets/cart_button.dart';
 import '../../providers/cart_provider.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/clipboard_copy.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
@@ -40,6 +45,9 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
   String? _slug;
   MerchantProfile? _merchant;
   List<ProductModel> _menus = const [];
+  // Voucher toko publik (+ status klaim pembeli ini); id yang sedang diklaim
+  List<Voucher> _vouchers = const [];
+  int? _claiming;
   bool _loading = true;
   bool _failed = false;
   bool _isSearching = false;
@@ -113,8 +121,9 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     _load();
   }
 
-  /// Memuat profil toko (`GET /merchants/:slug`) lalu menu toko (`GET /menus?merchant=:slug`, maks. 50); galat apa
-  /// pun menampilkan layar "Gagal memuat profil toko" dengan tombol Coba lagi.
+  /// Memuat profil toko (`GET /merchants/:slug`, termasuk daftar voucher toko) lalu menu toko
+  /// (`GET /menus?merchant=:slug`, maks. 50); galat apa pun menampilkan layar "Gagal memuat profil toko" dengan
+  /// tombol Coba lagi.
   Future<void> _load() async {
     final repo = context.read<CatalogRepository>();
     final slug = _slug!;
@@ -129,6 +138,7 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       setState(() {
         _merchant = merchant;
         _menus = page.items;
+        _vouchers = merchant.vouchers;
         _loading = false;
         // Menu bisa berubah: ulasan dimuat ulang saat tab Penilaian dibuka.
         _reviews = null;
@@ -144,6 +154,62 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
       });
     }
   }
+
+  /// Klaim voucher [v] ke Voucher Saya (POST /me/vouchers/:id/claim lewat VoucherRepository); tamu diarahkan ke
+  /// login dulu. Hanya satu klaim berjalan sekaligus. Berhasil: status klaim kartu diperbarui dan muncul toast;
+  /// gagal: pesan galat di SnackBar.
+  Future<void> _claim(Voucher v) async {
+    if (_claiming != null || !await requireLogin(context)) return;
+    if (!mounted) return;
+    final repo = context.read<VoucherRepository>();
+    setState(() => _claiming = v.id);
+    try {
+      final hasil = await repo.claim(v.id);
+      if (!mounted) return;
+      setState(() => _vouchers = [for (final x in _vouchers) x.id == v.id ? x.copyWith(claimed: hasil.claimed) : x]);
+      _showToast('Voucher disimpan ke Voucher Saya');
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(
+          content: Text(e is ApiException ? e.message : 'Voucher belum bisa diklaim. Coba lagi.'),
+          behavior: SnackBarBehavior.floating,
+        ));
+    } finally {
+      if (mounted) setState(() => _claiming = null);
+    }
+  }
+
+  /// Baris "Voucher toko": kartu voucher yang bisa digulir ke samping, masing-masing dengan tombol Klaim.
+  Widget _buildVoucherStrip() => Padding(
+        padding: const EdgeInsets.fromLTRB(0, 4, 0, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text('Voucher toko',
+                  style: AppTextStyles.h4.copyWith(color: AppColors.textPrimary)),
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 92,
+              child: ListView.separated(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                scrollDirection: Axis.horizontal,
+                itemCount: _vouchers.length,
+                separatorBuilder: (_, _) => const SizedBox(width: 10),
+                itemBuilder: (_, i) => VoucherCard(
+                  voucher: _vouchers[i],
+                  busy: _claiming == _vouchers[i].id,
+                  onClaim: () => _claim(_vouchers[i]),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
 
   @override
   void dispose() {
@@ -387,14 +453,14 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
                 _buildCircleTopButton(
                   icon: Icons.share_outlined,
                   // Bagikan = salin teks promosi toko ke clipboard (belum memakai lembar bagikan sistem).
-                  onTap: () {
-                    Clipboard.setData(
-                      ClipboardData(
-                        text:
-                            'Cek menu ${_vendor.businessName} di KateringKita! Rating ⭐ ${_vendor.ratingAvg}',
-                      ),
+                  onTap: () async {
+                    final ok = await copyText(
+                      'Cek menu ${_vendor.businessName} di KateringKita! Rating ⭐ ${_vendor.ratingAvg}',
                     );
-                    _showToast('Info dapur disalin ke clipboard.');
+                    if (!mounted) return;
+                    _showToast(ok
+                        ? 'Info dapur disalin ke clipboard.'
+                        : 'Gagal menyalin info dapur.');
                   },
                 ),
               ],
@@ -578,14 +644,15 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
     );
   }
 
-  // ==================== 2. KOLOM CARI MENU ====================
-  // Nama metode masih "PromoVouchersRow", tetapi isinya hanya kolom cari saat _isSearching true.
+  // ==================== 2. VOUCHER TOKO & KOLOM CARI MENU ====================
 
-  /// Kolom cari menu di toko ini (tampil saat ikon cari aktif); ketikan langsung menyaring [_filteredMenus].
+  /// Baris voucher toko (bila toko punya voucher) dan kolom cari menu di toko ini (tampil saat ikon cari aktif);
+  /// ketikan langsung menyaring [_filteredMenus].
   Widget _buildPromoVouchersRow(bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (_vouchers.isNotEmpty) _buildVoucherStrip(),
         if (_isSearching)
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),

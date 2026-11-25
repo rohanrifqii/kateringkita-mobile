@@ -1,8 +1,9 @@
 // Model pesanan, pembayaran, dan rincian harga (quote) sebagaimana dikirim backend REST KateringKita.
-// Di cabang ini belum dipakai layar mana pun; disiapkan untuk alur pesan → bayar lewat ApiClient.
+// Dibuat oleh OrderRepository dan dipakai layar checkout, pembayaran, daftar pesanan, ulasan, dan form tiket.
 // Semua nominal uang berupa bilangan bulat Rupiah.
 import 'pickup_point.dart';
 import 'product_model.dart';
+import 'voucher.dart';
 
 // Mengubah teks tanggal ISO dari JSON menjadi DateTime; null tetap null.
 DateTime? _dt(dynamic v) => v == null ? null : DateTime.parse(v as String);
@@ -65,7 +66,32 @@ class OrderVa {
       );
 }
 
-/// Rincian pembayaran sebuah pesanan. [OrderPayment.fromJson] mengubah objek JSON menjadi kelas ini.
+/// QRIS yang digambar langsung di aplikasi (POST /orders/:code/qris).
+class OrderQris {
+  /// Isi QR (standar QRIS) untuk digambar sendiri.
+  final String qrString;
+
+  /// Gambar QR dari Midtrans (bisa dibuka/disimpan di browser).
+  final String qrUrl;
+
+  /// Batas waktu QR bisa dibayar.
+  final DateTime expiresAt;
+
+  const OrderQris({
+    required this.qrString,
+    required this.qrUrl,
+    required this.expiresAt,
+  });
+
+  factory OrderQris.fromJson(Map<String, dynamic> json) => OrderQris(
+        qrString: json['qr_string'] as String,
+        qrUrl: json['qr_url'] as String,
+        expiresAt: DateTime.parse(json['expires_at'] as String),
+      );
+}
+
+/// Rincian pembayaran sebuah pesanan (objek `payment` di JSON pesanan): metode, status,
+/// jumlah, serta data VA / tautan Snap / QRIS sesuai metode yang dipilih.
 class OrderPayment {
   /// Metode dan status pembayaran, berupa teks apa adanya dari backend.
   final String method;
@@ -80,12 +106,16 @@ class OrderPayment {
   /// Alamat halaman pembayaran (bila backend menyediakannya); null bila tidak ada.
   final String? paymentUrl;
 
+  /// Data QRIS bila pembayaran memakai QRIS di aplikasi; null bila tidak ada.
+  final OrderQris? qris;
+
   const OrderPayment({
     required this.method,
     required this.status,
     required this.amount,
     this.va,
     this.paymentUrl,
+    this.qris,
   });
 
   factory OrderPayment.fromJson(Map<String, dynamic> json) => OrderPayment(
@@ -96,6 +126,9 @@ class OrderPayment {
             ? null
             : OrderVa.fromJson(json['va'] as Map<String, dynamic>),
         paymentUrl: json['payment_url'] as String?,
+        qris: json['qris'] == null
+            ? null
+            : OrderQris.fromJson(json['qris'] as Map<String, dynamic>),
       );
 }
 
@@ -251,12 +284,19 @@ class QuoteWarning {
 }
 
 /// Quote = perhitungan harga dari backend sebelum pesanan benar-benar dibuat: daftar barang,
-/// subtotal, diskon, biaya layanan, total, dan peringatan (misalnya stok kurang).
+/// subtotal, diskon, potongan voucher, biaya layanan, total, dan peringatan (misalnya stok kurang).
 /// [Quote.fromJson] mengubah objek JSON menjadi kelas ini.
 class Quote {
   final List<OrderItem> items;
   final int subtotal;
   final int discount;
+
+  /// Potongan voucher toko / platform (server lama: 0).
+  final int merchantDiscount;
+  final int platformDiscount;
+
+  /// Voucher yang benar-benar dipakai server beserta besar potongannya (kosong bila tidak ada).
+  final List<AppliedVoucher> vouchersApplied;
   final int serviceFee;
   final int total;
   final List<QuoteWarning> warnings;
@@ -265,6 +305,9 @@ class Quote {
     required this.items,
     required this.subtotal,
     required this.discount,
+    this.merchantDiscount = 0,
+    this.platformDiscount = 0,
+    this.vouchersApplied = const [],
     required this.serviceFee,
     required this.total,
     this.warnings = const [],
@@ -276,6 +319,11 @@ class Quote {
             .toList(),
         subtotal: (json['subtotal'] as num).toInt(),
         discount: (json['discount'] as num).toInt(),
+        merchantDiscount: (json['merchant_discount'] as num?)?.toInt() ?? 0,
+        platformDiscount: (json['platform_discount'] as num?)?.toInt() ?? 0,
+        vouchersApplied: ((json['vouchers_applied'] as List?) ?? const [])
+            .map((e) => AppliedVoucher.fromJson(e as Map<String, dynamic>))
+            .toList(),
         serviceFee: (json['service_fee'] as num).toInt(),
         total: (json['total'] as num).toInt(),
         warnings: ((json['warnings'] as List?) ?? const [])

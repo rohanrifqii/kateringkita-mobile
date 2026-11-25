@@ -1,5 +1,5 @@
 // Widget gambar menu/toko dari URL yang dikirim backend REST KateringKita (misalnya
-// ProductModel.imageUrl), dipakai kartu dan layar katalog.
+// ProductModel.imageUrl, banner, pop-up promo), dipakai kartu, layar katalog, dan pop-up promo.
 import 'package:flutter/material.dart';
 
 /// Gambar menu dari URL jaringan, dengan gambar pengganti bila kosong/gagal.
@@ -46,6 +46,8 @@ class MenuImage extends StatelessWidget {
             width: width,
             height: height,
             fit: fit,
+            // web: penyimpanan foto tanpa header CORS → tampilkan lewat elemen <img>
+            webHtmlElementStrategy: WebHtmlElementStrategy.fallback,
             errorBuilder: (_, _, _) => _placeholder(),
             loadingBuilder: (_, w, progress) => progress == null ? w : _box(),
           );

@@ -1,6 +1,7 @@
-// Layar Beranda (tab pertama MainNavigationScreen): titik temu favorit, pencarian, kategori, banner info, dan daftar menu.
+// Layar Beranda (tab pertama MainNavigationScreen): titik temu favorit, pencarian, kategori, banner, dan daftar menu.
 // Kategori, menu, dan titik temu diambil lewat CatalogRepository (GET /meta/categories, /menus, /meta/pickup-points);
-// titik temu favorit disimpan ke profil lewat AuthProvider (PATCH /me). Banner info layanan masih data statis di berkas ini.
+// titik temu favorit disimpan ke profil lewat AuthProvider (PATCH /me). Banner dan pop-up promo diambil lewat
+// PromoContentRepository (GET /banners, GET /popup); bila server tidak punya banner, tampil kartu info statis di berkas ini.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -10,9 +11,15 @@ import '../../core/app_text_styles.dart';
 import '../../api/api_exception.dart';
 import '../../core/require_login.dart';
 import '../../data/catalog_repository.dart';
+import '../../data/promo_content_repository.dart';
+import '../../data/voucher_repository.dart';
+import '../../widgets/menu_image.dart';
+import '../../widgets/voucher_card.dart';
+import '../../widgets/promo_popup.dart';
 import '../../models/category_model.dart';
 import '../../models/pickup_point.dart';
 import '../../models/product_model.dart';
+import '../../models/voucher.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/cart_button.dart';
 import '../../widgets/food_card.dart';
@@ -72,7 +79,10 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentBannerIndex = 0;
   final PageController _bannerController = PageController();
 
-  /// Isi banner (statis, tidak dari server).
+  /// Banner dari server (admin & penjual); kosong → kartu informasi bawaan.
+  List<PromoBanner> _serverBanners = const [];
+
+  /// Kartu informasi layanan bawaan (statis) yang tampil bila [_serverBanners] kosong.
   static const List<_InfoBanner> _infoBanners = [
     _InfoBanner(
       tag: 'TITIK TEMU',
@@ -141,6 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Muat setelah frame pertama; daftar titik temu hanya perlu bila sudah ada favorit (untuk namanya).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _load();
+      _loadBanners();
       if (_auth.user?.favoritePickupPointId != null) _ensurePickupPoints();
     });
   }
@@ -151,6 +162,148 @@ class _HomeScreenState extends State<HomeScreen> {
     _bannerController.dispose();
     super.dispose();
   }
+
+  /// Muat banner dari server (GET /banners) lalu pop-up promo. Galat diabaikan: beranda tetap memakai kartu
+  /// informasi bawaan. Indeks titik banner dikembalikan ke 0 setiap daftar banner berganti.
+  Future<void> _loadBanners() async {
+    try {
+      final banners = await context.read<PromoContentRepository>().banners();
+      if (!mounted) return;
+      setState(() {
+        _serverBanners = banners;
+        _currentBannerIndex = 0;
+      });
+    } catch (_) {
+      // gagal / repositori tidak dipasang: tetap kartu informasi bawaan
+    }
+    await _loadPopup();
+  }
+
+  /// Pop-up promo admin (GET /popup), ditampilkan lewat [maybeShowPromoPopup]: sekali sehari, tidak tampil bila
+  /// vouchernya sudah diklaim. Dipanggil di akhir [_loadBanners].
+  Future<void> _loadPopup() async {
+    try {
+      final popup = await context.read<PromoContentRepository>().popup();
+      if (popup == null || !mounted) return;
+      await maybeShowPromoPopup(context, popup);
+    } catch (_) {
+      // pop-up hanya pelengkap: gagal dimuat tidak mengganggu beranda
+    }
+  }
+
+  /// Ketukan banner server: target toko membuka profil toko (slug toko), target promo membuka lembar voucher;
+  /// banner tanpa target tidak melakukan apa-apa.
+  void _onServerBannerTap(PromoBanner b) {
+    if (b.target == BannerTarget.merchant && b.merchant != null) {
+      Navigator.pushNamed(context, AppRoutes.storeProfile, arguments: b.merchant!.slug);
+    } else if (b.target == BannerTarget.promo && b.promo != null) {
+      _showBannerVoucher(b.promo!);
+    }
+  }
+
+  /// Lembar voucher dari banner: Klaim ke Voucher Saya (tamu login dulu; POST /me/vouchers/:id/claim lewat
+  /// VoucherRepository), atau buka toko pemilik voucher. Klaim berhasil menutup lembar dan menampilkan SnackBar;
+  /// gagal menampilkan pesan galat dan tombol bisa diketuk lagi.
+  void _showBannerVoucher(Voucher awal) {
+    final messenger = ScaffoldMessenger.of(context);
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheet) {
+        var v = awal;
+        var sibuk = false;
+        return StatefulBuilder(
+          builder: (sheet, setSheet) => SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text('Voucher', style: AppTextStyles.h3),
+                  const SizedBox(height: 12),
+                  VoucherCard(
+                    voucher: v,
+                    width: null,
+                    busy: sibuk,
+                    onClaim: () async {
+                      if (!await requireLogin(sheet)) return;
+                      if (!sheet.mounted) return;
+                      setSheet(() => sibuk = true);
+                      try {
+                        final hasil = await sheet.read<VoucherRepository>().claim(v.id);
+                        if (!sheet.mounted) return;
+                        setSheet(() => v = hasil);
+                        Navigator.pop(sheet);
+                        messenger.showSnackBar(const SnackBar(content: Text('Voucher disimpan ke Voucher Saya'), behavior: SnackBarBehavior.floating));
+                      } catch (e) {
+                        if (!sheet.mounted) return;
+                        setSheet(() => sibuk = false);
+                        messenger.showSnackBar(SnackBar(
+                          content: Text(e is ApiException ? e.message : 'Voucher belum bisa diklaim. Coba lagi.'),
+                          behavior: SnackBarBehavior.floating,
+                        ));
+                      }
+                    },
+                  ),
+                  if (v.merchant != null) ...[
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(sheet);
+                        Navigator.pushNamed(context, AppRoutes.storeProfile, arguments: v.merchant!.slug);
+                      },
+                      child: Text('Lihat ${v.merchant!.businessName}'),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  /// Satu kartu banner server: gambar penuh, gradasi gelap di bawah, dan judul banner; diketuk → [_onServerBannerTap].
+  Widget _buildServerBanner(PromoBanner b) => GestureDetector(
+        onTap: () => _onServerBannerTap(b),
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 16, offset: const Offset(0, 6))],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                MenuImage(b.imageUrl, fit: BoxFit.cover),
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.center,
+                      colors: [Colors.black.withValues(alpha: 0.7), Colors.transparent],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 16,
+                  right: 16,
+                  bottom: 14,
+                  child: Text(b.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.h3.copyWith(color: Colors.white, fontWeight: FontWeight.w800)),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 
   /// Masuk/keluar: muat ulang menu supaya `is_favorite` milik sesi yang benar.
   void _onAuthChanged() {
@@ -546,17 +699,19 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 20),
 
-              // ---------------- BANNER INFO LAYANAN ----------------
+              // ---------------- BANNER: dari server bila ada, selain itu kartu info layanan statis ----------------
               SizedBox(
                 width: double.infinity,
                 height: 172,
                 child: PageView.builder(
                   controller: _bannerController,
-                  itemCount: _infoBanners.length,
+                  itemCount: _serverBanners.isNotEmpty ? _serverBanners.length : _infoBanners.length,
                   onPageChanged: (index) {
                     setState(() => _currentBannerIndex = index);
                   },
                   itemBuilder: (context, index) {
+                    // Banner server didahulukan; kode di bawahnya menggambar kartu info statis.
+                    if (_serverBanners.isNotEmpty) return _buildServerBanner(_serverBanners[index]);
                     final banner = _infoBanners[index];
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 2),
@@ -685,7 +840,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // Dots Indicator
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(_infoBanners.length, (index) {
+                children: List.generate(_serverBanners.isNotEmpty ? _serverBanners.length : _infoBanners.length, (index) {
                   final isSelected = _currentBannerIndex == index;
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 200),

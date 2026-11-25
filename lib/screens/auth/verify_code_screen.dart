@@ -91,7 +91,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Verify Code',
+            'Verifikasi Kode',
             style: AppTextStyles.h3.copyWith(
               fontSize: 20,
               fontWeight: FontWeight.w800,
@@ -104,7 +104,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
               children: [
                 const TextSpan(
                   text:
-                      'Enter the 6-digit verification code sent to your email ',
+                      'Masukkan 6 digit kode verifikasi yang dikirim ke email ',
                 ),
                 TextSpan(
                   text: email,
@@ -113,7 +113,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const TextSpan(text: ' to reset your password.'),
+                const TextSpan(text: ' untuk mengatur ulang password.'),
               ],
             ),
           ),
@@ -136,7 +136,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
           AuthFieldError(_serverError),
           const SizedBox(height: 24),
           PrimaryButton(
-            text: 'Verify & Continue',
+            text: 'Verifikasi & Lanjutkan',
             isLoading: _isLoading,
             onPressed: () => _verify(email),
           ),
@@ -146,7 +146,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Text(
-                  "Didn't receive the code? ",
+                  'Belum menerima kode? ',
                   style: AppTextStyles.bodySmall.copyWith(
                     color: AppColors.textSecondary,
                   ),
@@ -156,7 +156,7 @@ class _VerifyCodeScreenState extends State<VerifyCodeScreen> {
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     child: Text(
-                      'Resend Code',
+                      'Kirim Ulang Kode',
                       style: AppTextStyles.bodySmall.copyWith(
                         color: AppColors.blue,
                         fontWeight: FontWeight.w600,

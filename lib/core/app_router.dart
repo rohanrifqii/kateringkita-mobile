@@ -21,8 +21,12 @@ import '../screens/orders/orders_screen.dart';
 import '../screens/orders/payment_screen.dart';
 import '../screens/orders/whatsapp_generator_screen.dart';
 import '../screens/home/notification_screen.dart';
+import '../screens/profile/my_vouchers_screen.dart';
 import '../screens/profile/profile_screen.dart';
 import '../screens/splash/splash_screen.dart';
+import '../screens/support/ticket_create_screen.dart';
+import '../screens/support/ticket_detail_screen.dart';
+import '../screens/support/ticket_list_screen.dart';
 import 'app_routes.dart';
 
 /// Kunci Navigator global, dipasang di MaterialApp (main.dart). Dipakai untuk pindah layar
@@ -70,5 +74,10 @@ class AppRouter {
     AppRoutes.liked: (context) => const LikedScreen(),
     AppRoutes.profile: (context) => const ProfileScreen(),
     AppRoutes.notifications: (context) => const NotificationScreen(),
+    AppRoutes.tickets: (context) => const TicketListScreen(),
+    AppRoutes.myVouchers: (context) => const MyVouchersScreen(),
+    AppRoutes.ticketCreate: (context) => const TicketCreateScreen(),
+    // Argumen: kode tiket (String) atau TicketDetail yang baru dibuat.
+    AppRoutes.ticketDetail: (context) => const TicketDetailScreen(),
   };
 }

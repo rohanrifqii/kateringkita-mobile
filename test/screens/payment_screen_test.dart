@@ -78,9 +78,33 @@ Map<String, dynamic> _va() => {
   },
 };
 
+const _qrString = '00020101021226QR-KK-1';
+const _qrUrl = 'https://api.sandbox.midtrans.com/v2/qris/trx-1/qr-code';
+
+Map<String, dynamic> _online({String? url, bool qris = false}) => {
+  'method': 'online',
+  'status': url == null && !qris ? 'unpaid' : 'pending',
+  'amount': 99000,
+  'payment_url': url,
+  'qris': qris
+      ? {
+          'qr_string': _qrString,
+          'qr_url': _qrUrl,
+          'expires_at': '2026-11-12T04:00:00Z',
+        }
+      : null,
+};
+
+http.Response _gagal(int status, String message) => _json({
+  'error': {'code': status == 409 ? 'CONFLICT' : 'BAD_GATEWAY', 'message': message},
+}, status);
+
 class _H {
   final reqs = <http.Request>[];
   String? snapUrl;
+  String? qrImageUrl;
+  int count(String suffix) =>
+      reqs.where((r) => r.method == 'POST' && r.url.path.endsWith(suffix)).length;
 }
 
 Future<_H> _open(
@@ -125,6 +149,7 @@ Future<_H> _open(
                       h.snapUrl = url;
                       if (opener != null) await opener();
                     },
+                    linkOpener: (url) async => h.qrImageUrl = url,
                   ),
                 ),
               ),
@@ -227,36 +252,87 @@ void main() {
     await _close(tester);
   });
 
-  testWidgets('online: startOnline lalu buka Snap lalu get(code)', (
+  testWidgets('online tanpa QR: QRIS dibuat otomatis lalu QR tampil di aplikasi', (
     tester,
   ) async {
     final h = await _open(
       tester,
-      arg: _order(method: 'online'),
+      arg: _order(method: 'online', payment: _online()),
       handler: (r) async {
+        if (r.url.path.endsWith('/qris')) {
+          return _json({'data': _order(method: 'online', payment: _online(qris: true))});
+        }
+        return _json({'data': _order(method: 'online', payment: _online())});
+      },
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(h.count('/qris'), 1);
+    expect(find.byKey(const ValueKey('qris:$_qrString')), findsOneWidget);
+    expect(find.text('Rp 99.000'), findsWidgets);
+    // QR sudah ada: halaman Midtrans tidak ditawarkan (order_id sudah dipakai QRIS)
+    expect(find.text('Bayar lewat halaman Midtrans'), findsNothing);
+    expect(h.snapUrl, isNull);
+
+    await tester.tap(find.text('Buka Gambar QR'));
+    await tester.pump();
+    expect(h.qrImageUrl, _qrUrl);
+
+    // polling berikutnya tidak membuat QRIS baru
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(h.count('/qris'), 1);
+    expect(find.byKey(const ValueKey('qris:$_qrString')), findsOneWidget);
+    await _close(tester);
+  });
+
+  testWidgets('QR sudah ada di argumen: langsung tampil tanpa POST /qris', (
+    tester,
+  ) async {
+    final withQr = _order(method: 'online', payment: _online(qris: true));
+    final h = await _open(
+      tester,
+      arg: withQr,
+      handler: (r) async => _json({'data': withQr}),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.byKey(const ValueKey('qris:$_qrString')), findsOneWidget);
+    expect(h.count('/qris'), 0);
+    await _close(tester);
+  });
+
+  testWidgets('QRIS gagal dibuat: pesan tampil, cadangan halaman Midtrans membuka Snap', (
+    tester,
+  ) async {
+    final h = await _open(
+      tester,
+      arg: _order(method: 'online', payment: _online()),
+      handler: (r) async {
+        if (r.url.path.endsWith('/qris')) {
+          return _gagal(502, 'Gagal membuat QRIS. Coba lagi.');
+        }
         if (r.url.path.endsWith('/online')) {
           return _json({
             'data': _order(
               method: 'online',
-              payment: {
-                'method': 'online',
-                'status': 'pending',
-                'amount': 99000,
-                'payment_url': 'https://app.sandbox.midtrans.com/snap/v4/x',
-              },
+              payment: _online(url: 'https://app.sandbox.midtrans.com/snap/v4/x'),
             ),
           });
         }
-        return _json({'data': _order(method: 'online')});
+        return _json({'data': _order(method: 'online', payment: _online())});
       },
     );
-    await tester.tap(find.text('Bayar dengan QRIS / E-Wallet'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(find.text('Gagal membuat QRIS. Coba lagi.'), findsOneWidget);
+    expect(find.text('Tampilkan QRIS'), findsOneWidget);
+
+    await tester.tap(find.text('Bayar lewat halaman Midtrans'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(h.snapUrl, 'https://app.sandbox.midtrans.com/snap/v4/x');
     final paths = h.reqs.map((r) => '${r.method} ${r.url.path}').toList();
     expect(paths.last, 'GET /api/v1/orders/KK-1');
-    expect(paths.where((p) => p.endsWith('/online')).length, 1);
+    expect(h.count('/online'), 1);
+    expect(h.count('/qris'), 1);
     await _close(tester);
   });
 
@@ -397,29 +473,24 @@ void main() {
     await _close(tester);
   });
 
-  testWidgets('online dengan payment_url tersimpan: Snap dibuka langsung', (
+  testWidgets('halaman Midtrans sudah pernah dibuka: QRIS tidak dibuat otomatis, Snap lama dipakai lagi', (
     tester,
   ) async {
     const url = 'https://app.sandbox.midtrans.com/snap/v4/lama';
-    final withUrl = _order(
-      method: 'online',
-      payment: {
-        'method': 'online',
-        'status': 'pending',
-        'amount': 99000,
-        'payment_url': url,
-      },
-    );
+    final withUrl = _order(method: 'online', payment: _online(url: url));
     final h = await _open(
       tester,
       arg: withUrl,
       handler: (r) async => _json({'data': withUrl}),
     );
-    await tester.tap(find.text('Bayar dengan QRIS / E-Wallet'));
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(h.count('/qris'), 0);
+    expect(find.text('Tampilkan QRIS'), findsOneWidget);
+    await tester.tap(find.text('Bayar lewat halaman Midtrans'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(h.snapUrl, url);
-    expect(h.reqs.where((r) => r.url.path.endsWith('/online')), isEmpty);
+    expect(h.count('/online'), 0);
     await _close(tester);
   });
 
@@ -499,6 +570,9 @@ void main() {
       arg: _order(method: 'online'),
       opener: () => gate.future,
       handler: (r) async {
+        if (r.url.path.endsWith('/qris')) {
+          return _gagal(502, 'Gagal membuat QRIS. Coba lagi.');
+        }
         if (r.url.path.endsWith('/online')) {
           return _json({
             'data': _order(
@@ -524,7 +598,8 @@ void main() {
         });
       },
     );
-    await tester.tap(find.text('Bayar dengan QRIS / E-Wallet'));
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tap(find.text('Bayar lewat halaman Midtrans'));
     await tester.pump(const Duration(milliseconds: 100));
     paid = true;
     await tester.pump(const Duration(seconds: 5));

@@ -1,3 +1,5 @@
+// Kerangka tampilan bersama layar auth (lupa sandi, verifikasi kode, atur ulang sandi): logo,
+// nama aplikasi, dan slogan di atas, isi form dari layar pemanggil di bawah. Hanya tampilan.
 import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
@@ -92,7 +94,7 @@ class _BrandHeader extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          'Simple shopping experience',
+          'Pesan katering jadi mudah',
           style: AppTextStyles.bodyMedium.copyWith(fontSize: 13),
         ),
       ],

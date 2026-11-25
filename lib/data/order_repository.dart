@@ -1,4 +1,4 @@
-// Repository pesanan pelanggan: hitung harga (quote), buat pesanan, bayar (VA/Midtrans Snap), daftar,
+// Repository pesanan pelanggan: hitung harga (quote), buat pesanan, bayar (VA/Midtrans Snap/QRIS), daftar,
 // batal, selesai, pesan WhatsApp, pesan lagi, dan ulasan. Dipakai layar checkout, pembayaran, dan pesanan.
 import '../api/api_client.dart';
 import '../models/order_api_model.dart';
@@ -45,9 +45,14 @@ class OrderRepository {
   Future<OrderApiModel> startOnline(String code) async =>
       _order(await _api.post('${_path(code)}/online'));
 
-  /// GET /me/orders: daftar pesanan milik pengguna untuk [tab] tertentu, dengan pencarian [q]
-  /// (opsional) dan halaman [page]/[limit]. Mengembalikan isi halaman dan [total] dari `meta`
-  /// (atau jumlah item bila `meta` tidak ada).
+  /// POST /orders/:code/qris: membuat kode QRIS yang ditampilkan langsung di aplikasi.
+  /// Idempoten di server (satu QR per pesanan).
+  Future<OrderApiModel> startQris(String code) async =>
+      _order(await _api.post('${_path(code)}/qris'));
+
+  /// GET /me/orders: satu halaman pesanan milik pembeli untuk [tab] (mis. `active`,
+  /// `completed`, `cancelled`), disaring kata kunci [q] bila diisi. `total` dari `meta.total`,
+  /// atau jumlah item halaman ini bila `meta` tidak ada.
   Future<({List<OrderApiModel> items, int total})> list({
     required String tab,
     String? q,

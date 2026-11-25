@@ -3,10 +3,18 @@
 
 /// Kumpulan pengaturan koneksi ke backend.
 class ApiConfig {
-  /// Alamat dasar API (sudah termasuk `/api/v1`).
-  ///
-  /// Bisa diganti saat build atau run dengan `--dart-define=API_BASE_URL=<alamat>`;
-  /// bila tidak diisi, dipakai alamat server Heroku di bawah.
-  static const String baseUrl = String.fromEnvironment('API_BASE_URL',
+  /// Nilai `--dart-define=API_BASE_URL`. Boleh relatif (mis. `/api/v1`) untuk
+  /// build web demo: API lalu mengikuti alamat halaman yang sedang dibuka,
+  /// jadi build yang sama tetap jalan walau IP WiFi laptop berubah.
+  static const String _raw = String.fromEnvironment('API_BASE_URL',
       defaultValue: 'https://ketring-45f82aef1ca0.herokuapp.com/api/v1');
+
+  /// Alamat dasar API yang dipakai ApiClient: [_raw] apa adanya bila sudah
+  /// lengkap (punya skema http/https), atau digabung dengan alamat halaman
+  /// yang sedang dibuka ([Uri.base]) bila relatif.
+  static String get baseUrl => resolve(_raw, Uri.base);
+
+  /// Alamat lengkap dibiarkan; alamat relatif digabung dengan [page].
+  static String resolve(String raw, Uri page) =>
+      Uri.parse(raw).hasScheme ? raw : page.resolve(raw).toString();
 }

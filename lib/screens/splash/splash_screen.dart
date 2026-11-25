@@ -94,7 +94,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
             ),
             const SizedBox(height: 6),
             Text(
-              'Simple shopping experience',
+              'Pesan katering jadi mudah',
               style: AppTextStyles.bodyMedium.copyWith(
                 color: AppColors.textSecondary,
                 fontSize: 14,

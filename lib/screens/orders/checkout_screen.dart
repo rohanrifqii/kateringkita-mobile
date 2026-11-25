@@ -1,6 +1,7 @@
 // Layar Checkout: dibuka dari keranjang (CartProvider) untuk memesan semua menu di keranjang dari satu toko.
 // Alur: wajib login → muat titik temu toko (CatalogRepository, GET /menus/{id}) → hitung total di server
 // (OrderRepository.quote, POST /orders/quote) → buat pesanan (POST /orders) → lanjut ke layar Pembayaran.
+// Voucher toko & platform dipilih lewat lembar pemilih voucher (showVoucherPicker) dan ikut dikirim sebagai promo_codes.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -26,6 +27,8 @@ import '../../widgets/app_modal_dialog.dart';
 import '../../widgets/menu_image.dart';
 import '../../widgets/payment_method_tile.dart';
 import '../../widgets/primary_button.dart';
+import '../../models/voucher.dart';
+import '../../widgets/voucher_picker_sheet.dart';
 import 'pickup_point_picker_screen.dart';
 
 /// Layar checkout isi keranjang: data pemesan, titik temu, waktu ambil, metode bayar, dan total
@@ -51,7 +54,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           method: PaymentMethod.online,
           code: 'QR',
           title: 'QRIS / E-Wallet',
-          subtitle: 'GoPay, ShopeePay & QRIS lewat Midtrans',
+          subtitle: 'QR tampil di aplikasi: GoPay, OVO, DANA, m-banking',
           badge: 'Cepat',
           accent: AppColors.primaryDark,
           accentBg: AppColors.primarySoft,
@@ -72,6 +75,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _noteController = TextEditingController();
   final TextEditingController _promoController = TextEditingController();
+  // Voucher: maks satu voucher toko + satu voucher platform; kode manual opsional
+  Voucher? _tokoVoucher;
+  Voucher? _platformVoucher;
+  bool _manualCode = false;
 
   /// true setelah lolos requireLogin.
   bool _authorized = false;
@@ -262,14 +269,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   /// Badan permintaan yang sama untuk quote dan buat pesanan. `pickup_at` (UTC, ISO-8601) hanya
-  /// dikirim bila pengguna memilih tanggal-jam; tanpa itu server memakai "secepatnya".
+  /// dikirim bila pengguna memilih tanggal-jam; tanpa itu server memakai "secepatnya". `promo_codes` berisi kode
+  /// voucher toko, voucher platform, dan kode manual (huruf besar), tanpa duplikat; kosong bila tidak ada.
   Map<String, dynamic> _body() {
     final at = _pickupAtUtc;
     return {
       'items': _cart.toQuoteItems(),
       'pickup_point_id': _point?.id,
       'note': _opt(_noteController),
-      'promo_code': _opt(_promoController),
+      'promo_codes': <String>{
+        if (_tokoVoucher != null) _tokoVoucher!.code,
+        if (_platformVoucher != null) _platformVoucher!.code,
+        if (_opt(_promoController) != null) _opt(_promoController)!.toUpperCase(),
+      }.toList(),
       'customer_name': _opt(_nameController),
       'customer_phone': _opt(_phoneController),
       if (!_isAsap && at != null) 'pickup_at': at.toUtc().toIso8601String(),
@@ -277,7 +289,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   /// Memetakan `fields` galat validasi server ke tampilan: `items.N...` ke baris keranjang ke-N,
-  /// selebihnya ke kolom titik temu, waktu ambil, promo, nama, telepon, atau catatan.
+  /// selebihnya ke kolom titik temu, waktu ambil, voucher (`promo_code`/`promo_codes`), nama, telepon, atau catatan.
   /// Mengembalikan true bila ada yang terpetakan. Galat baris lama selalu diganti.
   bool _applyFieldErrors(ApiException e) {
     final items = _cart.items;
@@ -298,7 +310,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       } else if (k == 'pickup_point_id') {
         _pointError = v.first;
         matched = true;
-      } else if (k == 'promo_code') {
+      } else if (k == 'promo_code' || k == 'promo_codes') {
         _promoError = v.first;
         matched = true;
       } else if (k == 'customer_name') {
@@ -824,8 +836,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  /// Formulir data pemesan. Mengubah kolom yang sedang bergalat menghapus galatnya dan meminta
-  /// quote ulang; kode promo selalu memicu quote ulang karena memengaruhi total.
+  /// Formulir data pemesan, diakhiri bagian Voucher. Mengubah kolom yang sedang bergalat menghapus galatnya dan
+  /// meminta quote ulang; memilih, melepas, atau mengetik kode voucher selalu memicu quote ulang karena memengaruhi total.
   Widget _buildOrdererForm(CartProvider cart) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -882,20 +894,111 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           },
         ),
         const SizedBox(height: 12),
-        _OrderField(
-          label: 'Kode Promo (opsional)',
-          controller: _promoController,
-          hintText: 'Masukkan kode promo',
-          action: TextInputAction.done,
-          textCapitalization: TextCapitalization.characters,
-          errorText: _promoError,
-          onChanged: (_) {
-            if (_promoError != null) setState(() => _promoError = null);
-            _scheduleQuote();
-          },
-        ),
+        _buildVoucherSection(cart),
       ],
     );
+  }
+
+  /// Bagian Voucher: baris voucher toko & platform (diketuk membuka lembar pemilih, tombol X melepas voucher),
+  /// tombol "Pakai kode" yang memunculkan kolom kode manual, dan galat voucher dari server.
+  Widget _buildVoucherSection(CartProvider cart) {
+    Widget baris(VoucherSlot slot, String label, Voucher? v) => InkWell(
+          key: ValueKey('voucher-slot-${slot.name}'),
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _pickVoucher(cart, slot),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: Row(
+              children: [
+                Icon(Icons.confirmation_number_outlined,
+                    size: 20, color: slot == VoucherSlot.toko ? AppColors.primary : AppColors.blue),
+                const SizedBox(width: 10),
+                Expanded(child: Text(label, style: AppTextStyles.bodyMedium)),
+                if (v == null)
+                  Text('Pilih voucher', style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary))
+                else ...[
+                  Flexible(
+                    child: Text('${v.code} · ${v.label}',
+                        overflow: TextOverflow.ellipsis,
+                        style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w700, color: AppColors.primary)),
+                  ),
+                  IconButton(
+                    tooltip: 'Lepas voucher',
+                    visualDensity: VisualDensity.compact,
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    onPressed: () {
+                      setState(() {
+                        if (slot == VoucherSlot.toko) {
+                          _tokoVoucher = null;
+                        } else {
+                          _platformVoucher = null;
+                        }
+                        _promoError = null;
+                      });
+                      _scheduleQuote();
+                    },
+                  ),
+                ],
+                if (v == null) const Icon(Icons.chevron_right_rounded),
+              ],
+            ),
+          ),
+        );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('Voucher', style: AppTextStyles.h4),
+        baris(VoucherSlot.toko, 'Voucher toko', _tokoVoucher),
+        baris(VoucherSlot.platform, 'Voucher platform', _platformVoucher),
+        if (_manualCode)
+          TextField(
+            key: const ValueKey('voucher-manual'),
+            controller: _promoController,
+            textCapitalization: TextCapitalization.characters,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(labelText: 'Kode voucher', hintText: 'Kode dari WhatsApp / Instagram'),
+            onChanged: (_) {
+              if (_promoError != null) setState(() => _promoError = null);
+              _scheduleQuote();
+            },
+          )
+        else
+          TextButton(
+            onPressed: () => setState(() => _manualCode = true),
+            child: const Text('Pakai kode'),
+          ),
+        if (_promoError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(_promoError!, style: AppTextStyles.bodySmall.copyWith(color: AppColors.danger)),
+          ),
+      ],
+    );
+  }
+
+  /// Buka lembar pemilih voucher untuk [slot] (toko/platform) dengan toko, subtotal, dan metode bayar saat ini, lalu
+  /// simpan pilihannya dan minta quote ulang. Tidak melakukan apa-apa bila keranjang belum punya toko atau batal.
+  Future<void> _pickVoucher(CartProvider cart, VoucherSlot slot) async {
+    final merchantId = cart.merchantId;
+    if (merchantId == null) return;
+    final v = await showVoucherPicker(
+      context,
+      slot: slot,
+      merchantId: merchantId,
+      // quote gagal / belum ada (mis. titik temu belum dipilih): estimasi keranjang, bukan 0
+      subtotal: _quote?.subtotal ?? cart.items.fold<int>(0, (s, i) => s + i.estimatedLineTotal),
+      paymentMethod: _payment.apiValue,
+    );
+    if (v == null || !mounted) return;
+    setState(() {
+      if (slot == VoucherSlot.toko) {
+        _tokoVoucher = v;
+      } else {
+        _platformVoucher = v;
+      }
+      _promoError = null;
+    });
+    _scheduleQuote();
   }
 
   /// Kartu titik temu: peta mini OSM sebagai latar, nama & keterangan titik terpilih, atau status
@@ -1264,7 +1367,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         children: [
           _summaryRow('Subtotal (${cart.count} Porsi)',
               AppCurrency.format(q.subtotal)),
-          if (q.discount > 0)
+          // voucher per slot; server lama / tanpa rincian → satu baris Diskon
+          if (q.vouchersApplied.isNotEmpty)
+            for (final v in q.vouchersApplied)
+              if (v.amount > 0)
+                _summaryRow(v.slot == VoucherSlot.toko ? 'Voucher toko (${v.code})' : 'Voucher platform (${v.code})',
+                    '- ${AppCurrency.format(v.amount)}', color: AppColors.success)
+              else
+                const SizedBox.shrink()
+          else if (q.discount > 0)
             _summaryRow('Diskon', '- ${AppCurrency.format(q.discount)}',
                 color: AppColors.success),
           _summaryRow(
@@ -1359,27 +1470,23 @@ class _OrderField extends StatefulWidget {
   final String label;
   final TextEditingController controller;
   final TextInputType? keyboardType;
-  final TextInputAction action;
   final Widget? trailing;
   final Color? fillColor;
   final int lines;
   final String hintText;
   final String? errorText;
   final ValueChanged<String>? onChanged;
-  final TextCapitalization textCapitalization;
 
   const _OrderField({
     required this.label,
     required this.controller,
     this.keyboardType,
-    this.action = TextInputAction.next,
     this.trailing,
     this.fillColor,
     this.lines = 1,
     this.hintText = '',
     this.errorText,
     this.onChanged,
-    this.textCapitalization = TextCapitalization.none,
   });
 
   @override
@@ -1445,8 +1552,7 @@ class _OrderFieldState extends State<_OrderField> {
                         controller: widget.controller,
                         focusNode: _focusNode,
                         keyboardType: widget.keyboardType,
-                        textInputAction: widget.action,
-                        textCapitalization: widget.textCapitalization,
+                        textInputAction: TextInputAction.next,
                         onChanged: widget.onChanged,
                         minLines: widget.lines,
                         maxLines: widget.lines,

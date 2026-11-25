@@ -1,5 +1,6 @@
 // Dialog modal bergaya KateringKita (ikon tanya/centang, judul, pesan, tombol) beserta pintasan untuk
-// kasus umum: keluar akun, konfirmasi bayar, sandi diperbarui, berhasil login, dan pusat bantuan.
+// kasus umum: keluar akun, konfirmasi bayar, sandi diperbarui, dan berhasil login. (Pusat Bantuan kini
+// berupa layar tiket, bukan modal WhatsApp.)
 import 'package:flutter/material.dart';
 
 import '../core/app_colors.dart';
@@ -155,28 +156,6 @@ class AppModalDialog extends StatelessWidget {
         Navigator.pop(context);
         onConfirm();
       },
-    );
-  }
-
-  /// 5. Modal Pusat Bantuan (Customer Service WhatsApp); tombol utama menutup
-  /// modal lalu memanggil [onWhatsAppPressed].
-  static Future<void> showCustomerSupport(
-    BuildContext context, {
-    required VoidCallback onWhatsAppPressed,
-  }) {
-    return show(
-      context: context,
-      type: AppModalType.question,
-      title: 'Pusat Bantuan',
-      message:
-          'Kamu akan diarahkan ke Customer Service KateringKita via WhatsApp untuk bantuan kendala pesanan, katering, atau pertanyaan lainnya.',
-      primaryButtonText: 'Hubungi via WhatsApp',
-      secondaryButtonText: 'Batal',
-      onPrimaryPressed: () {
-        Navigator.pop(context);
-        onWhatsAppPressed();
-      },
-      onSecondaryPressed: () => Navigator.pop(context),
     );
   }
 

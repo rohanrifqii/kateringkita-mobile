@@ -1,4 +1,4 @@
-// Layar Daftar akun pelanggan: nama, email, No. HP, sandi. Dibuka dari Login ("Create New Account").
+// Layar Daftar akun pelanggan: nama, email, nomor WhatsApp, sandi. Dibuka dari tautan "Daftar sekarang" di layar Masuk.
 // Daftar lewat AuthRepository -> POST /auth/customer/register, lalu langsung login lewat AuthProvider (POST /auth/login).
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -13,7 +13,7 @@ import '../../providers/auth_provider.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../widgets/primary_button.dart';
 
-/// Formulir pendaftaran pelanggan. Tombol Sign Up aktif hanya bila kotak syarat & ketentuan dicentang
+/// Formulir pendaftaran pelanggan. Tombol Daftar aktif hanya bila kotak syarat & ketentuan dicentang
 /// (centangnya tidak dikirim ke server). Sukses: masuk MainNav dalam keadaan sudah login.
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -49,13 +49,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  /// Validasi lokal (semua terisi, format email, HP 08 + 10–13 digit, aturan sandi), daftar ke server,
+  /// Validasi lokal (semua terisi, format email, HP 08 + 10–13 digit setelah spasi/tanda hubung dibuang, aturan sandi),
+  /// daftar ke server,
   /// lalu login otomatis. Bila daftar ditolak, galat ditaruh per kolom (atau SnackBar bila bukan galat kolom).
   /// Bila daftar berhasil tetapi login otomatis gagal, pengguna diarahkan ke Login dengan email terisi.
   Future<void> _onSignUp() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
-    final phone = _phoneController.text.trim();
+    // contoh di kolom memakai tanda hubung (08xx-xxxx-xxxx): spasi/tanda hubung dibuang sebelum dicek dan dikirim
+    final phone = _phoneController.text.replaceAll(RegExp(r'[\s-]'), '');
     final password = _passwordController.text;
 
     if (name.isEmpty || email.isEmpty || phone.isEmpty || password.isEmpty) {
@@ -137,7 +139,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 40),
               // Header
               Text(
-                'Create Account',
+                'Buat Akun',
                 style: AppTextStyles.h1.copyWith(
                   fontSize: 28,
                   fontWeight: FontWeight.w800,
@@ -146,7 +148,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 28),
               // Name Field
               CustomTextField(
-                label: 'Full Name',
+                label: 'Nama Lengkap',
                 hint: 'Masukkan nama lengkap',
                 controller: _nameController,
                 errorText: _errors['full_name'],
@@ -154,7 +156,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 16),
               // Email Field
               CustomTextField(
-                label: 'Email Address',
+                label: 'Alamat Email',
                 hint: 'Masukkan email',
                 controller: _emailController,
                 errorText: _errors['email'],
@@ -163,7 +165,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               const SizedBox(height: 16),
               // Phone Field
               CustomTextField(
-                label: 'Phone Number',
+                label: 'Nomor WhatsApp',
                 hint: '08xx-xxxx-xxxx',
                 controller: _phoneController,
                 errorText: _errors['phone'],
@@ -193,16 +195,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              // Terms & Conditions Checkbox
-              Row(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      setState(() {
-                        _agreeToTerms = !_agreeToTerms;
-                      });
-                    },
-                    child: Container(
+              // Kotak centang Syarat & Ketentuan
+              // seluruh baris (kotak + tulisan) bisa diketuk, bukan hanya kotak 22 px
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  setState(() {
+                    _agreeToTerms = !_agreeToTerms;
+                  });
+                },
+                child: Row(
+                  children: [
+                    Container(
                       width: 22,
                       height: 22,
                       decoration: BoxDecoration(
@@ -223,27 +227,27 @@ class _SignUpScreenState extends State<SignUpScreen> {
                             )
                           : null,
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'I agree to Terms & Conditions',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                        fontSize: 13,
-                        color: AppColors.textPrimary,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Saya menyetujui Syarat & Ketentuan',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          fontSize: 13,
+                          color: AppColors.textPrimary,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
               const SizedBox(height: 28),
-              // Sign Up Button
+              // Tombol Daftar (nonaktif sampai syarat dicentang)
               PrimaryButton(
-                text: _loading ? 'Menyimpan...' : 'Sign Up',
+                text: _loading ? 'Menyimpan...' : 'Daftar',
                 onPressed: (_agreeToTerms && !_loading) ? _onSignUp : null,
               ),
               const SizedBox(height: 20),
-              // Back to Login link
+              // Tautan "Sudah punya akun? Masuk"
               Center(
                 child: GestureDetector(
                   onTap: () {
@@ -263,7 +267,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       ),
                       children: [
                         TextSpan(
-                          text: 'Login',
+                          text: 'Masuk',
                           style: AppTextStyles.bodyMedium.copyWith(
                             color: AppColors.primary,
                             fontWeight: FontWeight.w700,

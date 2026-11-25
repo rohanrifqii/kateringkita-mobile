@@ -1,4 +1,4 @@
-// Layar Login: masuk dengan email atau No. WhatsApp + sandi. Dibuka dari splash/onboarding, setelah daftar,
+// Layar Masuk (Login): masuk dengan email atau No. WhatsApp + sandi. Dibuka dari splash/onboarding, setelah daftar,
 // atau dari requireLogin (mode tamu). Login lewat AuthProvider -> AuthRepository -> POST /auth/login.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -125,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       const SizedBox(height: 40),
                       // Header
                       Text(
-                        'Login',
+                        'Masuk',
                         style: AppTextStyles.h1.copyWith(
                           fontSize: 28,
                           fontWeight: FontWeight.w800,
@@ -162,20 +162,20 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                       const SizedBox(height: 32),
-                      // Login Button
+                      // Tombol Masuk
                       PrimaryButton(
-                        text: _loading ? 'Memeriksa...' : 'Login',
+                        text: _loading ? 'Memeriksa...' : 'Masuk',
                         onPressed: _loading ? null : _onLogin,
                       ),
                       const SizedBox(height: 16),
-                      // Forgot Password link
+                      // Tautan "Lupa password?" ke layar Lupa Password
                       Center(
                         child: TextButton(
                           onPressed: () {
                             Navigator.pushNamed(context, AppRoutes.forgotPassword);
                           },
                           child: Text(
-                            'Forgot Password?',
+                            'Lupa password?',
                             style: AppTextStyles.bodyMedium.copyWith(
                               color: AppColors.blue,
                               fontWeight: FontWeight.w600,
@@ -185,7 +185,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const Spacer(),
                       const SizedBox(height: 16),
-                      // Create New Account link
+                      // Tautan daftar akun baru
                       Center(
                         child: GestureDetector(
                           onTap: () {
@@ -200,7 +200,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               ),
                               children: [
                                 TextSpan(
-                                  text: 'Create New Account',
+                                  text: 'Daftar sekarang',
                                   style: AppTextStyles.bodyMedium.copyWith(
                                     color: AppColors.primary,
                                     fontWeight: FontWeight.w700,
