@@ -113,6 +113,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
       if (!mounted) return;
       setState(() => _loading = false);
       _showMessage('Akun berhasil dibuat! Silakan login.');
+      // Login otomatis gagal: ke halaman Login (bukan beranda) dengan email langsung terisi.
       Navigator.pushNamedAndRemoveUntil(
         context,
         AppRoutes.login,

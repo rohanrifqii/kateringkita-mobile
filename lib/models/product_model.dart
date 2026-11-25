@@ -78,6 +78,11 @@ class ProductModel {
   /// Nama satuan harga, bawaan `porsi`.
   final String unitLabel;
   final String? imageUrl;
+
+  /// Foto tambahan menu (maks 4) selain [imageUrl], dari kolom `gallery` JSON.
+  /// Diisi dari detail menu (GET /menus/{id}); bila backend tidak mengirimnya (misalnya data kartu
+  /// dari daftar menu), isinya daftar kosong.
+  final List<String> gallery;
   final CategoryModel? category;
   final MerchantRef merchant;
 
@@ -109,6 +114,7 @@ class ProductModel {
     required this.price,
     this.unitLabel = 'porsi',
     this.imageUrl,
+    this.gallery = const [],
     this.category,
     required this.merchant,
     this.available = 0,
@@ -130,6 +136,10 @@ class ProductModel {
         price: (json['price'] as num).toInt(),
         unitLabel: (json['unit_label'] as String?) ?? 'porsi',
         imageUrl: json['image_url'] as String?,
+        /// Kolom tidak ada = daftar kosong; elemen yang bukan teks (URL) dibuang.
+        gallery: ((json['gallery'] as List?) ?? const [])
+            .whereType<String>()
+            .toList(),
         category: json['category'] == null
             ? null
             : CategoryModel.fromJson(json['category'] as Map<String, dynamic>),
@@ -151,6 +161,10 @@ class ProductModel {
             (json['is_preorder'] as bool?) ?? json['badge'] == 'preorder',
         preorderDays: (json['preorder_days'] as num?)?.toInt() ?? 0,
       );
+
+  /// Semua foto menu berurutan: foto utama [imageUrl] (dilewati bila null) lalu isi [gallery].
+  /// Dipakai galeri geser di layar detail menu; daftar kosong bila menu tidak punya foto sama sekali.
+  List<String> get photos => [?imageUrl, ...gallery];
 
   // Getter kompatibilitas untuk layar lama.
   /// Nama lama untuk [ratingAvg].
@@ -198,6 +212,7 @@ class ProductModel {
         price: price,
         unitLabel: unitLabel,
         imageUrl: imageUrl,
+        gallery: gallery,
         category: category,
         merchant: merchant,
         available: available,

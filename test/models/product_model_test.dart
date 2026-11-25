@@ -124,4 +124,21 @@ void main() {
     expect(c.isFavorite, false);
     expect(c.id, p.id);
   });
+
+  test('gallery: foto utama lalu foto tambahan; kartu tanpa gallery → hanya foto utama', () {
+    final p = ProductModel.fromJson({
+      ...card(),
+      'gallery': ['https://x/a.jpg', 'https://x/b.jpg'],
+    });
+    expect(p.gallery, ['https://x/a.jpg', 'https://x/b.jpg']);
+    expect(p.photos, ['https://x/y.jpg', 'https://x/a.jpg', 'https://x/b.jpg']);
+    expect(p.copyWith(isFavorite: false).gallery, p.gallery);
+    expect(ProductModel.fromJson(card()).photos, ['https://x/y.jpg']);
+    expect(ProductModel.fromJson(card(imageUrl: null)).photos, isEmpty);
+    final hanyaGaleri = ProductModel.fromJson({
+      ...card(imageUrl: null),
+      'gallery': ['https://x/a.jpg'],
+    });
+    expect(hanyaGaleri.photos, ['https://x/a.jpg']);
+  });
 }

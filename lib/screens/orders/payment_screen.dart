@@ -72,6 +72,7 @@ class _PaymentScreenState extends State<PaymentScreen>
   late OrderApiModel _order;
   late OrderRepository _repo;
 
+  // Bank terpilih untuk Virtual Account (nama tampilan, kunci [_bankCodes]).
   String _selectedBank = 'BCA';
   int _remainingSeconds = 0;
   Timer? _countdownTimer;
@@ -242,6 +243,7 @@ class _PaymentScreenState extends State<PaymentScreen>
     });
   }
 
+  // Mengubah detik menjadi teks jj:mm:dd.
   String _formatTimer(int sec) {
     final h = sec ~/ 3600;
     final m = (sec % 3600) ~/ 60;
@@ -617,6 +619,7 @@ class _PaymentScreenState extends State<PaymentScreen>
   // buat nomor.
   Widget _vaSection() {
     final va = _va;
+    // Nomor VA sudah dibuat server: kartu nomor rekening VA + tombol salin.
     if (va != null) {
       return Container(
         padding: const EdgeInsets.all(16),
@@ -671,6 +674,7 @@ class _PaymentScreenState extends State<PaymentScreen>
         children: [
           Text('Pilih Bank', style: AppTextStyles.h4),
           const SizedBox(height: 10),
+          // Pilihan bank; tidak bisa diganti selama permintaan masih berjalan.
           Wrap(
             spacing: 8,
             children: [
@@ -773,6 +777,7 @@ class _PaymentScreenState extends State<PaymentScreen>
           ),
         ),
         const SizedBox(height: 14),
+        // Kotak QR: digambar dari `qrString` server.
         Center(
           child: Container(
             padding: const EdgeInsets.all(8),

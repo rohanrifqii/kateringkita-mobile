@@ -30,6 +30,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   /// Label tab yang tampil di layar.
   static const tabs = ['Aktif', 'Selesai', 'Dibatalkan'];
 
+  /// Indeks tab terpilih: 0 = Aktif, 1 = Selesai, 2 = Dibatalkan (urutan [tabs]).
   int _selectedTabIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   /// Kata kunci yang sudah dikirim ke OrderListView (setelah jeda ketik).

@@ -1,4 +1,4 @@
-package com.example.kateringkita_pbl
+package id.kateringkita.app
 
 import io.flutter.embedding.android.FlutterActivity
 

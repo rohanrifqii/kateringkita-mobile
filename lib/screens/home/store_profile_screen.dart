@@ -354,13 +354,13 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
 
   // ==================== 1. HERO & FLOATING STORE CARD ====================
 
-  /// Bagian atas layar: sampul berwarna utama, bar tombol (kembali, keranjang, cari, favorit, bagikan), dan kartu
+  /// Bagian atas layar: sampul (foto cover toko, atau warna utama bila belum ada), bar tombol (kembali, keranjang, cari, favorit, bagikan), dan kartu
   /// info toko yang menumpang di atas sampul.
   Widget _buildStoreHeroAndHeaderCard(bool isDark) {
     return Stack(
       clipBehavior: Clip.none,
       children: [
-        // Latar sampul: warna utama polos (belum ada gambar sampul) dengan lapisan gelap
+        // Latar sampul: foto cover toko atau warna utama polos, ditimpa lapisan gelap
         Column(
           children: [
             SizedBox(
@@ -369,7 +369,10 @@ class _StoreProfileScreenState extends State<StoreProfileScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  Container(color: AppColors.primary),
+                  // Foto sampul dari penjual (cover_url); bila belum dipasang, warna utama polos
+                  _vendor.coverUrl == null
+                      ? Container(color: AppColors.primary)
+                      : MenuImage(_vendor.coverUrl, fit: BoxFit.cover),
                   // Lapisan gelap bergradasi agar tombol atas terlihat jelas
                   Container(
                     decoration: BoxDecoration(
