@@ -1,14 +1,18 @@
-// Layar Asisten AI (tab ketiga MainNavigationScreen, juga rute AppRoutes.aiAssistant): rekomendasi menu + kalkulator danusan.
+// Layar Asisten Menu (tab ketiga MainNavigationScreen, juga rute AppRoutes.aiAssistant): rekomendasi menu + kalkulator danusan.
+// Tampilan netral bergaya shadcn_ui (ShadCard/ShadButton, tema buildAppShadTheme); oranye merek hanya untuk tombol utama
+// dan chip aktif. Setelah hasil ada, formulir diringkas jadi satu baris dengan tombol "Ubah".
 // Rekomendasi lewat AssistantRepository → POST /assistant/recommendations di backend KateringKita (kunci AI ada di server);
 // riwayat sesi disimpan lokal per akun lewat AiHistoryStore (SharedPreferences), bukan di backend.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 import '../../api/api_exception.dart';
 import '../../core/app_colors.dart';
 import '../../core/app_currency.dart';
 import '../../core/app_routes.dart';
+import '../../core/app_shad_theme.dart';
 import '../../core/danusan_calculator.dart';
 import '../../core/relative_time.dart';
 import '../../core/require_login.dart';
@@ -24,8 +28,13 @@ import '../../providers/cart_provider.dart';
 import '../../widgets/add_to_cart.dart';
 import '../../widgets/menu_image.dart';
 
-/// Warna aksen oranye khusus layar ini (tombol, chip terpilih, angka kalkulator).
-const _accent = Color(0xFFD9774A);
+/// Contoh kebutuhan siap-ketuk di bawah kolom Kebutuhan (lihat [_AIAssistantScreenState._addExample]).
+const _examples = [
+  'Rapat 30 orang',
+  'Danusan kampus',
+  'Snack sore',
+  'Tidak pedas',
+];
 
 /// Asisten AI pembeli: kebutuhan dalam bahasa bebas (+ anggaran, porsi,
 /// kategori opsional) → `POST /assistant/recommendations`. Menu hasil
@@ -88,6 +97,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
 
   /// true bila [_result] dibuka dari riwayat (snapshot lama).
   bool _isSnapshot = false;
+
+  /// true bila formulir dibuka lagi lewat "Ubah" padahal hasil sudah ada.
+  /// Selama false dan [_result] ada, formulir tampil sebagai ringkasan satu baris.
+  bool _editing = false;
 
   /// true selama tombol "Perbarui" pada snapshot riwayat memanggil server lagi.
   bool _refreshing = false;
@@ -154,6 +167,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       _resultBudget = null;
       _session = null;
       _isSnapshot = false;
+      _editing = false;
       _error = null;
       _questionError = null;
       _budgetError = null;
@@ -219,6 +233,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       _result = s.result;
       _resultBudget = s.budget;
       _isSnapshot = true;
+      _editing = false;
       _loading = false;
       _refreshing = false;
       _refreshError = null;
@@ -301,7 +316,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       builder: (c) => AlertDialog(
         title: const Text('Hapus semua riwayat?'),
         content: const Text(
-            'Semua riwayat Asisten AI akunmu di perangkat ini akan dihapus.'),
+            'Semua riwayat Asisten Menu akunmu di perangkat ini akan dihapus.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(c, false),
@@ -347,6 +362,17 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   int? _parse(TextEditingController c) {
     final digits = c.text.replaceAll(RegExp(r'[^0-9]'), '');
     return digits.isEmpty ? null : int.tryParse(digits);
+  }
+
+  /// Chip contoh diketuk: isi kolom Kebutuhan bila kosong, selain itu
+  /// tambahkan [text] di belakangnya dengan pemisah ", ".
+  void _addExample(String text) {
+    final current = _questionController.text.trim();
+    final next = current.isEmpty ? text : '$current, $text';
+    _questionController.value = TextEditingValue(
+      text: next,
+      selection: TextSelection.collapsed(offset: next.length),
+    );
   }
 
   /// Validasi lokal sebelum kirim: kebutuhan 3–500 karakter, anggaran dan
@@ -425,6 +451,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         _resultBudget = budget;
         _session = session;
         _isSnapshot = false;
+        _editing = false;
         _refreshError = null;
         _loading = false;
       });
@@ -473,41 +500,50 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    // Formulir diringkas bila hasil sudah ada dan pengguna belum menekan "Ubah".
+    final collapsed = _result != null && !_editing;
 
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: AppColors.background,
-      endDrawer: auth.isLoggedIn ? _historyDrawer() : null,
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _appBar(auth.isLoggedIn),
-            // Isi yang bisa digulir: sapaan, formulir, dan hasil; tamu hanya melihat ajakan masuk.
-            Expanded(
-              child: SingleChildScrollView(
-                controller: _scrollController,
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding:
-                    EdgeInsets.fromLTRB(20, 8, 20, keyboardOpen ? 16 : 110),
-                child: auth.isLoggedIn
-                    ? Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _greeting(auth.user?.fullName),
-                          const SizedBox(height: 16),
-                          _form(),
-                          if (_result != null) ...[
-                            const SizedBox(height: 18),
-                            _resultSection(_result!),
+    return ShadTheme(
+      data: buildAppShadTheme(),
+      child: Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: AppColors.background,
+        endDrawer: auth.isLoggedIn ? _historyDrawer() : null,
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              _appBar(auth.isLoggedIn),
+              // Isi yang bisa digulir: sapaan, formulir (atau ringkasannya), lalu
+              // kerangka muat atau hasil; tamu hanya melihat ajakan masuk.
+              Expanded(
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding:
+                      EdgeInsets.fromLTRB(16, 8, 16, keyboardOpen ? 16 : 112),
+                  child: auth.isLoggedIn
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _greeting(auth.user?.fullName),
+                            const SizedBox(height: 16),
+                            collapsed ? _formSummary() : _form(),
+                            if (_loading) ...[
+                              const SizedBox(height: 16),
+                              _loadingResults(),
+                            ] else if (_result != null) ...[
+                              const SizedBox(height: 16),
+                              _resultSection(_result!),
+                            ],
                           ],
-                        ],
-                      )
-                    : _guestPrompt(),
+                        )
+                      : _guestPrompt(),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -526,13 +562,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: IconButton(
+                    tooltip: 'Kembali',
                     icon: Icon(Icons.arrow_back_rounded,
-                        color: AppColors.textPrimary, size: 22),
+                        color: AppColors.textPrimary, size: 24),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ),
               Text(
-                'AI Assistant',
+                'Asisten Menu',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
@@ -546,7 +583,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                   child: IconButton(
                     tooltip: 'Riwayat',
                     icon: Icon(Icons.history_rounded,
-                        color: AppColors.textPrimary, size: 22),
+                        color: AppColors.textPrimary, size: 24),
                     onPressed: () {
                       FocusScope.of(context).unfocus();
                       _scaffoldKey.currentState?.openEndDrawer();
@@ -566,8 +603,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       backgroundColor: AppColors.background,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(28),
-          bottomLeft: Radius.circular(28),
+          topLeft: Radius.circular(16),
+          bottomLeft: Radius.circular(16),
         ),
       ),
       child: SafeArea(
@@ -576,10 +613,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
           children: [
             // 1. Judul riwayat + tombol tutup (X).
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 14, 12, 6),
+              padding: const EdgeInsets.fromLTRB(16, 16, 8, 8),
               child: Row(
                 children: [
-                  _aiBadge(size: 34),
+                  _aiBadge(size: 32),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -594,51 +631,53 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                   IconButton(
                     tooltip: 'Tutup',
                     icon: Icon(Icons.close_rounded,
-                        color: AppColors.textSecondary, size: 22),
+                        color: AppColors.textSecondary, size: 24),
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ],
               ),
             ),
-            // 2. Tombol "Percakapan baru": tutup drawer lalu kosongkan layar.
+            // 2. Tombol "Percakapan baru" (garis netral): tutup drawer lalu kosongkan layar.
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: _accent,
-                  side: const BorderSide(color: _accent),
-                  minimumSize: const Size.fromHeight(44),
+                  foregroundColor: AppColors.textPrimary,
+                  side: BorderSide(color: AppColors.cardBorder),
+                  minimumSize: const Size.fromHeight(48),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(24)),
+                      borderRadius: BorderRadius.circular(12)),
                 ),
                 onPressed: () {
                   Navigator.of(context).pop();
                   _resetScreen();
                 },
                 icon: const Icon(Icons.edit_note_rounded),
-                label: const Text('Percakapan baru'),
+                label: const Text('Percakapan baru',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
               ),
             ),
             // 3. Keterangan penyimpanan + tombol Hapus Semua (hanya bila ada riwayat).
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 4, 12, 0),
+              padding: const EdgeInsets.fromLTRB(16, 4, 8, 0),
               child: Row(
                 children: [
                   Expanded(
                     child: Text(
                       'Tersimpan di perangkat ini untuk akunmu',
                       style: TextStyle(
-                          fontSize: 11, color: AppColors.textSecondary),
+                          fontSize: 12, color: AppColors.textSecondary),
                     ),
                   ),
                   if (_history.isNotEmpty)
                     TextButton(
                       onPressed: _clearHistory,
                       style: TextButton.styleFrom(
-                          foregroundColor: AppColors.danger),
+                          foregroundColor: AppColors.danger,
+                          minimumSize: const Size(44, 44)),
                       child: const Text('Hapus Semua',
                           style: TextStyle(
-                              fontSize: 11.5, fontWeight: FontWeight.w700)),
+                              fontSize: 12, fontWeight: FontWeight.w700)),
                     ),
                 ],
               ),
@@ -648,18 +687,18 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               child: _history.isEmpty
                   ? Center(
                       child: Padding(
-                        padding: const EdgeInsets.all(28),
+                        padding: const EdgeInsets.all(24),
                         child: Text(
                           'Belum ada riwayat. Setiap rekomendasi tersimpan '
                           'otomatis di sini.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
-                              fontSize: 12, color: AppColors.textMuted),
+                              fontSize: 13, color: AppColors.textSecondary),
                         ),
                       ),
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+                      padding: const EdgeInsets.fromLTRB(8, 4, 8, 16),
                       itemCount: _history.length,
                       itemBuilder: (_, i) => _historyTile(_history[i]),
                     ),
@@ -671,22 +710,23 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   }
 
   /// Satu baris riwayat: pertanyaan, waktu simpan, dan total; ketuk untuk
-  /// membuka sesi, ikon tempat sampah untuk menghapusnya.
+  /// membuka sesi, ikon tempat sampah untuk menghapusnya. Sesi yang sedang
+  /// tampil diberi latar [AppColors.primarySoft] (pilihan aktif).
   Widget _historyTile(AiSession s) {
     final selected = s.id == _session?.id;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: 4),
       child: Material(
         color: selected ? AppColors.primarySoft : Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         child: InkWell(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           onTap: () {
             Navigator.of(context).pop();
             _openSession(s);
           },
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
+            padding: const EdgeInsets.fromLTRB(12, 8, 0, 8),
             child: Row(
               children: [
                 Expanded(
@@ -698,17 +738,17 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: 14,
                           fontWeight: FontWeight.w700,
                           color: AppColors.textPrimary,
                         ),
                       ),
-                      const SizedBox(height: 2),
+                      const SizedBox(height: 4),
                       Text(
                         '${relativeTimeWib(s.savedAt)} · '
                         '${AppCurrency.format(s.result.total)}',
                         style: TextStyle(
-                            fontSize: 11, color: AppColors.textMuted),
+                            fontSize: 12, color: AppColors.textSecondary),
                       ),
                     ],
                   ),
@@ -716,7 +756,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 IconButton(
                   tooltip: 'Hapus riwayat',
                   icon: Icon(Icons.delete_outline_rounded,
-                      size: 20, color: AppColors.textMuted),
+                      size: 20, color: AppColors.textSecondary),
                   onPressed: () => _deleteSession(s),
                 ),
               ],
@@ -727,92 +767,86 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
-  /// Gaya kartu putih bersudut bulat yang dipakai bagian-bagian layar ini.
-  BoxDecoration _card() => BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.cardBorder.withValues(alpha: 0.8)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+  /// Kartu netral layar ini (ShadCard): latar [AppColors.surface], garis tipis
+  /// [AppColors.cardBorder] dari tema shadcn, radius 16, tanpa bayangan.
+  Widget _panel({
+    Key? key,
+    required Widget child,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(16),
+  }) =>
+      ShadCard(
+        key: key,
+        width: double.infinity,
+        padding: padding,
+        radius: BorderRadius.circular(16),
+        shadows: const [],
+        child: child,
       );
 
-  /// Lencana ikon AI berukuran [size].
-  Widget _aiBadge({double size = 44}) => Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            colors: [Color(0xFFDF7347), Color(0xFFC85A2E)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+  /// Lencana AI berukuran [size]: ikon datar di lingkaran abu muda, tanpa
+  /// gradasi atau bayangan. Dekoratif, jadi disembunyikan dari pembaca layar.
+  Widget _aiBadge({double size = 40}) => ExcludeSemantics(
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: AppColors.secondaryBg,
+            shape: BoxShape.circle,
           ),
-          borderRadius: BorderRadius.circular(size / 3),
+          child: Icon(Icons.auto_awesome_rounded,
+              color: AppColors.textPrimary, size: size * 0.5),
         ),
-        child: Icon(Icons.auto_awesome_rounded,
-            color: Colors.white, size: size * 0.5),
       );
 
   /// Tampilan untuk tamu: ajakan masuk; tombolnya memanggil [requireLogin].
-  Widget _guestPrompt() => Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(top: 40),
-        padding: const EdgeInsets.all(24),
-        decoration: _card(),
-        child: Column(
-          children: [
-            _aiBadge(size: 56),
-            const SizedBox(height: 16),
-            Text(
-              'Masuk untuk memakai Asisten AI',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
+  Widget _guestPrompt() => Padding(
+        padding: const EdgeInsets.only(top: 40),
+        child: _panel(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              _aiBadge(size: 56),
+              const SizedBox(height: 16),
+              Text(
+                'Masuk untuk memakai Asisten AI',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Asisten membantu memilih menu yang masih tersedia sesuai '
-              'anggaran dan jumlah porsi acaramu.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 12.5,
-                height: 1.4,
-                color: AppColors.textSecondary,
+              const SizedBox(height: 8),
+              Text(
+                'Asisten membantu memilih menu yang masih tersedia sesuai '
+                'anggaran dan jumlah porsi acaramu.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.4,
+                  color: AppColors.textSecondary,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+              const SizedBox(height: 16),
+              ShadButton(
+                size: ShadButtonSize.lg,
+                onPressed: () => requireLogin(context),
+                child: const Text('Masuk'),
               ),
-              onPressed: () => requireLogin(context),
-              child: const Text('Masuk'),
-            ),
-          ],
+            ],
+          ),
         ),
       );
 
   /// Kartu sapaan dengan nama depan pengguna.
   Widget _greeting(String? fullName) {
     final first = (fullName ?? '').trim().split(' ').first;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: _card(),
+    return _panel(
       child: Row(
         children: [
           _aiBadge(),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -820,18 +854,18 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 Text(
                   first.isEmpty ? 'Halo!' : 'Halo $first!',
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: 16,
                     fontWeight: FontWeight.w800,
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 4),
                 Text(
                   'Ceritakan kebutuhan konsumsi acaramu. Asisten memilih '
                   'menu yang masih tersedia hari ini.',
                   style: TextStyle(
-                    fontSize: 12,
-                    height: 1.35,
+                    fontSize: 14,
+                    height: 1.4,
                     color: AppColors.textSecondary,
                   ),
                 ),
@@ -843,77 +877,79 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     );
   }
 
-  /// Dekorasi kolom isian seragam: petunjuk, pesan galat, dan akhiran satuan.
+  /// Dekorasi kolom isian seragam bergaya input shadcn: latar putih, garis
+  /// tipis, fokus bergaris gelap netral; petunjuk, galat, dan akhiran satuan.
   InputDecoration _input(String hint, {String? error, String? suffix}) =>
       InputDecoration(
         hintText: hint,
-        hintStyle: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+        hintStyle: TextStyle(fontSize: 14, color: AppColors.textMuted),
         errorText: error,
         errorMaxLines: 2,
         suffixText: suffix,
+        suffixStyle: TextStyle(fontSize: 14, color: AppColors.textSecondary),
         isDense: true,
         filled: true,
-        fillColor: AppColors.secondaryBg,
+        fillColor: AppColors.inputBg,
         contentPadding:
-            const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: AppColors.cardBorder),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: AppColors.cardBorder),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: _accent),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: AppColors.textPrimary, width: 1.5),
         ),
       );
 
-  /// Label kecil di atas kolom isian.
+  /// Label yang selalu terlihat di atas kolom isian.
   Widget _label(String text) => Padding(
-        padding: const EdgeInsets.only(bottom: 6),
+        padding: const EdgeInsets.only(bottom: 8),
         child: Text(
           text,
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
-            color: AppColors.textSecondary,
+            color: AppColors.textPrimary,
           ),
         ),
       );
 
-  /// Formulir kebutuhan: teks kebutuhan, modal & porsi opsional, chip kategori
-  /// (bila daftar kategori termuat), kotak galat umum, dan tombol kirim.
+  /// Formulir kebutuhan: teks kebutuhan + chip contoh, modal & porsi opsional,
+  /// chip kategori (bila daftar kategori termuat), kotak galat umum, dan tombol kirim.
   Widget _form() {
     final style = TextStyle(
-      fontSize: 13,
-      fontWeight: FontWeight.w600,
+      fontSize: 14,
+      fontWeight: FontWeight.w500,
       color: AppColors.textPrimary,
     );
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: _card(),
+    return _panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Judul formulir: ikon pengatur + teks.
           Row(
             children: [
-              const Icon(Icons.tune_rounded, color: AppColors.primary, size: 20),
+              ExcludeSemantics(
+                child: Icon(Icons.tune_rounded,
+                    color: AppColors.textSecondary, size: 20),
+              ),
               const SizedBox(width: 8),
               Text(
                 'Ceritakan Kebutuhanmu',
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: 16,
                   fontWeight: FontWeight.w800,
                   color: AppColors.textPrimary,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 16),
           _label('Kebutuhan'),
           TextField(
             key: const ValueKey('ai-question'),
@@ -928,7 +964,28 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               error: _questionError,
             ),
           ),
-          const SizedBox(height: 8),
+          // Chip contoh siap-ketuk: mengisi/menambah teks kolom Kebutuhan.
+          Wrap(
+            spacing: 8,
+            runSpacing: 0,
+            children: [
+              for (final e in _examples)
+                ActionChip(
+                  label: Text(e),
+                  onPressed: () => _addExample(e),
+                  backgroundColor: AppColors.surface,
+                  side: BorderSide(color: AppColors.cardBorder),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                  labelStyle: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
           // Baris dua kolom: Modal (Rp) dan Jumlah porsi, keduanya opsional.
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -973,11 +1030,11 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             ],
           ),
           if (_categories.isNotEmpty) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             _label('Kategori (opsional)'),
             Wrap(
               spacing: 8,
-              runSpacing: 8,
+              runSpacing: 0,
               children: [
                 _chip('Semua', null),
                 for (final c in _categories) _chip(c.name, c.slug),
@@ -985,7 +1042,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             ),
           ],
           if (_error != null) ...[
-            const SizedBox(height: 14),
+            const SizedBox(height: 16),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -997,14 +1054,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Icon(Icons.info_outline_rounded,
-                      color: AppColors.danger, size: 18),
+                      color: AppColors.danger, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       _error!,
                       style: const TextStyle(
-                        fontSize: 12.5,
-                        height: 1.35,
+                        fontSize: 14,
+                        height: 1.4,
                         color: AppColors.danger,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1015,39 +1072,93 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             ),
           ],
           const SizedBox(height: 16),
-          // Tombol Cari Rekomendasi ([_submit]); spinner selama memuat.
-          SizedBox(
+          // Tombol utama ([_submit]): selama memuat nonaktif + spinner, jadi tidak
+          // bisa diketuk dua kali.
+          ShadButton(
             width: double.infinity,
-            height: 46,
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: _accent,
-                foregroundColor: Colors.white,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(24)),
-              ),
-              onPressed: _loading ? null : _submit,
-              child: _loading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : const Text(
-                      'Cari Rekomendasi',
-                      style:
-                          TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
-                    ),
-            ),
+            size: ShadButtonSize.lg,
+            enabled: !_loading,
+            onPressed: _submit,
+            leading: _loading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.white),
+                  )
+                : null,
+            child: Text(_loading ? 'Mencari…' : 'Cari Rekomendasi'),
           ),
         ],
       ),
     );
   }
 
+  /// Ringkasan formulir satu baris setelah hasil ada, mis. "Rapat 30 orang ·
+  /// 30 porsi · Rp 300.000" (kebutuhan dipotong 24 karakter). Tombol "Ubah"
+  /// membuka formulir lagi tanpa membuang hasil.
+  Widget _formSummary() {
+    final q = _questionController.text.trim().characters;
+    final portions = _parse(_portionsController);
+    final budget = _parse(_budgetController);
+    final text = [
+      q.length > 24 ? '${q.take(24).toString().trimRight()}…' : q.toString(),
+      if (portions != null) '$portions porsi',
+      if (budget != null) AppCurrency.format(budget),
+    ].join(' · ');
+    return _panel(
+      key: const ValueKey('ai-form-summary'),
+      padding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          ShadButton.outline(
+            size: ShadButtonSize.lg,
+            onPressed: () => setState(() => _editing = true),
+            child: const Text('Ubah'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Keadaan menunggu jawaban: teks status (diumumkan pembaca layar) dan tiga
+  /// kerangka kartu hasil.
+  Widget _loadingResults() => Column(
+        key: const ValueKey('ai-loading'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              'Mencari menu yang cocok…',
+              style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
+            ),
+          ),
+          const SizedBox(height: 12),
+          for (var i = 0; i < 3; i++) ...[
+            const _SkeletonCard(),
+            const SizedBox(height: 8),
+          ],
+        ],
+      );
+
   /// Chip pilihan kategori; [slug] null berarti "Semua" (tanpa penyaring).
+  /// Chip aktif: latar [AppColors.primarySoft], garis oranye merek lebih tebal,
+  /// dan teks tebal (warna bukan satu-satunya penanda). Tanpa tanda centang
+  /// supaya lebar chip tidak berubah saat dipilih.
   Widget _chip(String label, String? slug) {
     final selected = _categorySlug == slug;
     return ChoiceChip(
@@ -1055,36 +1166,39 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       selected: selected,
       onSelected: (_) => setState(() => _categorySlug = slug),
       selectedColor: AppColors.primarySoft,
-      backgroundColor: AppColors.secondaryBg,
-      side: BorderSide(color: selected ? _accent : AppColors.cardBorder),
-      labelStyle: TextStyle(
-        fontSize: 12,
-        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-        color: selected ? _accent : AppColors.textPrimary,
-      ),
+      backgroundColor: AppColors.surface,
       showCheckmark: false,
+      side: BorderSide(
+          color: selected ? AppColors.primary : AppColors.cardBorder,
+          width: selected ? 1.5 : 1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      labelStyle: TextStyle(
+        fontSize: 13,
+        fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+        color: AppColors.textPrimary,
+      ),
     );
   }
 
   /// Kartu hasil: catatan snapshot (bila dari riwayat), ringkasan server,
   /// penanda saran cadangan tanpa AI, menu per toko, lalu kalkulator danusan.
-  Widget _resultSection(Recommendation r) => Container(
+  Widget _resultSection(Recommendation r) => _panel(
         key: _resultKey,
-        width: double.infinity,
-        padding: const EdgeInsets.all(18),
-        decoration: _card(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(Icons.auto_awesome_rounded, color: _accent, size: 20),
+                ExcludeSemantics(
+                  child: Icon(Icons.auto_awesome_rounded,
+                      color: AppColors.textSecondary, size: 20),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Rekomendasi Menu',
                     style: TextStyle(
-                      fontSize: 15,
+                      fontSize: 16,
                       fontWeight: FontWeight.w800,
                       color: AppColors.textPrimary,
                     ),
@@ -1101,13 +1215,13 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppColors.primarySoft,
-                borderRadius: BorderRadius.circular(14),
+                color: AppColors.secondaryBg,
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 r.summary,
                 style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 14,
                   height: 1.45,
                   color: AppColors.textPrimary,
                 ),
@@ -1118,9 +1232,9 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               Text(
                 'Saran otomatis dari menu yang paling cocok, tanpa AI.',
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 12,
                   fontStyle: FontStyle.italic,
-                  color: AppColors.textMuted,
+                  color: AppColors.textSecondary,
                 ),
               ),
             ],
@@ -1129,79 +1243,86 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               Text(
                 'Belum ada menu yang bisa direkomendasikan. Coba ubah '
                 'kebutuhan, anggaran, atau kategori.',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 14, color: AppColors.textSecondary),
               ),
             ],
             for (final g in r.groups) ...[
               const SizedBox(height: 16),
               _groupHeader(g),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               for (final item in g.items) ...[
                 _itemCard(item),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
               ],
             ],
             if (r.groups.isNotEmpty) ...[
-              const SizedBox(height: 4),
+              const SizedBox(height: 8),
               _calculator(r),
             ],
           ],
         ),
       );
 
-  /// Catatan bahwa hasil berasal dari riwayat (harga/stok bisa berubah) dengan
-  /// tombol "Perbarui" yang menjalankan [_refreshSession].
+  /// Catatan netral bahwa hasil berasal dari riwayat (harga/stok bisa berubah)
+  /// dengan tombol "Perbarui" yang menjalankan [_refreshSession].
   Widget _snapshotNote(AiSession s) => Container(
         key: const ValueKey('ai-snapshot-note'),
         width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 8),
         decoration: BoxDecoration(
-          color: AppColors.warningLight,
-          borderRadius: BorderRadius.circular(14),
+          color: AppColors.secondaryBg,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.cardBorder),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(Icons.history_rounded,
-                    color: AppColors.warning, size: 18),
+                ExcludeSemantics(
+                  child: Icon(Icons.history_rounded,
+                      color: AppColors.textSecondary, size: 20),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'Hasil tersimpan ${relativeTimeWib(s.savedAt)}. '
                     'Harga & stok bisa sudah berubah.',
                     style: TextStyle(
-                      fontSize: 12,
-                      height: 1.35,
+                      fontSize: 13,
+                      height: 1.4,
                       color: AppColors.textPrimary,
                     ),
                   ),
                 ),
                 _refreshing
                     ? const Padding(
-                        padding: EdgeInsets.all(10),
+                        padding: EdgeInsets.all(12),
                         child: SizedBox(
-                          width: 18,
-                          height: 18,
+                          width: 20,
+                          height: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         ),
                       )
                     : TextButton(
                         onPressed: _loading ? null : _refreshSession,
-                        style: TextButton.styleFrom(foregroundColor: _accent),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.textPrimary,
+                          minimumSize: const Size(44, 44),
+                        ),
                         child: const Text('Perbarui',
-                            style: TextStyle(fontWeight: FontWeight.w800)),
+                            style: TextStyle(
+                                fontSize: 14, fontWeight: FontWeight.w800)),
                       ),
               ],
             ),
             if (_refreshError != null)
               Padding(
-                padding: const EdgeInsets.only(top: 4, right: 6),
+                padding: const EdgeInsets.only(top: 4, right: 8),
                 child: Text(
                   _refreshError!,
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 13,
                     color: AppColors.danger,
                     fontWeight: FontWeight.w600,
                   ),
@@ -1215,14 +1336,14 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   Widget _calcRow(String label, String value,
           {Color? color, bool strong = false, Key? key}) =>
       Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
+        padding: const EdgeInsets.symmetric(vertical: 4),
         child: Row(
           children: [
             Expanded(
               child: Text(
                 label,
                 style: TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 13,
                   color: AppColors.textSecondary,
                 ),
               ),
@@ -1231,7 +1352,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
               value,
               key: key,
               style: TextStyle(
-                fontSize: strong ? 15 : 13,
+                fontSize: strong ? 16 : 14,
                 fontWeight: strong ? FontWeight.w800 : FontWeight.w700,
                 color: color ?? AppColors.textPrimary,
               ),
@@ -1257,10 +1378,10 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
     return Container(
       key: const ValueKey('ai-calculator'),
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.secondaryBg,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.cardBorder),
       ),
       child: Column(
@@ -1268,12 +1389,15 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
         children: [
           Row(
             children: [
-              const Icon(Icons.calculate_outlined, color: _accent, size: 18),
-              const SizedBox(width: 6),
+              ExcludeSemantics(
+                child: Icon(Icons.calculate_outlined,
+                    color: AppColors.textSecondary, size: 20),
+              ),
+              const SizedBox(width: 8),
               Text(
                 'Kalkulator Danusan',
                 style: TextStyle(
-                  fontSize: 13.5,
+                  fontSize: 14,
                   fontWeight: FontWeight.w800,
                   color: AppColors.textPrimary,
                 ),
@@ -1282,12 +1406,12 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
           ),
           const SizedBox(height: 8),
           _calcRow('Modal terpakai', AppCurrency.format(e.modalTerpakai),
-              color: _accent, strong: true),
+              strong: true),
           if (e.sisaModal != null)
             _calcRow('Sisa modal', AppCurrency.format(e.sisaModal!)),
           Text(
             'Harga menu dari server; harga akhir dihitung ulang saat checkout.',
-            style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
           const SizedBox(height: 12),
           _label('Harga jual per porsi (opsional)'),
@@ -1297,8 +1421,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
             keyboardType: TextInputType.number,
             inputFormatters: [FilteringTextInputFormatter.digitsOnly],
             style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
               color: AppColors.textPrimary,
             ),
             onChanged: _onSellPriceChanged,
@@ -1308,7 +1432,7 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
           if (!e.hasProfit)
             Text(
               'Isi harga jual untuk melihat perkiraan laba dan ROI.',
-              style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
             )
           else ...[
             _calcRow(
@@ -1317,18 +1441,18 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 AppCurrency.format(e.pendapatan!)),
             _calcRow('Laba', formatSignedRupiah(laba!),
                 key: const ValueKey('ai-profit'),
-                color: laba < 0 ? AppColors.danger : AppColors.success,
+                color: laba < 0 ? AppColors.danger : AppColors.successDark,
                 strong: true),
             _calcRow('ROI', formatRoi(e.roiPercent),
                 key: const ValueKey('ai-roi'),
-                color: laba < 0 ? AppColors.danger : AppColors.success),
-            const SizedBox(height: 2),
+                color: laba < 0 ? AppColors.danger : AppColors.successDark),
+            const SizedBox(height: 4),
             Text(
               'Perkiraan dari harga jual yang kamu isi.',
               style: TextStyle(
-                fontSize: 10.5,
+                fontSize: 12,
                 fontStyle: FontStyle.italic,
-                color: AppColors.textMuted,
+                color: AppColors.textSecondary,
               ),
             ),
           ],
@@ -1341,16 +1465,18 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
   /// menu yang bisa dipesan).
   Widget _groupHeader(RecommendationGroup g) => Row(
         children: [
-          const Icon(Icons.storefront_rounded,
-              color: AppColors.primary, size: 18),
-          const SizedBox(width: 6),
+          ExcludeSemantics(
+            child: Icon(Icons.storefront_rounded,
+                color: AppColors.textSecondary, size: 20),
+          ),
+          const SizedBox(width: 8),
           Expanded(
             child: Text(
               g.merchant.businessName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 13.5,
+                fontSize: 14,
                 fontWeight: FontWeight.w800,
                 color: AppColors.textPrimary,
               ),
@@ -1361,42 +1487,42 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 ? () => _addGroup(g)
                 : null,
             style: TextButton.styleFrom(
-              foregroundColor: _accent,
-              visualDensity: VisualDensity.compact,
+              foregroundColor: AppColors.textPrimary,
+              minimumSize: const Size(44, 44),
             ),
-            icon: const Icon(Icons.add_shopping_cart_rounded, size: 16),
+            icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
             label: const Text(
               'Tambah semua',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
             ),
           ),
         ],
       );
 
-  /// Kartu satu menu rekomendasi: foto, qty × harga, subtotal, alasan AI
-  /// (bila ada); ketuk untuk detail, tombol untuk masuk keranjang.
+  /// Kartu satu menu rekomendasi (putih bergaris): foto, qty × harga, subtotal,
+  /// alasan AI (bila ada); ketuk untuk detail, tombol bergaris netral untuk
+  /// masuk keranjang.
   Widget _itemCard(RecommendedItem item) {
     final menu = item.menu;
     return Material(
-      color: AppColors.secondaryBg,
-      borderRadius: BorderRadius.circular(18),
+      color: AppColors.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: AppColors.cardBorder),
+      ),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
-        borderRadius: BorderRadius.circular(18),
         onTap: () => _openDetail(menu),
-        child: Container(
+        child: Padding(
           padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.cardBorder),
-          ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               MenuImage(
                 menu.imageUrl,
-                width: 60,
-                height: 60,
-                borderRadius: BorderRadius.circular(12),
+                width: 64,
+                height: 64,
+                borderRadius: BorderRadius.circular(8),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -1408,26 +1534,26 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: 13.5,
+                        fontSize: 14,
                         fontWeight: FontWeight.w800,
                         color: AppColors.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 3),
+                    const SizedBox(height: 4),
                     Text(
                       '${item.qty} ${menu.unitLabel} × '
                       '${AppCurrency.format(menu.price)}',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: 13,
                         color: AppColors.textSecondary,
                       ),
                     ),
                     Text(
                       AppCurrency.format(item.subtotal),
-                      style: const TextStyle(
-                        fontSize: 13,
+                      style: TextStyle(
+                        fontSize: 14,
                         fontWeight: FontWeight.w800,
-                        color: _accent,
+                        color: AppColors.textPrimary,
                       ),
                     ),
                     if (item.reason != null) ...[
@@ -1435,8 +1561,8 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                       Text(
                         item.reason!,
                         style: TextStyle(
-                          fontSize: 11.5,
-                          height: 1.35,
+                          fontSize: 13,
+                          height: 1.4,
                           fontStyle: FontStyle.italic,
                           color: AppColors.textSecondary,
                         ),
@@ -1446,17 +1572,16 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
                 ),
               ),
               const SizedBox(width: 8),
-              IconButton.filled(
+              IconButton.outlined(
                 tooltip: 'Tambah ke keranjang',
                 style: IconButton.styleFrom(
-                  backgroundColor: _accent,
-                  foregroundColor: Colors.white,
-                  disabledBackgroundColor: AppColors.cardBorder,
+                  foregroundColor: AppColors.textPrimary,
+                  side: BorderSide(color: AppColors.cardBorder),
                 ),
                 onPressed: menu.canOrder
                     ? () => addToCartWithPrompt(context, menu, qty: item.qty)
                     : null,
-                icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
+                icon: const Icon(Icons.add_shopping_cart_rounded, size: 20),
               ),
             ],
           ),
@@ -1464,4 +1589,84 @@ class _AIAssistantScreenState extends State<AIAssistantScreen> {
       ),
     );
   }
+}
+
+/// Kerangka satu kartu hasil (blok abu) selama menunggu jawaban. Berdenyut
+/// halus, kecuali pengguna mematikan animasi (MediaQuery.disableAnimations).
+class _SkeletonCard extends StatefulWidget {
+  const _SkeletonCard();
+
+  @override
+  State<_SkeletonCard> createState() => _SkeletonCardState();
+}
+
+/// State denyut [_SkeletonCard]: opasitas bolak-balik 0,5–1.
+class _SkeletonCardState extends State<_SkeletonCard>
+    with SingleTickerProviderStateMixin {
+  late final _pulse = AnimationController(
+    vsync: this,
+    lowerBound: 0.5,
+    duration: const Duration(milliseconds: 900),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Hormati setelan kurangi gerakan: kerangka diam penuh.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _pulse.value = 1;
+    } else if (!_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  /// Blok abu berukuran [width]×[height] (width null = selebar ruang).
+  Widget _block({double? width, required double height}) => Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          color: AppColors.divider,
+          borderRadius: BorderRadius.circular(8),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) => ExcludeSemantics(
+        child: FadeTransition(
+          opacity: _pulse,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.cardBorder),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _block(width: 64, height: 64),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _block(height: 14),
+                      const SizedBox(height: 8),
+                      _block(width: 120, height: 12),
+                      const SizedBox(height: 8),
+                      _block(width: 80, height: 12),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
 }

@@ -1,3 +1,6 @@
+// Tes widget layar Asisten Menu: riwayat sesi, formulir (chip contoh, ringkasan + "Ubah", keadaan muat),
+// hasil rekomendasi, kalkulator danusan, dan penanganan galat.
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -146,6 +149,7 @@ Future<void> _ask(WidgetTester tester, String question,
         find.byKey(const ValueKey('ai-portions')), portions);
   }
   await tester.ensureVisible(find.text('Cari Rekomendasi'));
+  await tester.pumpAndSettle();
   await tester.tap(find.text('Cari Rekomendasi'));
   await tester.pumpAndSettle();
 }
@@ -229,6 +233,12 @@ void main() {
       expect(
           tester.widget<Text>(find.byKey(const ValueKey('ai-roi'))).data,
           '+177,8%');
+      // Formulir tampil ringkas; "Ubah" membukanya dengan isian sesi lama.
+      expect(find.text('snack seminar 50 orang · 50 porsi · Rp 600.000'),
+          findsOneWidget);
+      await tester.ensureVisible(find.text('Ubah'));
+      await tester.tap(find.text('Ubah'));
+      await tester.pumpAndSettle();
       final q = tester.widget<TextField>(
           find.byKey(const ValueKey('ai-question')));
       expect(q.controller!.text, 'snack seminar 50 orang');
@@ -373,6 +383,77 @@ void main() {
     expect(find.widgetWithText(ChoiceChip, 'Snack'), findsOneWidget);
   });
 
+  testWidgets('chip contoh mengisi lalu menambah kolom Kebutuhan',
+      (tester) async {
+    final h = _Harness((req) async => _json(_recommendation()));
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    String question() => tester
+        .widget<TextField>(find.byKey(const ValueKey('ai-question')))
+        .controller!
+        .text;
+    await tester.tap(find.text('Rapat 30 orang'));
+    await tester.pump();
+    expect(question(), 'Rapat 30 orang');
+    await tester.tap(find.text('Tidak pedas'));
+    await tester.pump();
+    expect(question(), 'Rapat 30 orang, Tidak pedas');
+  });
+
+  testWidgets('hasil ada: formulir jadi ringkasan, "Ubah" membukanya lagi',
+      (tester) async {
+    final h = _Harness((req) async => _json(_recommendation()));
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ai-form-summary')), findsNothing);
+    await _ask(tester, 'Rapat 30 orang', budget: '300000', portions: '30');
+
+    expect(find.text('Rapat 30 orang · 30 porsi · Rp 300.000'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ai-question')), findsNothing);
+    expect(find.text('Cari Rekomendasi'), findsNothing);
+
+    await tester.ensureVisible(find.text('Ubah'));
+    await tester.tap(find.text('Ubah'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ai-form-summary')), findsNothing);
+    expect(find.text('Cari Rekomendasi'), findsOneWidget);
+    // Hasil lama tetap tampil di bawah formulir.
+    expect(find.text('Nasi Box'), findsOneWidget);
+
+    // Kirim lagi: formulir kembali ringkas dengan isian baru.
+    await tester.enterText(find.byKey(const ValueKey('ai-budget')), '');
+    await tester.enterText(find.byKey(const ValueKey('ai-portions')), '');
+    await _ask(tester, 'Snack sore');
+    expect(find.text('Snack sore'), findsOneWidget);
+    expect(h.posts, hasLength(2));
+  });
+
+  testWidgets('menunggu jawaban: teks status + kerangka, tombol nonaktif',
+      (tester) async {
+    final reply = Completer<http.Response>();
+    final h = _Harness((req) => reply.future);
+    await tester.pumpWidget(h.app());
+    await tester.pumpAndSettle();
+    await tester.enterText(
+        find.byKey(const ValueKey('ai-question')), 'makan siang rapat');
+    await tester.ensureVisible(find.text('Cari Rekomendasi'));
+    await tester.tap(find.text('Cari Rekomendasi'));
+    await tester.pump();
+
+    expect(find.text('Mencari menu yang cocok…'), findsOneWidget);
+    expect(find.byKey(const ValueKey('ai-loading')), findsOneWidget);
+    expect(find.text('Mencari…'), findsOneWidget);
+    // Ketuk lagi selama memuat tidak mengirim permintaan kedua.
+    await tester.tap(find.text('Mencari…'), warnIfMissed: false);
+    await tester.pump();
+    expect(h.posts, hasLength(1));
+
+    reply.complete(_json(_recommendation()));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('ai-loading')), findsNothing);
+    expect(find.text('Nasi Box'), findsOneWidget);
+  });
+
   testWidgets('validasi lokal: kebutuhan & anggaran, tanpa memanggil server',
       (tester) async {
     final h = _Harness((req) async => _json(_recommendation()));
@@ -390,6 +471,7 @@ void main() {
     final h = _Harness((req) async => _json(_recommendation()));
     await tester.pumpWidget(h.app());
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Nasi'));
     await tester.tap(find.widgetWithText(ChoiceChip, 'Nasi'));
     await tester.pump();
     await _ask(tester, '  makan siang rapat, tidak pedas ',
