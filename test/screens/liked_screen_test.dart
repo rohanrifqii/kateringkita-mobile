@@ -245,7 +245,7 @@ void main() {
     testWidgets('memuat GET /me/favorite-merchants saat segmen dibuka',
         (tester) async {
       final seen = <Uri>[];
-      Object? storeArgs;
+      String? storeRoute;
       await tester.pumpWidget(_wrap((req) async {
         seen.add(req.url);
         if (req.url.path.endsWith('/me/favorite-merchants')) {
@@ -256,8 +256,8 @@ void main() {
         }
         return _json(_page([]));
       }, routes: {
-        AppRoutes.storeProfile: (c) {
-          storeArgs = ModalRoute.of(c)?.settings.arguments;
+        AppRoutes.storeProfileFor('dapur-4'): (c) {
+          storeRoute = ModalRoute.of(c)?.settings.name;
           return const Scaffold(body: Text('layar-toko'));
         },
       }));
@@ -274,7 +274,7 @@ void main() {
       await tester.tap(find.text('Diego Katering'));
       await tester.pumpAndSettle();
       expect(find.text('layar-toko'), findsOneWidget);
-      expect(storeArgs, 'dapur-4');
+      expect(storeRoute, '/store-profile/dapur-4');
     });
 
     testWidgets('hapus toko: langsung hilang, DELETE, muat ulang',

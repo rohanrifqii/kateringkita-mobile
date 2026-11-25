@@ -255,7 +255,7 @@ class _FavoriteMerchantsViewState extends State<FavoriteMerchantsView> {
     final liked = context.watch<FavoritesProvider>().isFavoriteMerchant(m);
     return GestureDetector(
       onTap: () =>
-          Navigator.pushNamed(context, AppRoutes.storeProfile, arguments: m.slug),
+          Navigator.pushNamed(context, AppRoutes.storeProfileFor(m.slug)),
       child: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(

@@ -186,7 +186,7 @@ class _LikedScreenState extends State<LikedScreen> {
 
   /// Buka layar detail menu.
   void _openDetail(ProductModel product) {
-    Navigator.pushNamed(context, AppRoutes.productDetail, arguments: product);
+    Navigator.pushNamed(context, AppRoutes.productDetailFor(product.id), arguments: product);
   }
 
   @override

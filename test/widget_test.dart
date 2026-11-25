@@ -120,9 +120,34 @@ void main() {
     return names;
   }
 
+  for (final initialRoute in ['/store-profile/dapur-a', '/product-detail/7']) {
+    testWidgets('web dimuat ulang di $initialRoute: halaman itu tetap terbuka', (
+      tester,
+    ) async {
+      tester.binding.platformDispatcher.defaultRouteNameTestValue =
+          initialRoute;
+      addTearDown(
+        tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+      );
+      await _pump(tester, (r) async => _err(404, 'NOT_FOUND', 'x'));
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      // Splash menyingkir; halaman tetap di atas dengan beranda di bawahnya.
+      final routeNames = <String?>[];
+      appNavigatorKey.currentState!.popUntil((route) {
+        routeNames.add(route.settings.name);
+        return route.isFirst;
+      });
+      expect(routeNames, [initialRoute, AppRoutes.mainNav]);
+    });
+  }
+
   for (final (initialRoute, label) in [
     (AppRoutes.mainNav, 'beranda'),
     ('/order-chat/', 'alamat Chat tanpa kode'),
+    ('/store-profile', 'alamat toko tanpa slug'),
+    ('/product-detail/', 'alamat menu tanpa id'),
   ]) {
     testWidgets('web dimuat ulang di $label: hanya satu beranda/tab', (
       tester,

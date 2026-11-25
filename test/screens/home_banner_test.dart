@@ -56,8 +56,8 @@ Future<List<http.Request>> _pump(WidgetTester tester, List<Map<String, dynamic>>
     ],
     child: MaterialApp(
       home: const HomeScreen(),
-      onGenerateRoute: (s) => s.name == AppRoutes.storeProfile
-          ? MaterialPageRoute(builder: (_) => Scaffold(body: Text('toko:${s.arguments}')))
+      onGenerateRoute: (s) => s.name!.startsWith('${AppRoutes.storeProfile}/')
+          ? MaterialPageRoute(builder: (_) => Scaffold(body: Text('toko:${s.name}')))
           : null,
     ),
   ));
@@ -95,6 +95,6 @@ void main() {
     await _pump(tester, [_bannerToko]);
     await tester.tap(find.text('Dapur Siti buka'));
     await tester.pumpAndSettle();
-    expect(find.text('toko:dapur-siti'), findsOneWidget);
+    expect(find.text('toko:/store-profile/dapur-siti'), findsOneWidget);
   });
 }

@@ -127,7 +127,7 @@ class _Harness {
       child: MaterialApp(
         home: const AIAssistantScreen(),
         routes: {
-          AppRoutes.productDetail: (c) {
+          AppRoutes.productDetailFor(7): (c) {
             detailArgs = ModalRoute.of(c)?.settings.arguments;
             return const Scaffold(body: Text('layar-detail'));
           },
