@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:kateringkita_pbl/api/api_client.dart';
+import 'package:kateringkita_pbl/core/app_routes.dart';
 import 'package:kateringkita_pbl/data/catalog_repository.dart';
 import 'package:kateringkita_pbl/models/product_model.dart';
 import 'package:kateringkita_pbl/providers/cart_provider.dart';
@@ -14,6 +15,8 @@ import 'package:kateringkita_pbl/screens/home/store_profile_screen.dart';
 import 'package:kateringkita_pbl/widgets/primary_button.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../support/session.dart';
 
 class _FakeTheme extends ChangeNotifier implements ThemeProvider {
   @override
@@ -58,11 +61,32 @@ ProductModel _card({bool open = true, String badge = 'available'}) =>
     ProductModel.fromJson(_menuJson(open: open, badge: badge));
 
 Widget _wrap(Widget screen, Object? args,
-    {bool open = true, String badge = 'available', CartProvider? cart}) {
+    {bool open = true,
+    String badge = 'available',
+    CartProvider? cart,
+    FakeAuth? auth,
+    List<http.Request>? favLog,
+    int favStatus = 204,
+    bool favorite = false,
+    bool storeFavorite = false,
+    List<http.Request>? storeLog,
+    int storeStatus = 204}) {
   final api = ApiClient(
     baseUrl: 'https://x.test/api/v1',
     client: MockClient((req) async {
       final p = req.url.path;
+      if (p.contains('/me/favorites/')) {
+        favLog?.add(req);
+        if (favStatus == 204) return http.Response('', 204);
+        return _json({
+          'error': {'code': 'NOT_FOUND', 'message': 'Menu tidak ditemukan.'}
+        }, favStatus);
+      }
+      if (p.endsWith('/menus/7') && favorite) {
+        return _json({
+          'data': {..._menuJson(open: open, badge: badge), 'is_favorite': true}
+        });
+      }
       if (p.endsWith('/menus/7/reviews')) {
         return _json({
           'data': [
@@ -85,8 +109,17 @@ Widget _wrap(Widget screen, Object? args,
             'merchant_type': {'name': 'Danusan'},
             'rating_avg': 4.5,
             'rating_count': 12,
+            // Production lama belum memuat is_favorite (dianggap false).
+            if (storeFavorite) 'is_favorite': true,
           }
         });
+      }
+      if (p.contains('/me/favorite-merchants/')) {
+        storeLog?.add(req);
+        if (storeStatus == 204) return http.Response('', 204);
+        return _json({
+          'error': {'code': 'NOT_FOUND', 'message': 'Toko tidak ditemukan.'}
+        }, storeStatus);
       }
       if (p.endsWith('/menus')) {
         return _json({
@@ -102,8 +135,21 @@ Widget _wrap(Widget screen, Object? args,
       Provider<CatalogRepository>.value(value: CatalogRepository(api)),
       ChangeNotifierProvider<ThemeProvider>.value(value: _FakeTheme()),
       ChangeNotifierProvider<CartProvider>.value(value: cart ?? CartProvider()),
+      ...sessionProviders(api, auth: auth),
     ],
     child: MaterialApp(
+      routes: {
+        // Login palsu: "masuk" lalu kembali dengan true (returnTo).
+        AppRoutes.login: (c) => Scaffold(
+              body: TextButton(
+                onPressed: () {
+                  auth?.set(true);
+                  Navigator.pop(c, true);
+                },
+                child: const Text('login-palsu'),
+              ),
+            ),
+      },
       home: Builder(
         builder: (c) => Scaffold(
           body: TextButton(
@@ -207,6 +253,196 @@ void main() {
     await tester.pump();
     expect(cart.count, 1);
     expect(find.text('Lihat Keranjang (1)'), findsOneWidget);
+  });
+
+  testWidgets('profil toko: tanpa label "Terlaris" karangan', (tester) async {
+    await _open(tester, _wrap(const StoreProfileScreen(), 'dapur-a'));
+    // Server tidak memberi data "terlaris" per toko; filter berbasis rating.
+    expect(find.text('Terlaris'), findsNothing);
+
+    // Yang disalin hanya teks info dapur, bukan tautan.
+    await tester.tap(find.byIcon(Icons.share_outlined));
+    await tester.pump();
+    expect(find.textContaining('Tautan'), findsNothing);
+    expect(find.text('Info dapur disalin ke clipboard.'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Rating 4.8+'));
+    await tester.tap(find.text('Rating 4.8+'));
+    await tester.pumpAndSettle();
+    expect(find.text('Belum ada menu di kategori ini'), findsOneWidget);
+  });
+
+  group('hati favorit di detail', () {
+    Finder heartOn() => find.byIcon(Icons.favorite_rounded);
+    Finder heartOff() => find.byIcon(Icons.favorite_border_rounded);
+
+    testWidgets('pembeli: is_favorite dari server tampil penuh',
+        (tester) async {
+      await _open(
+          tester,
+          _wrap(const ProductDetailScreen(), _card(),
+              auth: FakeAuth(loggedIn: true), favorite: true));
+      expect(heartOn(), findsOneWidget);
+    });
+
+    testWidgets('tamu: is_favorite diabaikan, hati kosong', (tester) async {
+      await _open(tester,
+          _wrap(const ProductDetailScreen(), _card(), favorite: true));
+      expect(heartOn(), findsNothing);
+      expect(heartOff(), findsOneWidget);
+    });
+
+    testWidgets('pembeli: ketuk -> langsung penuh, PUT /me/favorites/7',
+        (tester) async {
+      final log = <http.Request>[];
+      await _open(
+          tester,
+          _wrap(const ProductDetailScreen(), _card(),
+              auth: FakeAuth(loggedIn: true), favLog: log));
+      await tester.tap(heartOff());
+      await tester.pump();
+      expect(heartOn(), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(log.single.method, 'PUT');
+      expect(log.single.url.path, '/api/v1/me/favorites/7');
+      expect(find.text('Ditambahkan ke favorit: Nasi Box'), findsOneWidget);
+
+      await tester.tap(heartOn());
+      await tester.pumpAndSettle();
+      expect(log.last.method, 'DELETE');
+      expect(heartOff(), findsOneWidget);
+    });
+
+    testWidgets('server menolak: hati kembali kosong + pesan galat',
+        (tester) async {
+      await _open(
+          tester,
+          _wrap(const ProductDetailScreen(), _card(),
+              auth: FakeAuth(loggedIn: true), favStatus: 404));
+      await tester.tap(heartOff());
+      await tester.pumpAndSettle();
+      expect(heartOff(), findsOneWidget);
+      expect(heartOn(), findsNothing);
+      expect(find.text('Menu tidak ditemukan.'), findsOneWidget);
+    });
+
+    testWidgets('tamu: diarahkan ke Login dengan pesan, lalu tersimpan',
+        (tester) async {
+      final auth = FakeAuth();
+      final log = <http.Request>[];
+      await _open(
+          tester,
+          _wrap(const ProductDetailScreen(), _card(),
+              auth: auth, favLog: log));
+      await tester.tap(heartOff());
+      await tester.pumpAndSettle();
+      expect(find.text('login-palsu'), findsOneWidget);
+      expect(find.text('Masuk dulu untuk menyimpan menu favorit.'),
+          findsOneWidget);
+      expect(log, isEmpty);
+
+      await tester.tap(find.text('login-palsu'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ProductDetailScreen), findsOneWidget);
+      expect(log.single.method, 'PUT');
+      expect(heartOn(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('tamu batal login: tidak ada permintaan, tidak crash',
+        (tester) async {
+      final log = <http.Request>[];
+      await _open(
+          tester,
+          _wrap(const ProductDetailScreen(), _card(),
+              auth: FakeAuth(), favLog: log));
+      await tester.tap(heartOff());
+      await tester.pumpAndSettle();
+      final nav = tester.state<NavigatorState>(find.byType(Navigator));
+      nav.pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(ProductDetailScreen), findsOneWidget);
+      expect(log, isEmpty);
+      expect(heartOff(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Dapur Favorit di profil toko', () {
+    Finder heart() => find.byKey(const ValueKey('store-favorite'));
+    Finder on() => find.descendant(
+        of: heart(), matching: find.byIcon(Icons.favorite_rounded));
+    Finder off() => find.descendant(
+        of: heart(), matching: find.byIcon(Icons.favorite_border_rounded));
+
+    testWidgets('pembeli: is_favorite toko dari server tampil penuh',
+        (tester) async {
+      await _open(
+          tester,
+          _wrap(const StoreProfileScreen(), 'dapur-a',
+              auth: FakeAuth(loggedIn: true), storeFavorite: true));
+      expect(on(), findsOneWidget);
+    });
+
+    testWidgets('server lama tanpa is_favorite: hati kosong, tanpa crash',
+        (tester) async {
+      await _open(
+          tester,
+          _wrap(const StoreProfileScreen(), 'dapur-a',
+              auth: FakeAuth(loggedIn: true)));
+      expect(off(), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('ketuk: optimistis PUT, ketuk lagi DELETE', (tester) async {
+      final log = <http.Request>[];
+      await _open(
+          tester,
+          _wrap(const StoreProfileScreen(), 'dapur-a',
+              auth: FakeAuth(loggedIn: true), storeLog: log));
+      await tester.tap(heart());
+      await tester.pump();
+      expect(on(), findsOneWidget);
+      await tester.pumpAndSettle();
+      expect(log.single.method, 'PUT');
+      expect(log.single.url.path, '/api/v1/me/favorite-merchants/1');
+      expect(find.text('Dapur A disimpan ke Dapur Favorit'), findsOneWidget);
+
+      await tester.tap(heart());
+      await tester.pumpAndSettle();
+      expect(log.last.method, 'DELETE');
+      expect(off(), findsOneWidget);
+    });
+
+    testWidgets('server menolak: hati kembali + pesan', (tester) async {
+      await _open(
+          tester,
+          _wrap(const StoreProfileScreen(), 'dapur-a',
+              auth: FakeAuth(loggedIn: true), storeStatus: 404));
+      await tester.tap(heart());
+      await tester.pumpAndSettle();
+      expect(off(), findsOneWidget);
+      expect(find.text('Toko tidak ditemukan.'), findsOneWidget);
+    });
+
+    testWidgets('tamu: login dulu, lalu toko langsung disimpan',
+        (tester) async {
+      final auth = FakeAuth();
+      final log = <http.Request>[];
+      await _open(
+          tester,
+          _wrap(const StoreProfileScreen(), 'dapur-a',
+              auth: auth, storeLog: log));
+      await tester.tap(heart());
+      await tester.pumpAndSettle();
+      expect(find.text('Masuk dulu untuk menyimpan Dapur Favorit.'),
+          findsOneWidget);
+      expect(log, isEmpty);
+      await tester.tap(find.text('login-palsu'));
+      await tester.pumpAndSettle();
+      expect(log.single.method, 'PUT');
+      expect(on(), findsOneWidget);
+    });
   });
 
   testWidgets('store profile loads from API by slug', (tester) async {

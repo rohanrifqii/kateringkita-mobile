@@ -12,24 +12,44 @@ import 'order_list_view.dart';
 /// kolom cari (nama menu / kode pesanan). Pencarian dikirim ke server sebagai
 /// parameter `q`. Tombol kembali hanya muncul bila layar dibuka sebagai rute.
 class OrdersScreen extends StatefulWidget {
-  const OrdersScreen({super.key});
+  /// [initialTab]: `active` | `completed` | `cancelled`; [initialQuery] mis.
+  /// kode pesanan (dipakai saat dibuka dari notifikasi).
+  const OrdersScreen({super.key, this.initialTab, this.initialQuery = ''});
+
+  final String? initialTab;
+  final String initialQuery;
 
   @override
   State<OrdersScreen> createState() => _OrdersScreenState();
 }
 
+/// State layar Pesanan: tab status terpilih dan kata kunci pencarian.
 class _OrdersScreenState extends State<OrdersScreen> {
   // Nilai `tab` untuk server, urutannya sama dengan label [tabs].
   static const _tabKeys = ['active', 'completed', 'cancelled'];
+  /// Label tab yang tampil di layar.
   static const tabs = ['Aktif', 'Selesai', 'Dibatalkan'];
 
   int _selectedTabIndex = 0;
   final TextEditingController _searchController = TextEditingController();
+  /// Kata kunci yang sudah dikirim ke OrderListView (setelah jeda ketik).
   String _searchQuery = '';
   Timer? _debounce;
 
-  /// Debounce 400 ms: query baru diteruskan ke OrderListView (yang memuat
-  /// ulang) setelah pengguna berhenti mengetik.
+  @override
+  void initState() {
+    super.initState();
+    // Tab dan kata kunci awal dari argumen rute (mis. dari notifikasi); tab tak dikenal tetap ke "Aktif".
+    final i = _tabKeys.indexOf(widget.initialTab ?? '');
+    if (i >= 0) _selectedTabIndex = i;
+    final q = widget.initialQuery.trim();
+    if (q.isNotEmpty) {
+      _searchController.text = q;
+      _searchQuery = q;
+    }
+  }
+
+  /// Kirim kata kunci ke daftar setelah 400 ms tanpa ketikan baru, supaya tidak memanggil server tiap huruf.
   void _onSearch(String val) {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 400), () {

@@ -1,5 +1,9 @@
-// Repository akun pelanggan: login, daftar, keluar, lupa/reset sandi, ubah profil dan sandi lewat
-// backend REST. Dipakai AuthProvider dan layar auth/profil: layar → AuthProvider → AuthRepository → ApiClient.
+// Repository akun pelanggan: login, daftar, lupa sandi, profil, titik temu favorit, dan foto profil.
+// Alur: layar → AuthProvider → AuthRepository → ApiClient → backend REST KateringKita.
+import 'dart:typed_data';
+
+import 'package:http/http.dart' as http;
+
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import '../models/api_user.dart';
@@ -8,8 +12,28 @@ import 'token_store.dart';
 /// Akun pelanggan lewat REST backend. Token & email sesi disimpan di
 /// [TokenStore] (secure storage).
 class AuthRepository {
-  AuthRepository(this._api, {this.onSessionInvalid});
+  AuthRepository(this._api, {this.onSessionInvalid, http.Client? uploadClient})
+      // ignore: prefer_initializing_formals
+      : _uploadClient = uploadClient;
   final ApiClient _api;
+
+  /// Klien polos untuk PUT foto ke URL presign R2 (tanpa header Authorization
+  /// aplikasi). null: klien baru per unggahan.
+  final http.Client? _uploadClient;
+
+  /// Batas ukuran foto profil, sama dengan server.
+  static const int avatarMaxBytes = 5242880;
+
+  /// Ekstensi berkas yang diterima → content type yang dikirim ke server.
+  static const _avatarTypes = {
+    'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png': 'image/png',
+    'webp': 'image/webp',
+  };
+
+  static const _uploadTimeout = Duration(seconds: 60);
+  static const _uploadFailed = 'Gagal mengunggah foto. Coba lagi.';
 
   /// Dipanggil saat [currentUser] mendapati sesi tidak valid (401) dan token
   /// sudah dihapus, supaya status login aplikasi ikut dibersihkan. Hanya
@@ -139,10 +163,14 @@ class AuthRepository {
     return user;
   }
 
-  /// PUT /me/password. Return null bila sukses, atau pesan galat dari server
-  /// (galat kolom sandi lama/baru didahulukan). [email] tidak dipakai oleh metode ini.
+  /// PATCH /me `{favorite_pickup_point_id}`; null menghapus favorit. Server
+  /// menolak titik yang tidak aktif (400, kolom favorite_pickup_point_id).
+  Future<ApiUser> setFavoritePickupPoint(int? pickupPointId) async =>
+      _userFrom(await _api.patch('/me',
+          body: {'favorite_pickup_point_id': pickupPointId}));
+
+  /// PUT /me/password. Return null bila sukses, atau pesan galat dari server.
   Future<String?> changePassword({
-    required String email,
     required String currentPassword,
     required String newPassword,
   }) async {
@@ -159,7 +187,102 @@ class AuthRepository {
     }
   }
 
-  // Mengambil objek `user` dari balasan /me.
+  /// Content type foto dari ekstensi [fileName], atau null bila bukan
+  /// JPG/PNG/WebP.
+  static String? avatarContentType(String fileName) {
+    final dot = fileName.lastIndexOf('.');
+    if (dot < 0) return null;
+    return _avatarTypes[fileName.substring(dot + 1).toLowerCase()];
+  }
+
+  /// Ganti foto profil: minta URL presign (POST /me/avatar), PUT berkas ke
+  /// penyimpanan, lalu simpan public_url ke profil (PATCH /me). Tipe & ukuran
+  /// dicek dulu tanpa jaringan. Galat berupa [ApiException] dengan pesan siap
+  /// tampil.
+  Future<ApiUser> uploadAvatar({
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    final type = avatarContentType(fileName);
+    if (type == null) {
+      throw _invalid('content_type', 'Format foto harus JPG, PNG, atau WebP.');
+    }
+    if (bytes.isEmpty) throw _invalid('size', 'Ukuran foto tidak valid.');
+    if (bytes.length > avatarMaxBytes) {
+      throw _invalid('size', 'Ukuran foto maksimal 5 MB.');
+    }
+    final res = await _withFieldMessage(
+      () => _api.post('/me/avatar',
+          body: {'content_type': type, 'size': bytes.length}),
+      const ['content_type', 'size'],
+    );
+    final data = res.data as Map<String, dynamic>;
+    await _putToStorage(Uri.parse(data['upload_url'] as String), type, bytes);
+    return _setAvatarUrl(data['public_url'] as String);
+  }
+
+  /// Hapus foto profil (server menyimpan "" sebagai null).
+  Future<ApiUser> removeAvatar() => _setAvatarUrl('');
+
+  /// PATCH /me {avatar_url}; pesan galat kolom avatar_url dipakai bila ada.
+  Future<ApiUser> _setAvatarUrl(String url) async =>
+      _userFrom(await _withFieldMessage(
+        () => _api.patch('/me', body: {'avatar_url': url}),
+        const ['avatar_url'],
+      ));
+
+  /// PUT mentah ke URL presign. Content-Type & Content-Length ikut
+  /// ditandatangani, jadi harus persis [type] dan panjang [bytes].
+  Future<void> _putToStorage(Uri url, String type, Uint8List bytes) async {
+    final client = _uploadClient ?? http.Client();
+    final req = http.Request('PUT', url)
+      ..headers['Content-Type'] = type
+      ..bodyBytes = bytes;
+    var status = 0;
+    try {
+      final res = await client.send(req).timeout(_uploadTimeout);
+      await res.stream.drain<void>();
+      status = res.statusCode;
+    } catch (_) {
+      // Jaringan putus / waktu habis: sama dengan gagal unggah.
+    } finally {
+      if (_uploadClient == null) client.close();
+    }
+    if (status < 200 || status >= 300) {
+      throw ApiException(
+          status: status, code: 'UPLOAD_FAILED', message: _uploadFailed);
+    }
+  }
+
+  /// Galat validasi server memakai pesan kolom pertama dari [keys], lebih
+  /// jelas daripada "Data tidak valid.".
+  Future<T> _withFieldMessage<T>(
+      Future<T> Function() call, List<String> keys) async {
+    try {
+      return await call();
+    } on ApiException catch (e) {
+      for (final k in keys) {
+        final m = e.field(k);
+        if (m != null) {
+          throw ApiException(
+              status: e.status, code: e.code, message: m, fields: e.fields);
+        }
+      }
+      rethrow;
+    }
+  }
+
+  /// Galat validasi lokal berbentuk sama dengan galat 400 dari server.
+  static ApiException _invalid(String field, String message) => ApiException(
+        status: 400,
+        code: 'VALIDATION_ERROR',
+        message: message,
+        fields: {
+          field: [message]
+        },
+      );
+
+  /// Mengambil objek `user` dari balasan server.
   ApiUser _userFrom(ApiResponse res) => ApiUser.fromJson(
       (res.data as Map<String, dynamic>)['user'] as Map<String, dynamic>);
 }

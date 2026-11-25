@@ -2,10 +2,12 @@
 // Alur: layar → AuthProvider → AuthRepository → ApiClient → backend.
 import 'package:flutter/foundation.dart';
 
+import '../api/api_exception.dart';
 import '../data/auth_repository.dart';
 import '../models/api_user.dart';
 
-/// Menyimpan pengguna yang sedang login dan memberi tahu pendengar (layar, keranjang di main.dart)
+/// Menyimpan pengguna yang sedang login dan memberi tahu pendengar (layar; di main.dart keranjang,
+/// favorit, dan lencana notifikasi dikosongkan saat keluar)
 /// setiap kali status login berubah.
 class AuthProvider extends ChangeNotifier {
   AuthProvider(this._repo);
@@ -35,7 +37,48 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Keluar di server dan lokal, lalu mengosongkan status login.
+  /// Simpan titik temu favorit ke profil lewat PATCH /me (dipakai beranda &
+  /// checkout); null menghapusnya. Gagal: [ApiException], user tidak berubah.
+  Future<void> setFavoritePickupPoint(int? pickupPointId) async {
+    _setUser(await _repo.setFavoritePickupPoint(pickupPointId));
+  }
+
+  /// Ubah nama/WA/email (PATCH /me). Server meminta [currentPassword] bila
+  /// email atau nomor berubah. Gagal: [ApiException], user tidak berubah.
+  Future<void> updateProfile({
+    required String fullName,
+    required String phone,
+    required String email,
+    String? currentPassword,
+  }) async {
+    final u = _requireUser();
+    _setUser(await _repo.updateProfile(
+      userId: u.id,
+      oldEmail: u.email ?? '',
+      fullName: fullName,
+      phone: phone,
+      newEmail: email,
+      currentPassword: currentPassword,
+    ));
+  }
+
+  /// Ganti foto profil (lihat [AuthRepository.uploadAvatar]).
+  Future<void> uploadAvatar({
+    required String fileName,
+    required Uint8List bytes,
+  }) async {
+    _requireUser();
+    _setUser(await _repo.uploadAvatar(fileName: fileName, bytes: bytes));
+  }
+
+  /// Hapus foto profil, kembali ke inisial nama.
+  Future<void> removeAvatar() async {
+    _requireUser();
+    _setUser(await _repo.removeAvatar());
+  }
+
+  /// Keluar: POST /auth/logout (galat server diabaikan), hapus token lokal,
+  /// lalu kosongkan status login.
   Future<void> logout() async {
     await _repo.logout();
     clear();
@@ -46,4 +89,18 @@ class AuthProvider extends ChangeNotifier {
     _user = null;
     notifyListeners();
   }
+
+  /// Ganti data pengguna dengan balasan server terbaru lalu beri tahu layar.
+  void _setUser(ApiUser user) {
+    _user = user;
+    notifyListeners();
+  }
+
+  /// Pengguna yang sedang login; tamu langsung ditolak dengan galat 401 lokal.
+  ApiUser _requireUser() =>
+      _user ??
+      (throw const ApiException(
+          status: 401,
+          code: 'UNAUTHORIZED',
+          message: 'Masuk dulu untuk mengubah profil.'));
 }

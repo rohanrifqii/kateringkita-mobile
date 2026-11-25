@@ -1,5 +1,6 @@
-// Kartu menu untuk tampilan grid katalog. Layar mengambil data menu lewat CatalogRepository
-// (backend REST KateringKita) lalu menggambar tiap ProductModel dengan widget di berkas ini.
+// Kartu menu (FoodGridCard) untuk grid menu di beranda.
+// Data dari ProductModel; tombol hati memakai FavoriteButton (favorit tersimpan di server).
+import 'favorite_button.dart';
 import 'menu_image.dart';
 import 'package:flutter/material.dart';
 import '../core/app_colors.dart';
@@ -8,8 +9,8 @@ import '../core/app_routes.dart';
 import '../core/app_text_styles.dart';
 import '../models/product_model.dart';
 
-/// Kartu satu menu: gambar dengan label status ([ProductModel.badgeText]), nama menu,
-/// nama toko, harga, dan rating.
+/// Kartu satu menu: gambar dengan label status ([ProductModel.badgeText]), tombol hati
+/// favorit ([FavoriteButton]), nama menu, nama toko, harga, dan rating.
 ///
 /// Mengetuk kartu menjalankan [onTap] (biasanya membuka detail menu). Mengetuk baris nama
 /// toko membuka profil toko (rute `AppRoutes.storeProfile`) dengan slug toko sebagai argumen.
@@ -87,6 +88,32 @@ class FoodGridCard extends StatelessWidget {
                         ),
                       ),
                     ),
+                  Positioned(
+                    top: 6,
+                    right: 6,
+                    child: Container(
+                      width: 30,
+                      height: 30,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.9),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.12),
+                            blurRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: FavoriteButton(
+                        menu: product,
+                        size: 17,
+                        compact: true,
+                        // Lingkaran selalu putih, jadi hati kosong tetap gelap.
+                        color: AppColors.lightTextPrimary,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),

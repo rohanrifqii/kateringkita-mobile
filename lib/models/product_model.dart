@@ -87,7 +87,8 @@ class ProductModel {
   final double ratingAvg;
   final int ratingCount;
 
-  /// True bila menu ini disukai pengguna yang sedang login, menurut backend.
+  /// True bila menu ini ada di favorit pengguna yang sedang login, menurut
+  /// backend (`is_favorite`); status terbaru di aplikasi ada di FavoritesProvider.
   final bool isFavorite;
   final String? description;
   final List<MenuOption> options;
@@ -145,7 +146,9 @@ class ProductModel {
             .toList(),
         minOrderQty: (json['min_order_qty'] as num?)?.toInt() ?? 1,
         prepMinutes: (json['prep_minutes'] as num?)?.toInt() ?? 0,
-        isPreorder: (json['is_preorder'] as bool?) ?? false,
+        // Kartu katalog tidak memuat is_preorder; badge 'preorder' jadi penanda (detail menu memuatnya eksplisit)
+        isPreorder:
+            (json['is_preorder'] as bool?) ?? json['badge'] == 'preorder',
         preorderDays: (json['preorder_days'] as num?)?.toInt() ?? 0,
       );
 
@@ -187,8 +190,8 @@ class ProductModel {
   String get badgeType =>
       (badge == 'low_stock' || badge == 'sold_out') ? 'quota' : 'available';
 
-  /// Membuat salinan menu ini dengan nilai [isFavorite] baru (misalnya setelah tombol suka
-  /// ditekan); kolom lain tetap sama. Bila [isFavorite] null, nilai lama dipertahankan.
+  /// Membuat salinan menu ini dengan nilai [isFavorite] baru; kolom lain tetap sama.
+  /// Bila [isFavorite] null, nilai lama dipertahankan.
   ProductModel copyWith({bool? isFavorite}) => ProductModel(
         id: id,
         name: name,
@@ -209,15 +212,4 @@ class ProductModel {
         isPreorder: isPreorder,
         preorderDays: preorderDays,
       );
-}
-
-/// Shim sementara agar layar yang belum dipindah ke API tetap kompil.
-/// Dihapus setelah pemakai terakhirnya hilang.
-/// Shim = pengganti sementara: kelas ini tidak berisi data apa pun.
-class ProductData {
-  /// Selalu daftar kosong (dulu berisi data contoh).
-  static final List<ProductModel> mockProducts = [];
-
-  /// Selalu mengembalikan null; [name] diabaikan.
-  static ProductModel? getProductByName(String name) => null;
 }

@@ -40,7 +40,7 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen>
     with WidgetsBindingObserver {
-  /// Nama tampilan bank -> kode API.
+  // Nama tampilan bank -> kode API.
   static const Map<String, String> _bankCodes = {
     'BCA': 'bca',
     'BNI': 'bni',
@@ -96,9 +96,9 @@ class _PaymentScreenState extends State<PaymentScreen>
     Future.microtask(_refresh);
   }
 
-  /// Sisa waktu berpatokan pada `seconds_left` server, bukan jam perangkat.
-  /// Jam perangkat hanya dipakai bila server tidak mengirim `seconds_left`
-  /// (selisih ke `hold_until`); tidak pernah negatif.
+  // Sisa waktu berpatokan pada `seconds_left` server, bukan jam perangkat.
+  // Jam perangkat hanya dipakai bila server tidak mengirim `seconds_left`
+  // (selisih ke `hold_until`); tidak pernah negatif.
   int _computeRemaining(OrderApiModel o) {
     final s = o.secondsLeft;
     if (s != null) return s < 0 ? 0 : s;
@@ -110,8 +110,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     return 0;
   }
 
-  /// Argumen rute yang tampak kedaluwarsa belum dianggap final sebelum
-  /// server mengonfirmasi.
+  // Argumen rute yang tampak kedaluwarsa belum dianggap final sebelum
+  // server mengonfirmasi.
   PaymentOutcome get _outcome {
     final o = outcomeOf(_order);
     if (!_serverConfirmed &&
@@ -122,8 +122,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     return o;
   }
 
-  /// Selama status masih menunggu: hitung mundur tiap detik (saat habis,
-  /// tanya server) dan polling status lewat [PaymentPoller].
+  // Selama status masih menunggu: hitung mundur tiap detik (saat habis,
+  // tanya server) dan polling status lewat [PaymentPoller].
   void _startWatching() {
     if (_outcome != PaymentOutcome.waiting) return;
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -137,7 +137,7 @@ class _PaymentScreenState extends State<PaymentScreen>
     _pollSub = _poller!.start().listen(_apply);
   }
 
-  /// Hentikan timer hitung mundur dan polling.
+  // Hentikan timer hitung mundur dan polling.
   void _stopWatching() {
     _countdownTimer?.cancel();
     _countdownTimer = null;
@@ -160,8 +160,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     if (state == AppLifecycleState.resumed && _argsLoaded) _refresh();
   }
 
-  /// Ambil status terbaru (GET /orders/:code) sekali; panggilan yang tumpang
-  /// tindih diabaikan dan galat didiamkan.
+  // Ambil status terbaru (GET /orders/:code) sekali; panggilan yang tumpang
+  // tindih diabaikan dan galat didiamkan.
   Future<void> _refresh() async {
     if (_refreshing || !mounted) return;
     _refreshing = true;
@@ -175,8 +175,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     }
   }
 
-  /// Terapkan data pesanan dari server ke layar; hentikan pemantauan bila
-  /// status sudah final dan tampilkan lembar sukses bila sudah dibayar.
+  // Terapkan data pesanan dari server ke layar; hentikan pemantauan bila
+  // status sudah final dan tampilkan lembar sukses bila sudah dibayar.
   void _apply(OrderApiModel o) {
     if (!mounted) return;
     // Monoton: status bayar tidak boleh mundur karena respons usang.
@@ -192,8 +192,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     if (o.isPaid) _scheduleSuccess();
   }
 
-  /// Jadwalkan lembar sukses setelah frame ini (sekali saja, tidak saat Snap
-  /// masih terbuka).
+  // Jadwalkan lembar sukses setelah frame ini (sekali saja, tidak saat Snap
+  // masih terbuka).
   void _scheduleSuccess() {
     if (_successShown || _snapOpen) return;
     _successShown = true;
@@ -212,15 +212,15 @@ class _PaymentScreenState extends State<PaymentScreen>
   String _errorText(Object e) =>
       e is ApiException ? e.message : 'Terjadi gangguan. Coba lagi.';
 
-  /// Tampilkan galat; 409 (konflik dengan keadaan pesanan di server) memicu
-  /// penyegaran status.
+  // Tampilkan galat; 409 (konflik dengan keadaan pesanan di server) memicu
+  // penyegaran status.
   void _onApiError(Object e) {
     if (!mounted) return;
     setState(() => _error = _errorText(e));
     if (e is ApiException && e.status == 409) _refresh();
   }
 
-  /// Minta nomor Virtual Account untuk bank terpilih (POST /orders/:code/va).
+  // Minta nomor Virtual Account untuk bank terpilih (POST /orders/:code/va).
   Future<void> _createVa() async {
     setState(() {
       _busy = true;
@@ -237,8 +237,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     }
   }
 
-  /// Bayar QRIS / e-wallet: siapkan tautan Snap (POST /orders/:code/online
-  /// bila belum ada), buka WebView, lalu cek status ke server setelah ditutup.
+  // Bayar QRIS / e-wallet: siapkan tautan Snap (POST /orders/:code/online
+  // bila belum ada), buka WebView, lalu cek status ke server setelah ditutup.
   Future<void> _payOnline() async {
     setState(() {
       _busy = true;
@@ -293,8 +293,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     (_) => false,
   );
 
-  /// Lembar sukses (tidak bisa ditutup dengan geser). Bila uang masuk setelah
-  /// pesanan kedaluwarsa, tampil pesan pengembalian dana tanpa tombol WhatsApp.
+  // Lembar sukses (tidak bisa ditutup dengan geser). Bila uang masuk setelah
+  // pesanan kedaluwarsa, tampil pesan pengembalian dana tanpa tombol WhatsApp.
   void _showPaymentSuccessSheet() {
     final late = _order.status == 'expired';
     showModalBottomSheet<void>(
@@ -533,8 +533,8 @@ class _PaymentScreenState extends State<PaymentScreen>
     ),
   );
 
-  /// Bagian VA: nomor VA bila sudah dibuat, selain itu pilihan bank + tombol
-  /// buat nomor.
+  // Bagian VA: nomor VA bila sudah dibuat, selain itu pilihan bank + tombol
+  // buat nomor.
   Widget _vaSection() {
     final va = _va;
     if (va != null) {
@@ -655,7 +655,7 @@ class _PaymentScreenState extends State<PaymentScreen>
     ),
   );
 
-  /// Pesanan dibatalkan atau kedaluwarsa tanpa pembayaran.
+  // Pesanan dibatalkan atau kedaluwarsa tanpa pembayaran.
   Widget _endedSection() {
     final cancelled = _outcome == PaymentOutcome.cancelled;
     return Container(

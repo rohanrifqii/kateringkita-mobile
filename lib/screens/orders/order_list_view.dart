@@ -71,8 +71,8 @@ class _OrderListViewState extends State<OrderListView>
     WidgetsBinding.instance.addPostFrameCallback((_) => _load());
   }
 
-  /// Login (di layar mana pun) langsung memuat daftar; keluar membuang daftar
-  /// milik akun sebelumnya.
+  // Login (di layar mana pun) langsung memuat daftar; keluar membuang daftar
+  // milik akun sebelumnya.
   void _onAuthChanged() {
     final now = _auth.isLoggedIn;
     if (now == _wasLoggedIn || !mounted) return;
@@ -123,8 +123,8 @@ class _OrderListViewState extends State<OrderListView>
 
   bool get _loggedIn => context.read<AuthProvider>().isLoggedIn;
 
-  /// Muat ulang diam-diam (tanpa spinner) hanya bila layar terlihat, aplikasi
-  /// di depan, pengguna login, dan tidak ada muat yang sedang berjalan.
+  // Muat ulang diam-diam (tanpa spinner) hanya bila layar terlihat, aplikasi
+  // di depan, pengguna login, dan tidak ada muat yang sedang berjalan.
   void _poll() {
     if (!mounted || !_foreground || !_visible || !_loggedIn || _fetching) {
       return;
@@ -132,10 +132,10 @@ class _OrderListViewState extends State<OrderListView>
     _load(silent: true);
   }
 
-  /// Setiap pemuatan mengambil nomor urut; hasil dari permintaan yang lebih
-  /// lama (mis. query sudah berganti) diabaikan.
-  /// [silent] = tanpa spinner; galat muat diam-diam hanya ditampilkan bila
-  /// daftar masih kosong (daftar lama tetap terlihat).
+  // Setiap pemuatan mengambil nomor urut; hasil dari permintaan yang lebih
+  // lama (mis. query sudah berganti) diabaikan.
+  // [silent] = tanpa spinner; galat muat diam-diam hanya ditampilkan bila
+  // daftar masih kosong (daftar lama tetap terlihat).
   Future<void> _load({bool silent = false}) async {
     if (!mounted) return;
     if (!_loggedIn) {
@@ -167,15 +167,15 @@ class _OrderListViewState extends State<OrderListView>
     }
   }
 
-  /// Pesan galat untuk pengguna: pesan dari server bila ada, selain itu umum.
+  // Pesan galat untuk pengguna: pesan dari server bila ada, selain itu umum.
   String _msg(Object e) =>
       e is ApiException ? e.message : 'Terjadi kesalahan. Coba lagi.';
 
   void _snack(String text) => ScaffoldMessenger.of(context)
       .showSnackBar(SnackBar(content: Text(text)));
 
-  /// Menjalankan aksi untuk satu pesanan: cegah tekan ganda per kode pesanan
-  /// dan tampilkan galatnya sebagai SnackBar.
+  // Menjalankan aksi untuk satu pesanan: cegah tekan ganda per kode pesanan
+  // dan tampilkan galatnya sebagai SnackBar.
   Future<void> _run(OrderApiModel o, Future<void> Function() action) async {
     if (_busy.contains(o.code)) return;
     setState(() => _busy.add(o.code));
@@ -188,7 +188,7 @@ class _OrderListViewState extends State<OrderListView>
     }
   }
 
-  /// Dialog konfirmasi; true hanya bila tombol [yes] ditekan.
+  // Dialog konfirmasi; true hanya bila tombol [yes] ditekan.
   Future<bool> _confirm(String? title, String body, String no, String yes) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -204,7 +204,7 @@ class _OrderListViewState extends State<OrderListView>
     return ok == true;
   }
 
-  /// Batalkan pesanan setelah konfirmasi (POST /orders/:code/cancel).
+  // Batalkan pesanan setelah konfirmasi (POST /orders/:code/cancel).
   Future<void> _cancel(OrderApiModel o) async {
     if (!await _confirm('Batalkan pesanan?',
         'Pesanan ini akan dibatalkan dan tidak bisa dikembalikan.',
@@ -219,7 +219,7 @@ class _OrderListViewState extends State<OrderListView>
     });
   }
 
-  /// Tandai pesanan sudah diambil (POST /orders/:code/complete).
+  // Tandai pesanan sudah diambil (POST /orders/:code/complete).
   Future<void> _complete(OrderApiModel o) async {
     if (!await _confirm('Pesanan sudah diambil?',
         'Pesanan akan ditandai selesai.', 'Belum', 'Sudah')) {
@@ -233,7 +233,7 @@ class _OrderListViewState extends State<OrderListView>
     });
   }
 
-  /// Buka lembar ulasan; daftar dimuat ulang bila ulasan terkirim.
+  // Buka lembar ulasan; daftar dimuat ulang bila ulasan terkirim.
   Future<void> _review(OrderApiModel o) async {
     final ok = await showReviewSheet(context, o);
     if (ok == true && mounted) {
@@ -242,8 +242,8 @@ class _OrderListViewState extends State<OrderListView>
     }
   }
 
-  /// Lanjutkan bayar: ambil detail lengkap (GET /orders/:code) lalu buka
-  /// PaymentScreen; daftar disegarkan saat kembali.
+  // Lanjutkan bayar: ambil detail lengkap (GET /orders/:code) lalu buka
+  // PaymentScreen; daftar disegarkan saat kembali.
   Future<void> _pay(OrderApiModel o) => _run(o, () async {
         final full = await context.read<OrderRepository>().get(o.code);
         if (!mounted) return;
@@ -254,7 +254,7 @@ class _OrderListViewState extends State<OrderListView>
   static const _unavailable =
       'Beberapa pilihan menu sudah tidak tersedia. Silakan pesan ulang dari halaman menu.';
 
-  /// Keranjang berisi: tanya dulu sebelum menggantinya. "Tidak" = batal.
+  // Keranjang berisi: tanya dulu sebelum menggantinya. "Tidak" = batal.
   Future<void> _reorder(OrderApiModel o) async {
     if (_busy.contains(o.code)) return;
     final cart = context.read<CartProvider>();
@@ -267,10 +267,10 @@ class _OrderListViewState extends State<OrderListView>
     await _doReorder(o);
   }
 
-  /// Pesan lagi: POST /orders/:code/reorder memberi daftar menu + opsi, lalu
-  /// tiap menu dicek ke katalog (GET /menus/:id). Menu yang tidak bisa
-  /// dipesan, opsi yang hilang, atau lebih dari satu opsi membatalkan semuanya.
-  /// Bila lolos, keranjang diganti dan layar checkout dibuka.
+  // Pesan lagi: POST /orders/:code/reorder memberi daftar menu + opsi, lalu
+  // tiap menu dicek ke katalog (GET /menus/:id). Menu yang tidak bisa
+  // dipesan, opsi yang hilang, atau lebih dari satu opsi membatalkan semuanya.
+  // Bila lolos, keranjang diganti dan layar checkout dibuka.
   Future<void> _doReorder(OrderApiModel o) => _run(o, () async {
         final orders = context.read<OrderRepository>();
         final catalog = context.read<CatalogRepository>();
@@ -340,7 +340,7 @@ class _OrderListViewState extends State<OrderListView>
     );
   }
 
-  /// Membungkus pesan galat/kosong agar tetap bisa ditarik untuk muat ulang.
+  // Membungkus pesan galat/kosong agar tetap bisa ditarik untuk muat ulang.
   Widget _scrollable(Widget child) => RefreshIndicator(
         onRefresh: () => _load(silent: true),
         child: LayoutBuilder(
@@ -418,7 +418,7 @@ class _OrderListViewState extends State<OrderListView>
     );
   }
 
-  /// Detik -> "mm:ss" untuk sisa waktu bayar.
+  // Detik -> "mm:ss" untuk sisa waktu bayar.
   String _countdown(int s) {
     final m = (s ~/ 60).toString().padLeft(2, '0');
     final r = (s % 60).toString().padLeft(2, '0');
@@ -441,10 +441,10 @@ class _OrderListViewState extends State<OrderListView>
     );
   }
 
-  /// Kartu satu pesanan. Tombol mengikuti status: belum dibayar (`holding`)
-  /// -> Lanjutkan Bayar; masih berjalan -> Buka WhatsApp; selesai / batal /
-  /// kedaluwarsa -> Pesan Lagi. Ulasan, batal, dan selesai mengikuti flag
-  /// dari server (canReview, canCancel, canComplete).
+  // Kartu satu pesanan. Tombol mengikuti status: belum dibayar (`holding`)
+  // -> Lanjutkan Bayar; masih berjalan -> Buka WhatsApp; selesai / batal /
+  // kedaluwarsa -> Pesan Lagi. Ulasan, batal, dan selesai mengikuti flag
+  // dari server (canReview, canCancel, canComplete).
   Widget _card(OrderApiModel o) {
     final first = o.items.isEmpty ? null : o.items.first;
     final more = o.items.length - 1;

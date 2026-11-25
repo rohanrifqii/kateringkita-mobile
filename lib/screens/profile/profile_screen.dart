@@ -1,24 +1,26 @@
-// Layar Profil (tab terakhir MainNavigationScreen): kartu profil, keamanan akun, preferensi, bantuan, dan tombol keluar.
-// Data akun dari AuthRepository.currentUser (GET /me); preferensi & data tambahan profil disimpan lokal (SharedPreferences).
-import 'dart:io';
-
+// Layar Profil & Pengaturan (tab Profil di navigasi bawah). Data akun diambil dari AuthProvider (dimuat saat
+// splash/login lewat GET /me); dari sini pengguna membuka Ubah Profil, mengganti sandi (PUT /me/password), mengatur
+// tema, membaca FAQ/S&K/kebijakan privasi (teks statis), menghubungi CS WhatsApp, dan keluar (POST /auth/logout).
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/app_colors.dart';
+import '../../core/app_info.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
-import '../../models/api_user.dart';
+import '../../core/password_rules.dart';
+import '../../core/require_login.dart';
 import '../../providers/auth_provider.dart';
 import '../../data/auth_repository.dart';
 import '../../providers/theme_provider.dart';
 import '../../widgets/app_modal_dialog.dart';
+import '../../widgets/profile_avatar.dart';
 import 'edit_profile_screen.dart';
 
-/// Halaman profil & pengaturan. Untuk tamu (tanpa sesi) kartu profil memakai nilai contoh.
+/// Halaman profil & pengaturan. Untuk tamu (tanpa sesi) kartu profil diganti ajakan Masuk/Daftar, dan bagian
+/// Akun & Keamanan serta tombol Keluar disembunyikan.
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
 
@@ -26,67 +28,15 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
+/// State layar Profil: lembar bawah tiap menu dan susunan kartu pengaturan.
 class _ProfileScreenState extends State<ProfileScreen> {
-  static final SharedPreferencesAsync _prefs = SharedPreferencesAsync();
-
-  ApiUser? _user;
-  UserProfileExtras _extras = const UserProfileExtras();
-
-  // Pengaturan Preferensi & Notifikasi
-  String _selectedLanguage = 'Indonesia'; // 'Indonesia' atau 'English'
-  bool _biometricEnabled = true;
-  bool _notifMealTime = true;
-  bool _notifPromo = true;
-  bool _notifCourier = true;
-  bool _notifWhatsApp = true;
-
-  bool get _isEn => _selectedLanguage == 'English';
-
-  @override
-  void initState() {
-    super.initState();
-    _loadUserAndPreferences();
-  }
-
-  /// Memuat akun (GET /me; null bila tamu), data tambahan profil per email, dan preferensi aplikasi
-  /// dari SharedPreferences. Tamu memakai email contoh sebagai kunci data tambahan.
-  Future<void> _loadUserAndPreferences() async {
-    final user = await context.read<AuthRepository>().currentUser();
-    final email = user?.email ?? 'abdurrahim.workspace@gmail.com';
-    final extras = await UserProfileExtras.load(email);
-
-    final lang = await _prefs.getString('app_pref_lang') ?? 'Indonesia';
-    final bioAuth = await _prefs.getBool('app_pref_biometric') ?? true;
-    final nMeal = await _prefs.getBool('app_notif_meal') ?? true;
-    final nPromo = await _prefs.getBool('app_notif_promo') ?? true;
-    final nCourier = await _prefs.getBool('app_notif_courier') ?? true;
-    final nWa = await _prefs.getBool('app_notif_wa') ?? true;
-
-    if (!mounted) return;
-    setState(() {
-      _user = user;
-      _extras = extras;
-      _selectedLanguage = (lang == 'English') ? 'English' : 'Indonesia';
-      _biometricEnabled = bioAuth;
-      _notifMealTime = nMeal;
-      _notifPromo = nPromo;
-      _notifCourier = nCourier;
-      _notifWhatsApp = nWa;
-    });
-  }
-
-  /// Buka EditProfileScreen, lalu muat ulang data setelah kembali.
-  Future<void> _openEditProfile() async {
-    await Navigator.push<bool>(
+  /// Buka layar Ubah Profil. Layar ini tidak memuat ulang data setelah kembali: [AuthProvider.user] sudah
+  /// diperbarui oleh layar Ubah Profil, dan build() memantaunya lewat context.watch.
+  void _openEditProfile() {
+    Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => EditProfileScreen(
-          initialUser: _user,
-          initialExtras: _extras,
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => const EditProfileScreen()),
     );
-    await _loadUserAndPreferences();
   }
 
   /// SnackBar mengambang berikon centang.
@@ -143,7 +93,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ==================== BOTTOM SHEETS UNTUK TIAP MENU ====================
 
-  /// 1. Sheet Password & Keamanan
+  /// 1. Lembar Password & Keamanan: ubah sandi lewat [AuthRepository.changePassword] (PUT /me/password).
+  /// Aturan sandi baru dan konfirmasinya dicek dulu di perangkat; galat server tampil di dalam lembar.
   void _showPasswordSecuritySheet() {
     final currentPwdCtrl = TextEditingController();
     final newPwdCtrl = TextEditingController();
@@ -177,7 +128,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        _isEn ? 'Password & Security' : 'Password & Keamanan',
+                        'Password & Keamanan',
                         style: AppTextStyles.h3.copyWith(fontSize: 17),
                       ),
                       IconButton(
@@ -187,61 +138,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.secondaryBg,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.fingerprint_rounded,
-                          color: AppColors.primary,
-                          size: 22,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _isEn
-                                    ? 'Biometric & Transaction PIN'
-                                    : 'PIN Transaksi & Biometrik',
-                                style: AppTextStyles.bodyMedium.copyWith(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              Text(
-                                _isEn
-                                    ? 'Quick verification during checkout'
-                                    : 'Verifikasi cepat saat transaksi pesanan',
-                                style: AppTextStyles.bodySmall.copyWith(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Switch(
-                          value: _biometricEnabled,
-                          activeTrackColor: AppColors.primary,
-                          onChanged: (val) async {
-                            setSheetState(() => _biometricEnabled = val);
-                            setState(() => _biometricEnabled = val);
-                            await _prefs.setBool('app_pref_biometric', val);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                   Text(
-                    _isEn ? 'Change Account Password' : 'Ubah Password Akun',
+                    'Ubah Password Akun',
                     style: AppTextStyles.bodyMedium.copyWith(
                       fontWeight: FontWeight.w700,
                       fontSize: 13.5,
@@ -252,8 +150,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: currentPwdCtrl,
                     obscureText: obscureCurrent,
                     decoration: InputDecoration(
-                      labelText:
-                          _isEn ? 'Current Password' : 'Password Saat Ini',
+                      labelText: 'Password Saat Ini',
                       suffixIcon: IconButton(
                         icon: Icon(
                           obscureCurrent
@@ -271,7 +168,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: newPwdCtrl,
                     obscureText: obscureNew,
                     decoration: InputDecoration(
-                      labelText: _isEn ? 'New Password' : 'Password Baru',
+                      labelText: 'Password Baru',
                       suffixIcon: IconButton(
                         icon: Icon(
                           obscureNew
@@ -289,9 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: confirmPwdCtrl,
                     obscureText: obscureNew,
                     decoration: InputDecoration(
-                      labelText: _isEn
-                          ? 'Confirm New Password'
-                          : 'Konfirmasi Password Baru',
+                      labelText: 'Konfirmasi Password Baru',
                     ),
                   ),
                   if (errorMsg != null) ...[
@@ -317,15 +212,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       onPressed: () async {
-                        final cur = currentPwdCtrl.text.trim();
-                        final nw = newPwdCtrl.text.trim();
-                        final cf = confirmPwdCtrl.text.trim();
+                        final cur = currentPwdCtrl.text;
+                        final nw = newPwdCtrl.text;
+                        final cf = confirmPwdCtrl.text;
 
-                        if (nw.length < 6) {
-                          setSheetState(() {
-                            errorMsg =
-                                'Password baru minimal harus 6 karakter.';
-                          });
+                        // Aturan & pesan sama dengan layar daftar (server).
+                        final rule = validatePasswordRules(nw);
+                        if (rule != null) {
+                          setSheetState(() => errorMsg = rule);
                           return;
                         }
                         if (nw != cf) {
@@ -335,12 +229,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           return;
                         }
 
-                        // Ganti sandi ke server (PUT /me/password); changePassword mengembalikan pesan galat atau null.
-                        final email =
-                            _user?.email ?? 'abdurrahim.workspace@gmail.com';
+                        // Langsung ke repository: ganti sandi tidak mengubah data user di AuthProvider.
                         final repo = context.read<AuthRepository>();
                         final err = await repo.changePassword(
-                          email: email,
                           currentPassword: cur,
                           newPassword: nw,
                         );
@@ -354,7 +245,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         _showToast('Password akun berhasil diperbarui!');
                       },
                       child: Text(
-                        _isEn ? 'Update Password' : 'Simpan Password Baru',
+                        'Simpan Password Baru',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
@@ -372,274 +263,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// 2. Sheet Pengaturan Notifikasi
-  void _showNotificationSettingsSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) {
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _isEn
-                              ? 'Notification Settings'
-                              : 'Pengaturan Notifikasi',
-                          style: AppTextStyles.h3.copyWith(fontSize: 17),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close_rounded, size: 20),
-                          onPressed: () => Navigator.pop(ctx),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    _buildNotifSwitchTile(
-                      title: _isEn
-                          ? 'Meal Time & Pre-Order Reminder'
-                          : 'Pengingat Jam Makan & Pre-Order',
-                      subtitle: _isEn
-                          ? 'Remind before daily quota closes'
-                          : 'Ingatkan sebelum kuota porsi harian habis',
-                      value: _notifMealTime,
-                      onChanged: (v) async {
-                        setSheetState(() => _notifMealTime = v);
-                        setState(() => _notifMealTime = v);
-                        await _prefs.setBool('app_notif_meal', v);
-                      },
-                    ),
-                    const Divider(height: 1),
-                    _buildNotifSwitchTile(
-                      title: _isEn
-                          ? 'Danusan Promo & Discount'
-                          : 'Promo & Diskon Paket Danusan',
-                      subtitle: _isEn
-                          ? 'Special wholesale price info from vendors'
-                          : 'Info diskon grosir & paket hemat organisasi',
-                      value: _notifPromo,
-                      onChanged: (v) async {
-                        setSheetState(() => _notifPromo = v);
-                        setState(() => _notifPromo = v);
-                        await _prefs.setBool('app_notif_promo', v);
-                      },
-                    ),
-                    const Divider(height: 1),
-                    _buildNotifSwitchTile(
-                      title: _isEn
-                          ? 'Order & Courier Status'
-                          : 'Status Pesanan & Pengantaran Kurir',
-                      subtitle: _isEn
-                          ? 'Real-time updates when food arrives'
-                          : 'Notifikasi saat pesanan sedang dimasak & diantar',
-                      value: _notifCourier,
-                      onChanged: (v) async {
-                        setSheetState(() => _notifCourier = v);
-                        setState(() => _notifCourier = v);
-                        await _prefs.setBool('app_notif_courier', v);
-                      },
-                    ),
-                    const Divider(height: 1),
-                    _buildNotifSwitchTile(
-                      title: _isEn
-                          ? 'WhatsApp Order Confirmation'
-                          : 'Notifikasi Konfirmasi WhatsApp',
-                      subtitle: _isEn
-                          ? 'Send invoice & receipt to WhatsApp'
-                          : 'Kirim bukti pesanan otomatis via WhatsApp',
-                      value: _notifWhatsApp,
-                      onChanged: (v) async {
-                        setSheetState(() => _notifWhatsApp = v);
-                        setState(() => _notifWhatsApp = v);
-                        await _prefs.setBool('app_notif_wa', v);
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildNotifSwitchTile({
-    required String title,
-    required String subtitle,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: AppTextStyles.bodyMedium.copyWith(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13.5,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textSecondary,
-                    fontSize: 11.5,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Switch(
-            value: value,
-            activeTrackColor: AppColors.primary,
-            onChanged: onChanged,
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 3. Sheet Pilih Bahasa (Hanya Bahasa Indonesia & English sesuai instruksi!)
-  void _showLanguagePickerSheet() {
-    final languages = [
-      ('Indonesia', 'Bahasa Indonesia (ID)', '🇮🇩'),
-      ('English', 'English (US)', '🇬🇧'),
-    ];
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      _isEn ? 'Select Language' : 'Pilih Bahasa Aplikasi',
-                      style: AppTextStyles.h3.copyWith(fontSize: 17),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded, size: 20),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ...languages.map((lang) {
-                  final isSelected = _selectedLanguage == lang.$1;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(14),
-                      onTap: () async {
-                        setState(() => _selectedLanguage = lang.$1);
-                        Navigator.pop(ctx);
-                        await _prefs.setString('app_pref_lang', lang.$1);
-                        _showToast(
-                          lang.$1 == 'English'
-                              ? 'Language changed to English'
-                              : 'Bahasa berhasil diubah ke Bahasa Indonesia',
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.primarySoft
-                              : AppColors.secondaryBg,
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(
-                            color: isSelected
-                                ? AppColors.primary
-                                : AppColors.cardBorder,
-                            width: isSelected ? 1.5 : 1,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Text(lang.$3, style: const TextStyle(fontSize: 22)),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                lang.$2,
-                                style: AppTextStyles.bodyMedium.copyWith(
-                                  fontWeight: isSelected
-                                      ? FontWeight.w800
-                                      : FontWeight.w600,
-                                  color: isSelected
-                                      ? AppColors.primaryDark
-                                      : AppColors.textPrimary,
-                                ),
-                              ),
-                            ),
-                            if (isSelected)
-                              const Icon(
-                                Icons.check_circle_rounded,
-                                color: AppColors.primary,
-                                size: 22,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  /// 4. Sheet Pusat Bantuan & FAQ
+  /// 2. Lembar Pusat Bantuan & FAQ (teks statis di aplikasi).
   void _showHelpFaqSheet() {
+    // Hanya perilaku aplikasi yang nyata (lihat checkout, pembayaran, tab
+    // Pesanan, Asisten AI). Jangan tambahkan janji yang tidak ada di server.
     final faqs = [
       (
-        'Bagaimana cara memesan paket katering atau danusan?',
-        'Kamu bisa memilih menu langsung di halaman Home atau menggunakan fitur AI Assistant untuk menghitung kombinasi paket terbaik sesuai modalmu, lalu klik tombol Pesan dan lanjutkan ke Checkout.'
+        'Bagaimana cara memesan?',
+        'Pilih menu di Beranda atau dari rekomendasi Asisten AI, tambahkan ke keranjang, lalu checkout: pilih titik temu, waktu ambil, dan metode pembayaran. Pesanan tidak diantar; kamu mengambilnya sendiri di titik temu yang dipilih.'
       ),
       (
-        'Apa fungsi fitur Holding Timer 5 Menit saat Checkout?',
-        'Holding Timer mengunci kuota porsi pesananmu selama 5 menit saat kamu berada di halaman Checkout agar stok tidak habis diserobot pembeli lain ketika kamu sedang menyelesaikan pembayaran.'
-      ),
-      (
-        'Apa bedanya Profit Maksimal dan Variasi Menu di AI Assistant?',
-        'Profit Maksimal memfokuskan modalmu pada 1 menu dengan margin keuntungan paling tinggi. Sedangkan Variasi Menu membagi modalmu ke banyak pilihan menu berbeda (seperti Martabak, Nasi Goreng, Mochi, Lumpia, & Cheese Roll) agar variasi jualanmu lengkap.'
+        'Apa itu batas waktu pembayaran?',
+        'Setiap pesanan punya batas waktu yang ditentukan toko, tampil sebagai hitung mundur di halaman pembayaran. Selesaikan pembayaran sebelum waktunya habis; bila lewat, pesanan otomatis kedaluwarsa.'
       ),
       (
         'Metode pembayaran apa saja yang tersedia?',
-        'KateringKita menerima pembayaran via QRIS / E-Wallet Instan (GoPay, OVO, ShopeePay, DANA), Transfer Virtual Account (BCA, Mandiri, BNI, BRI), serta Tunai saat Pengambilan (COD).'
+        'Pembayaran lewat Midtrans: QRIS / e-wallet (GoPay, ShopeePay & QRIS) atau Virtual Account bank (BCA, BNI, BRI). Tidak ada pembayaran tunai.'
+      ),
+      (
+        'Bagaimana memantau status pesanan?',
+        'Status pesanan diperbarui dari server dan tampil di tab Pesanan: Menunggu pembayaran, Dikonfirmasi, Sedang dimasak, Siap diambil, lalu Selesai. Perubahan status juga muncul di Notifikasi.'
+      ),
+      (
+        'Apa yang bisa dilakukan Asisten AI?',
+        'Ceritakan kebutuhanmu (boleh disertai anggaran, jumlah porsi, dan kategori), lalu asisten merekomendasikan menu dari katalog KateringKita yang bisa langsung dimasukkan ke keranjang. Kalkulator danusan menghitung modal dari total harga menu, serta perkiraan laba dan ROI dari harga jual yang kamu isi.'
       ),
     ];
 
@@ -666,7 +313,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        _isEn ? 'Help Center & FAQ' : 'Pusat Bantuan & FAQ',
+                        'Pusat Bantuan & FAQ',
                         style: AppTextStyles.h3.copyWith(fontSize: 18),
                       ),
                       IconButton(
@@ -730,7 +377,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// 5. Sheet Syarat & Ketentuan Layanan / Kebijakan Privasi
+  /// 3. Lembar dokumen teks statis (Syarat & Ketentuan / Kebijakan Privasi): [sections] berisi pasangan (judul, isi).
   void _showLegalDocumentSheet({
     required String title,
     required List<(String, String)> sections,
@@ -811,7 +458,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// 6. Sheet Tentang KateringKita
+  /// 4. Lembar Tentang KateringKita, menampilkan versi aplikasi dari [kAppVersion].
   void _showAboutAppSheet() {
     showModalBottomSheet(
       context: context,
@@ -853,7 +500,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    'Versi 1.0.2 • Build 2025',
+                    'Versi $kAppVersion',
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w700,
@@ -901,127 +548,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  /// 7. Sheet Beri Rating di App Store
-  void _showRateAppSheet() {
-    int selectedStars = 5;
-    final reviewCtrl = TextEditingController();
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 20,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    _isEn
-                        ? 'Rate KateringKita App'
-                        : 'Beri Rating KateringKita',
-                    style: AppTextStyles.h3.copyWith(fontSize: 18),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _isEn
-                        ? 'How is your experience ordering with KateringKita?'
-                        : 'Bagaimana pengalamanmu memesan katering & danusan di aplikasi ini?',
-                    textAlign: TextAlign.center,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (idx) {
-                      final starNum = idx + 1;
-                      final active = starNum <= selectedStars;
-                      return IconButton(
-                        onPressed: () =>
-                            setSheetState(() => selectedStars = starNum),
-                        icon: Icon(
-                          active
-                              ? Icons.star_rounded
-                              : Icons.star_outline_rounded,
-                          size: 38,
-                          color: active
-                              ? const Color(0xFFF59E0B)
-                              : AppColors.cardBorder,
-                        ),
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: reviewCtrl,
-                    maxLines: 2,
-                    decoration: InputDecoration(
-                      labelText:
-                          _isEn ? 'Your Feedback (Optional)' : 'Masukan / Ulasan (Opsional)',
-                      hintText: _isEn
-                          ? 'Write your review here...'
-                          : 'Tulis kesan atau saranmu untuk KateringKita...',
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _showToast(
-                          'Terima kasih atas rating $selectedStars ⭐ untuk KateringKita!',
-                        );
-                      },
-                      child: Text(
-                        _isEn ? 'Submit Rating' : 'Kirim Rating Sekarang',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
   // ==================== MAIN BUILD ====================
 
   @override
   Widget build(BuildContext context) {
-    final name = (_user?.fullName != null && _user!.fullName.trim().isNotEmpty)
-        ? _user!.fullName
-        : 'Abdurrahim';
-    final bioLines = _extras.bio.trim().isNotEmpty
-        ? _extras.bio.trim()
-        : 'Mahasiswa\nUniversitas Brawijaya';
+    final auth = context.watch<AuthProvider>();
+    // Tamu: tanpa data akun siapa pun, hanya ajakan Masuk/Daftar.
+    final user = auth.isLoggedIn ? auth.user : null;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -1036,7 +569,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               // Judul Halaman: Profil & Pengaturan
               Text(
-                _isEn ? 'Profile & Settings' : 'Profil & Pengaturan',
+                'Profil & Pengaturan',
                 style: AppTextStyles.h2.copyWith(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
@@ -1048,67 +581,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 1. Kartu Profil Pengguna (Sesuai Redesign)
-              _buildProfileHeaderCard(name: name, bioLines: bioLines),
+              // 1. Kartu Profil Pengguna (Sesuai Redesign) / ajakan masuk
+              if (user == null)
+                _buildGuestCard()
+              else
+                _buildProfileHeaderCard(
+                    name: user.fullName, avatarUrl: user.avatarUrl),
               const SizedBox(height: 22),
 
-              // 2. Section: AKUN & KEAMANAN (Tanpa Akun WhatsApp terpisah karena sudah ada di Kelola Profil)
-              _buildSectionHeader(_isEn ? 'ACCOUNT & SECURITY' : 'AKUN & KEAMANAN'),
-              const SizedBox(height: 8),
-              _buildSectionCard([
-                _buildSettingTile(
-                  icon: Icons.person_outline_rounded,
-                  iconBg: const Color(0xFFFFF1E8),
-                  iconColor: const Color(0xFFD9774A),
-                  title: _isEn ? 'Manage Profile' : 'Kelola Profil',
-                  subtitle: _isEn
-                      ? 'Name, Email, & WhatsApp Number'
-                      : 'Nama, Email, & No. WhatsApp',
-                  onTap: _openEditProfile,
-                ),
-                _buildCardDivider(),
-                _buildSettingTile(
-                  icon: Icons.lock_outline_rounded,
-                  iconBg: const Color(0xFFFEF3C7),
-                  iconColor: const Color(0xFFD97706),
-                  title: _isEn ? 'Password & Security' : 'Password & Keamanan',
-                  subtitle: _biometricEnabled
-                      ? (_isEn
-                          ? 'Transaction PIN & Biometric active'
-                          : 'PIN Transaksi & Biometrik aktif')
-                      : (_isEn
-                          ? 'Manage account password'
-                          : 'Kelola password keamanan akun'),
-                  onTap: _showPasswordSecuritySheet,
-                ),
-                _buildCardDivider(),
-                _buildSettingTile(
-                  icon: Icons.notifications_none_rounded,
-                  iconBg: const Color(0xFFEFF6FF),
-                  iconColor: const Color(0xFF3B82F6),
-                  title: _isEn
-                      ? 'Notification Settings'
-                      : 'Pengaturan Notifikasi',
-                  subtitle: _isEn
-                      ? 'Meal time, promos, courier status'
-                      : 'Jam makan, promo, status kurir',
-                  onTap: _showNotificationSettingsSheet,
-                ),
-                _buildCardDivider(),
-                _buildSettingTile(
-                  icon: Icons.translate_rounded,
-                  iconBg: const Color(0xFFF3E8FF),
-                  iconColor: const Color(0xFF9333EA),
-                  title: _isEn ? 'Language' : 'Bahasa',
-                  trailingText: _selectedLanguage,
-                  onTap: _showLanguagePickerSheet,
-                ),
-              ]),
-              const SizedBox(height: 20),
+              // 2. Section: AKUN & KEAMANAN (hanya untuk akun yang masuk)
+              if (user != null) ...[
+                _buildSectionHeader('AKUN & KEAMANAN'),
+                const SizedBox(height: 8),
+                _buildSectionCard([
+                  _buildSettingTile(
+                    icon: Icons.person_outline_rounded,
+                    iconBg: const Color(0xFFFFF1E8),
+                    iconColor: const Color(0xFFD9774A),
+                    title: 'Kelola Profil',
+                    subtitle: 'Nama, Email, & No. WhatsApp',
+                    onTap: _openEditProfile,
+                  ),
+                  _buildCardDivider(),
+                  _buildSettingTile(
+                    icon: Icons.lock_outline_rounded,
+                    iconBg: const Color(0xFFFEF3C7),
+                    iconColor: const Color(0xFFD97706),
+                    title: 'Password & Keamanan',
+                    subtitle: 'Kelola password keamanan akun',
+                    onTap: _showPasswordSecuritySheet,
+                  ),
+                ]),
+                const SizedBox(height: 20),
+              ],
 
               // 3. Section: PREFERENSI & LAYANAN (Dibersihkan sesuai arahan user: Hanya Tema Tampilan)
-              _buildSectionHeader(
-                  _isEn ? 'PREFERENCES & APPEARANCE' : 'PREFERENSI & LAYANAN'),
+              _buildSectionHeader('PREFERENSI & LAYANAN'),
               const SizedBox(height: 8),
               _buildSectionCard([
                 _buildThemeToggleTile(),
@@ -1116,17 +624,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 20),
 
               // 4. Section: BANTUAN & DUKUNGAN
-              _buildSectionHeader(_isEn ? 'HELP & SUPPORT' : 'BANTUAN & DUKUNGAN'),
+              _buildSectionHeader('BANTUAN & DUKUNGAN'),
               const SizedBox(height: 8),
               _buildSectionCard([
                 _buildSettingTile(
                   icon: Icons.help_outline_rounded,
                   iconBg: const Color(0xFFFFF1E8),
                   iconColor: const Color(0xFFD9774A),
-                  title: _isEn ? 'Help Center & FAQ' : 'Pusat Bantuan & FAQ',
-                  subtitle: _isEn
-                      ? 'Complete campus catering guide'
-                      : 'Panduan lengkap katering kampus',
+                  title: 'Pusat Bantuan & FAQ',
+                  subtitle: 'Panduan lengkap katering kampus',
                   onTap: _showHelpFaqSheet,
                 ),
                 _buildCardDivider(),
@@ -1134,12 +640,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.chat_bubble_outline_rounded,
                   iconBg: const Color(0xFFDCFCE7),
                   iconColor: const Color(0xFF16A34A),
-                  title:
-                      _isEn ? 'Contact WhatsApp CS' : 'Hubungi CS WhatsApp',
-                  subtitle: _isEn
-                      ? 'Fast response < 2 mins'
-                      : 'Respon cepat < 2 menit',
-                  subtitleColor: const Color(0xFF16A34A),
+                  title: 'Hubungi CS WhatsApp',
+                  subtitle: 'Bantuan pesanan lewat WhatsApp',
                   onTap: () {
                     AppModalDialog.showCustomerSupport(
                       context,
@@ -1152,23 +654,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.description_outlined,
                   iconBg: const Color(0xFFE0F2FE),
                   iconColor: const Color(0xFF0284C7),
-                  title: _isEn
-                      ? 'Terms of Service'
-                      : 'Syarat & Ketentuan Layanan',
+                  title: 'Syarat & Ketentuan Layanan',
                   onTap: () => _showLegalDocumentSheet(
                     title: 'Syarat & Ketentuan Layanan',
                     sections: const [
                       (
                         '1. Ketentuan Pemesanan & Pre-Order',
-                        'Setiap pesanan katering dan paket danusan di KateringKita diproses sesuai kuota harian mitra vendor. Pastikan titik lokasi pengantaran dan nomor WhatsApp aktif sudah sesuai sebelum melakukan konfirmasi pembayaran.'
+                        'Setiap pesanan katering dan paket danusan di KateringKita diproses sesuai kuota harian mitra vendor. Pesanan tidak diantar: pembeli mengambil sendiri di titik temu yang dipilih saat checkout. Pastikan titik temu, waktu ambil, dan nomor WhatsApp aktif sudah sesuai sebelum melakukan pembayaran.'
                       ),
                       (
-                        '2. Sistem Holding Timer 5 Menit',
-                        'Saat pengguna masuk ke halaman Checkout, sistem mengunci kuota porsi selama 5 menit agar stok tidak diambil pengguna lain. Apabila waktu habis sebelum pembayaran dikonfirmasi, kuota akan otomatis dilepas kembali.'
+                        '2. Batas Waktu Pembayaran',
+                        'Setiap pesanan punya batas waktu pembayaran yang ditentukan toko dan tampil di halaman pembayaran. Pesanan yang belum dibayar sampai batas waktu habis otomatis kedaluwarsa.'
                       ),
                       (
                         '3. Pembayaran & Konfirmasi Pesanan',
-                        'Pembayaran dapat dilakukan melalui QRIS, Transfer Virtual Account, maupun Tunai saat Pengambilan (COD). Bukti pesanan dapat diteruskan langsung ke WhatsApp resmi vendor melalui fitur konfirmasi di aplikasi.'
+                        'Pembayaran dilakukan lewat Midtrans: QRIS/e-wallet atau Virtual Account bank. Tidak ada pembayaran tunai. Bukti pesanan dapat diteruskan ke WhatsApp vendor melalui fitur konfirmasi di aplikasi.'
                       ),
                     ],
                   ),
@@ -1178,21 +678,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   icon: Icons.verified_user_outlined,
                   iconBg: const Color(0xFFF3E8FF),
                   iconColor: const Color(0xFF7C3AED),
-                  title: _isEn ? 'Privacy Policy' : 'Kebijakan Privasi',
+                  title: 'Kebijakan Privasi',
                   onTap: () => _showLegalDocumentSheet(
                     title: 'Kebijakan Privasi KateringKita',
                     sections: const [
                       (
                         '1. Perlindungan Data Pengguna',
-                        'KateringKita menjaga kerahasiaan data pribadi pengguna seperti Nama, Alamat Email, Nomor WhatsApp, serta titik lokasi pengantaran. Password dan token sesi disimpan secara terenkripsi menggunakan penyimpanan aman (Secure Storage).'
+                        'KateringKita menjaga kerahasiaan data pribadi pengguna seperti Nama, Alamat Email, Nomor WhatsApp, serta titik temu favorit. Token sesi disimpan secara terenkripsi menggunakan penyimpanan aman (Secure Storage); kata sandi tidak disimpan di perangkat.'
                       ),
                       (
-                        '2. Penggunaan Lokasi & GPS',
-                        'Akses lokasi GPS dan peta OpenStreetMap hanya digunakan untuk memudahkan penentuan titik pengantaran pesanan katering serta menghitung estimasi waktu tempuh pengantaran.'
+                        '2. Peta & Titik Temu',
+                        'Aplikasi tidak meminta akses lokasi GPS. Peta OpenStreetMap hanya ditampilkan sebagai latar area kampus, dan titik temu dipilih dari daftar resmi KateringKita.'
                       ),
                       (
-                        '3. Keamanan Konsultasi AI Assistant',
-                        'Riwayat percakapan dan simulasi anggaran pada fitur AI Assistant disimpan secara lokal di perangkatmu dan hanya digunakan untuk memberikan rekomendasi paket menu terbaik.'
+                        '3. Asisten AI',
+                        'Pertanyaan yang kamu kirim ke Asisten AI diproses di server KateringKita untuk membuat rekomendasi menu. Riwayat sesi asisten disimpan di perangkatmu, terpisah per akun.'
                       ),
                     ],
                   ),
@@ -1201,91 +701,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 20),
 
               // 5. Section: TENTANG APLIKASI
-              _buildSectionHeader(_isEn ? 'ABOUT APPLICATION' : 'TENTANG APLIKASI'),
+              _buildSectionHeader('TENTANG APLIKASI'),
               const SizedBox(height: 8),
               _buildSectionCard([
                 _buildSettingTile(
                   icon: Icons.access_time_rounded,
                   iconBg: const Color(0xFFF1F5F9),
                   iconColor: const Color(0xFF475569),
-                  title: _isEn ? 'About KateringKita' : 'Tentang KateringKita',
-                  subtitle: _isEn
-                      ? 'Malang Student Lunch & Catering Solution'
-                      : 'Solusi Makan Siang Mahasiswa Malang',
+                  title: 'Tentang KateringKita',
+                  subtitle: 'Solusi Makan Siang Mahasiswa Malang',
                   onTap: _showAboutAppSheet,
-                ),
-                _buildCardDivider(),
-                _buildSettingTile(
-                  icon: Icons.star_rounded,
-                  iconBg: const Color(0xFFFEF3C7),
-                  iconColor: const Color(0xFFF59E0B),
-                  title: _isEn ? 'Rate on App Store' : 'Beri Rating di App Store',
-                  onTap: _showRateAppSheet,
                 ),
               ]),
               const SizedBox(height: 24),
 
-              // 6. Tombol Keluar dari Akun (Sesuai Redesign)
-              Material(
-                color: AppColors.isDarkMode
-                    ? const Color(0xFF2C161A)
-                    : const Color(0xFFFFF1F2),
-                borderRadius: BorderRadius.circular(16),
-                child: InkWell(
+              // 6. Tombol Keluar dari Akun (Sesuai Redesign), hanya bila masuk
+              if (user != null) ...[
+                Material(
+                  color: AppColors.isDarkMode
+                      ? const Color(0xFF2C161A)
+                      : const Color(0xFFFFF1F2),
                   borderRadius: BorderRadius.circular(16),
-                  onTap: () {
-                    AppModalDialog.showLogout(
-                      context,
-                      onConfirm: () async {
-                        // Keluar: POST /auth/logout + hapus sesi lokal, lalu ganti seluruh tumpukan rute dengan Login.
-                        final nav = Navigator.of(context);
-                        await context.read<AuthProvider>().logout();
-                        nav.pushNamedAndRemoveUntil(
-                          AppRoutes.login,
-                          (route) => false,
-                        );
-                      },
-                    );
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: AppColors.isDarkMode
-                            ? const Color(0xFF4C1D24)
-                            : const Color(0xFFFECDD3),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(16),
+                    onTap: () {
+                      AppModalDialog.showLogout(
+                        context,
+                        // Keluar: hapus sesi (server + token lokal), lalu kosongkan tumpukan layar dan buka Login.
+                        onConfirm: () async {
+                          final nav = Navigator.of(context);
+                          await context.read<AuthProvider>().logout();
+                          nav.pushNamedAndRemoveUntil(
+                            AppRoutes.login,
+                            (route) => false,
+                          );
+                        },
+                      );
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppColors.isDarkMode
+                              ? const Color(0xFF4C1D24)
+                              : const Color(0xFFFECDD3),
+                        ),
                       ),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.logout_rounded,
-                          color: Color(0xFFE11D48),
-                          size: 18,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          _isEn ? 'Log Out of Account' : 'Keluar dari Akun',
-                          style: AppTextStyles.h4.copyWith(
-                            color: const Color(0xFFE11D48),
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w700,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.logout_rounded,
+                            color: Color(0xFFE11D48),
+                            size: 18,
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 8),
+                          Text(
+                            'Keluar dari Akun',
+                            style: AppTextStyles.h4.copyWith(
+                              color: const Color(0xFFE11D48),
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 14),
+                const SizedBox(height: 14),
+              ],
 
               // 7. Footer Teks
               Center(
                 child: Text(
-                  'KateringKita untuk Mahasiswa Kampus Malang • 2025',
+                  'KateringKita untuk Mahasiswa Kampus Malang',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.bodySmall.copyWith(
                     color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
@@ -1302,10 +794,124 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // ==================== WIDGET HELPERS ====================
 
-  Widget _buildProfileHeaderCard({
-    required String name,
-    required String bioLines,
-  }) {
+  /// Kartu tamu: tanpa data akun, hanya ajakan Masuk / Daftar.
+  Widget _buildGuestCard() {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: isDark ? AppColors.darkSurface : AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: (isDark ? AppColors.darkCardBorder : AppColors.cardBorder)
+              .withValues(alpha: 0.7),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.025),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 68,
+                height: 68,
+                decoration: BoxDecoration(
+                  color: AppColors.primarySoft,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Icon(
+                  Icons.person_outline_rounded,
+                  color: AppColors.primary,
+                  size: 34,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Tamu',
+                      style: AppTextStyles.h3.copyWith(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        color: isDark
+                            ? AppColors.darkTextPrimary
+                            : AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Masuk atau daftar untuk mengelola profil, pesanan, '
+                      'dan favoritmu.',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.textSecondary,
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () => requireLogin(context),
+                  child: const Text(
+                    'Masuk',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    side: const BorderSide(color: AppColors.primary),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onPressed: () =>
+                      Navigator.pushNamed(context, AppRoutes.signUp),
+                  child: const Text(
+                    'Daftar',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Kartu profil akun yang masuk: foto/inisial dan nama; diketuk membuka Ubah Profil.
+  Widget _buildProfileHeaderCard({required String name, String? avatarUrl}) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return GestureDetector(
       onTap: _openEditProfile,
@@ -1329,63 +935,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeaderAvatar(name),
+            ProfileAvatar(
+              name: name,
+              url: avatarUrl,
+              size: 68,
+              borderRadius: BorderRadius.circular(16),
+            ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTextStyles.h3.copyWith(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                            color: isDark
-                                ? AppColors.darkTextPrimary
-                                : AppColors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.isDarkMode
-                              ? const Color(0xFF143823)
-                              : const Color(0xFFDCFCE7),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          _isEn ? 'Active' : 'Aktif',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.isDarkMode
-                                ? const Color(0xFF4ADE80)
-                                : const Color(0xFF16A34A),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 3),
                   Text(
-                    bioLines,
-                    maxLines: 2,
+                    name,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.textSecondary,
-                      fontSize: 12,
-                      height: 1.35,
+                    style: AppTextStyles.h3.copyWith(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: isDark
+                          ? AppColors.darkTextPrimary
+                          : AppColors.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 10),
@@ -1404,7 +974,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          _isEn ? 'Edit Profile' : 'Edit Profil',
+                          'Edit Profil',
                           style: TextStyle(
                             color: AppColors.isDarkMode
                                 ? const Color(0xFFFF8243)
@@ -1433,65 +1003,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildHeaderAvatar(String name) {
-    if (_extras.avatarPath.isNotEmpty) {
-      final file = File(_extras.avatarPath);
-      if (file.existsSync()) {
-        return ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Image.file(
-            file,
-            width: 68,
-            height: 68,
-            fit: BoxFit.cover,
-          ),
-        );
-      }
-    }
-
-    if (_extras.avatarIndex == 0) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: Image.asset(
-          'assets/images/avatar_abdurrahim.png',
-          width: 68,
-          height: 68,
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => Container(
-            width: 68,
-            height: 68,
-            color: AppColors.primarySoft,
-            child: const Icon(
-              Icons.person_rounded,
-              color: AppColors.primary,
-              size: 34,
-            ),
-          ),
-        ),
-      );
-    }
-
-    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : 'U';
-    return Container(
-      width: 68,
-      height: 68,
-      decoration: BoxDecoration(
-        color: AppColors.primarySoft,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Center(
-        child: Text(
-          initial,
-          style: const TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            color: AppColors.primary,
-          ),
-        ),
-      ),
-    );
-  }
-
+  /// Judul kecil berhuruf kapital di atas tiap kelompok menu.
   Widget _buildSectionHeader(String title) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Padding(
@@ -1508,6 +1020,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Kartu yang membungkus beberapa baris menu dalam satu kelompok.
   Widget _buildSectionCard(List<Widget> children) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
@@ -1531,6 +1044,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Garis pemisah antarbaris menu di dalam kartu.
   Widget _buildCardDivider() {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Divider(
@@ -1543,14 +1057,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Satu baris menu: ikon berlatar, judul, subjudul opsional, dan panah; diketuk memanggil [onTap].
   Widget _buildSettingTile({
     required IconData icon,
     required Color iconBg,
     required Color iconColor,
     required String title,
     String? subtitle,
-    Color? subtitleColor,
-    String? trailingText,
     required VoidCallback onTap,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1592,13 +1105,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: AppTextStyles.bodySmall.copyWith(
-                        color: subtitleColor ??
-                            (isDark
-                                ? AppColors.darkTextSecondary
-                                : AppColors.textSecondary),
-                        fontWeight: subtitleColor != null
-                            ? FontWeight.w600
-                            : FontWeight.w400,
+                        color: isDark
+                            ? AppColors.darkTextSecondary
+                            : AppColors.textSecondary,
+                        fontWeight: FontWeight.w400,
                         fontSize: 11.5,
                       ),
                     ),
@@ -1606,19 +1116,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
-            if (trailingText != null) ...[
-              const SizedBox(width: 8),
-              Text(
-                trailingText,
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: isDark
-                      ? AppColors.darkTextSecondary
-                      : AppColors.textSecondary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
-            ],
             const SizedBox(width: 4),
             Icon(
               Icons.chevron_right_rounded,
@@ -1631,6 +1128,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Baris Tema Tampilan dengan pilihan Terang/Gelap; pilihan disimpan lewat [ThemeProvider.setDarkMode].
   Widget _buildThemeToggleTile() {
     final themeProvider = context.watch<ThemeProvider>();
     final isDark = themeProvider.isDarkMode;
@@ -1658,7 +1156,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  _isEn ? 'Appearance Theme' : 'Tema Tampilan',
+                  'Tema Tampilan',
                   style: AppTextStyles.bodyMedium.copyWith(
                     fontWeight: FontWeight.w700,
                     fontSize: 13.5,
@@ -1669,9 +1167,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  isDark
-                      ? (_isEn ? 'Dark Mode' : 'Mode Gelap')
-                      : (_isEn ? 'Light Mode' : 'Mode Terang'),
+                  isDark ? 'Mode Gelap' : 'Mode Terang',
                   style: AppTextStyles.bodySmall.copyWith(
                     color: isDark
                         ? AppColors.darkTextSecondary
@@ -1701,30 +1197,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 _buildThemeOptionChip(
-                  label: _isEn ? 'Light' : 'Terang',
+                  label: 'Terang',
                   selected: !isDark,
                   isDark: isDark,
                   onTap: () async {
+                    // Abaikan bila tema yang dipilih sudah aktif.
                     if (!isDark) return;
                     await themeProvider.setDarkMode(false);
                     _showToast(
-                      _isEn
-                          ? 'Appearance set to Light Mode'
-                          : 'Tema tampilan diatur ke Mode Terang',
+                      'Tema tampilan diatur ke Mode Terang',
                     );
                   },
                 ),
                 _buildThemeOptionChip(
-                  label: _isEn ? 'Dark' : 'Gelap',
+                  label: 'Gelap',
                   selected: isDark,
                   isDark: isDark,
                   onTap: () async {
                     if (isDark) return;
                     await themeProvider.setDarkMode(true);
                     _showToast(
-                      _isEn
-                          ? 'Appearance set to Dark Mode'
-                          : 'Tema tampilan diatur ke Mode Gelap',
+                      'Tema tampilan diatur ke Mode Gelap',
                     );
                   },
                 ),
@@ -1736,6 +1229,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  /// Satu tombol pilihan tema (Terang/Gelap) di dalam baris Tema Tampilan.
   Widget _buildThemeOptionChip({
     required String label,
     required bool selected,

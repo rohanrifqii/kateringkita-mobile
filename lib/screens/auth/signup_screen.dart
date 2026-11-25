@@ -22,6 +22,7 @@ class SignUpScreen extends StatefulWidget {
   State<SignUpScreen> createState() => _SignUpScreenState();
 }
 
+/// State formulir daftar: isi kolom, centang syarat, status menyimpan, dan galat per kolom.
 class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
@@ -154,7 +155,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               // Email Field
               CustomTextField(
                 label: 'Email Address',
-                hint: 'Masukkan email student UB',
+                hint: 'Masukkan email',
                 controller: _emailController,
                 errorText: _errors['email'],
                 keyboardType: TextInputType.emailAddress,
@@ -246,6 +247,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
               Center(
                 child: GestureDetector(
                   onTap: () {
+                    // Kembali ke Login yang membuka layar ini; bila tidak ada, buka Login baru.
                     if (Navigator.canPop(context)) {
                       Navigator.pop(context);
                     } else {

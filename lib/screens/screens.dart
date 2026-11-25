@@ -1,3 +1,6 @@
+// Barrel ekspor layar: mengumpulkan ekspor layar utama agar bisa diimpor sekaligus lewat `screens/screens.dart`.
+// Saat ini belum ada berkas yang mengimpornya; layar lain mengimpor berkas layar secara langsung.
+
 // Auth & Security
 export 'auth/forgot_password_screen.dart';
 export 'auth/login_screen.dart';
@@ -14,7 +17,6 @@ export 'home/search_screen.dart';
 export 'orders/active_orders_screen.dart';
 export 'orders/checkout_screen.dart';
 export 'orders/completed_orders_screen.dart';
-export 'orders/location_picker_screen.dart';
 export 'orders/orders_screen.dart';
 export 'orders/payment_screen.dart';
 export 'orders/whatsapp_generator_screen.dart';

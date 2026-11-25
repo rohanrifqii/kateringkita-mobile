@@ -1,5 +1,5 @@
-// Layar pemilih titik temu, dibuka dari kartu "Titik Temu Pengambilan" di Checkout.
-// Daftar titik diterima dari Checkout (dimuat dari GET /menus/{id}); layar ini tidak memanggil server.
+// Layar pemilih titik temu, dibuka dari kartu "Titik Temu Pengambilan" di Checkout dan dari kartu
+// "Titik Temu Favorit" di Beranda. Daftar titik diterima dari layar pemanggil; layar ini tidak memanggil server.
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -12,19 +12,32 @@ import '../../services/map_service.dart';
 /// Pusat peta titik temu: kampus UB.
 const LatLng ubPickupMapCenter = LatLng(-7.9526, 112.6145);
 
-/// Pilih titik temu toko. Peta hanya latar (model PickupPoint belum punya koordinat);
-/// mengetuk satu titik menutup layar dengan `pop(PickupPoint)`, tombol kembali mengembalikan null.
+/// Pilih titik temu (titik temu toko di checkout, atau titik temu favorit
+/// dari beranda). Peta hanya latar (titik belum punya koordinat);
+/// `pop(PickupPoint)` saat satu titik dipilih.
 class PickupPointPickerScreen extends StatelessWidget {
-  /// Titik temu milik toko yang boleh dipilih.
+  /// Titik temu yang boleh dipilih (milik toko di Checkout, semua titik aktif di Beranda).
   final List<PickupPoint> points;
 
-  /// Id titik yang sedang terpilih di Checkout (diberi tanda centang), atau null.
+  /// Id titik yang sedang terpilih (diberi tanda centang), atau null.
   final int? selectedId;
+
+  /// Judul di AppBar.
+  final String title;
+
+  /// Keterangan singkat di atas daftar; tidak tampil bila null.
+  final String? note;
+
+  /// Teks yang tampil bila [points] kosong.
+  final String emptyText;
 
   const PickupPointPickerScreen({
     super.key,
     required this.points,
     this.selectedId,
+    this.title = 'Pilih Titik Temu',
+    this.note,
+    this.emptyText = 'Toko ini belum punya titik temu.',
   });
 
   @override
@@ -36,8 +49,7 @@ class PickupPointPickerScreen extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text('Pilih Titik Temu',
-            style: AppTextStyles.h3.copyWith(fontSize: 18)),
+        title: Text(title, style: AppTextStyles.h3.copyWith(fontSize: 18)),
       ),
       body: Column(
         children: [
@@ -58,13 +70,24 @@ class PickupPointPickerScreen extends StatelessWidget {
               ],
             ),
           ),
+          if (note != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+              child: Text(
+                note!,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ),
           Expanded(
             child: points.isEmpty
                 ? Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
                       child: Text(
-                        'Toko ini belum punya titik temu.',
+                        emptyText,
                         textAlign: TextAlign.center,
                         style: AppTextStyles.bodyMedium,
                       ),

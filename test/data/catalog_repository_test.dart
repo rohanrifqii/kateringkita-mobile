@@ -126,6 +126,16 @@ void main() {
     expect(l.first.createdAt.year, 2026);
   });
 
+  test('reviews dengan limit (halamanSchema backend, maks 100)', () async {
+    late Uri url;
+    final r = _repo((req) async {
+      url = req.url;
+      return _json(200, {'data': []});
+    });
+    await r.reviews(3, limit: 5);
+    expect(url.queryParameters, {'page': '1', 'limit': '5'});
+  });
+
   test('merchant parses with int rating_avg', () async {
     final r = _repo((req) async {
       expect(req.url.path, '/api/v1/merchants/toko');
@@ -153,5 +163,23 @@ void main() {
     expect(m.isOpen, false);
     expect(m.pickupPoints.single.name, 'Gerbang');
     expect(m.description, isNull);
+    // Production lama belum memuat is_favorite: dianggap false.
+    expect(m.isFavorite, isFalse);
+  });
+
+  test('merchant: is_favorite dari server dibaca', () async {
+    final r = _repo((req) async => _json(200, {
+          'data': {
+            'id': 1,
+            'slug': 'toko',
+            'business_name': 'Toko',
+            'merchant_type': {'id': 2, 'name': 'Kantin'},
+            'is_open': true,
+            'open_time': '08:00',
+            'close_time': '17:00',
+            'is_favorite': true,
+          }
+        }));
+    expect((await r.merchant('toko')).isFavorite, isTrue);
   });
 }

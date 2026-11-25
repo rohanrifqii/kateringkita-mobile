@@ -1,6 +1,6 @@
-// Layar Beranda (tab pertama MainNavigationScreen): titik temu, pencarian, kategori, banner promo, dan daftar menu.
-// Kategori & menu diambil lewat CatalogRepository dari backend REST KateringKita (/meta/categories, /menus);
-// titik temu disimpan lokal di SettingsStore, sedangkan banner promo masih data statis di berkas ini.
+// Layar Beranda (tab pertama MainNavigationScreen): titik temu favorit, pencarian, kategori, banner info, dan daftar menu.
+// Kategori, menu, dan titik temu diambil lewat CatalogRepository (GET /meta/categories, /menus, /meta/pickup-points);
+// titik temu favorit disimpan ke profil lewat AuthProvider (PATCH /me). Banner info layanan masih data statis di berkas ini.
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -8,15 +8,18 @@ import '../../core/app_colors.dart';
 import '../../core/app_routes.dart';
 import '../../core/app_text_styles.dart';
 import '../../api/api_exception.dart';
+import '../../core/require_login.dart';
 import '../../data/catalog_repository.dart';
-import '../../data/settings_store.dart';
 import '../../models/category_model.dart';
+import '../../models/pickup_point.dart';
 import '../../models/product_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../widgets/cart_button.dart';
 import '../../widgets/food_card.dart';
-import '../orders/location_picker_screen.dart';
+import '../../widgets/notification_bell.dart';
+import '../orders/pickup_point_picker_screen.dart';
 
-/// Layar Beranda: menampilkan katalog menu dari backend yang bisa difilter per kategori.
+/// Layar Beranda: katalog menu dari backend yang bisa difilter per kategori, plus pemilih titik temu favorit.
 class HomeScreen extends StatefulWidget {
   /// Callback dari MainNavigationScreen untuk berpindah tab bawah (indeks tab).
   final Function(int)? onTabChange;
@@ -27,10 +30,37 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+/// Tujuan tombol banner: layar cari, tab Pesanan, atau tab Asisten AI.
+enum _BannerAction { search, orders, assistant }
+
+/// Banner informasi layanan. Backend tidak punya promo publik (promo hanya
+/// kode di checkout), jadi banner tidak menjanjikan diskon atau pengantaran.
+class _InfoBanner {
+  const _InfoBanner({
+    required this.tag,
+    required this.title,
+    required this.subtitle,
+    required this.image,
+    this.cta,
+    this.action,
+  });
+
+  final String tag;
+  final String title;
+  final String subtitle;
+  final String image;
+
+  /// Tanpa [cta]/[action] tombol tidak ditampilkan.
+  final String? cta;
+  final _BannerAction? action;
+}
+
+/// State Beranda: kategori terpilih, daftar kategori/menu, banner aktif, dan titik temu.
 class _HomeScreenState extends State<HomeScreen> {
+  /// Nama kategori terpilih untuk ditampilkan ('Semua' bila tanpa filter).
   String _selectedCategory = 'Semua';
+  /// Slug kategori yang dikirim ke GET /menus; null = semua kategori.
   String? _selectedSlug;
-  String _meetingPoint = SettingsStore.defaultMeetingPoint;
 
   List<CategoryModel> _categories = const [];
   List<ProductModel> _products = const [];
@@ -42,80 +72,170 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentBannerIndex = 0;
   final PageController _bannerController = PageController();
 
-  // Isi banner promo masih data statis lokal (belum dari backend).
-  static const List<Map<String, dynamic>> _promoBanners = [
-    {
-      'tag': 'SPECIAL PROMO',
-      'title': 'Summer Sale',
-      'subtitle': 'Diskon s/d 50% untuk Danusan',
-      'cta': 'Pesan Sekarang →',
-      'image': 'assets/images/banner_promo.png',
-    },
-    {
-      'tag': 'GRATIS ONGKIR',
-      'title': 'Antar Seluruh UB',
-      'subtitle': 'Bebas biaya kirim ke semua fakultas',
-      'cta': 'Klaim Promo →',
-      'image': 'assets/images/nasi_kuning.png',
-    },
-    {
-      'tag': 'PAKET DANUSAN',
-      'title': 'Paket Rapat Hemat',
-      'subtitle': 'Catering snack & makan siang organisasi',
-      'cta': 'Pilih Menu →',
-      'image': 'assets/images/lumpia_diego.png',
-    },
+  /// Isi banner (statis, tidak dari server).
+  static const List<_InfoBanner> _infoBanners = [
+    _InfoBanner(
+      tag: 'TITIK TEMU',
+      title: 'Ambil di Titik Temu',
+      subtitle:
+          'Pilih titik temu kampus saat checkout, lalu ambil pesananmu di sana.',
+      cta: 'Cari Menu →',
+      action: _BannerAction.search,
+      image: 'assets/images/nasi_kuning.png',
+    ),
+    _InfoBanner(
+      tag: 'PEMBAYARAN',
+      title: 'VA, QRIS & E-Wallet',
+      subtitle: 'Bayar lewat Midtrans: VA BCA, BNI, BRI, atau QRIS & e-wallet.',
+      cta: 'Lihat Pesanan →',
+      action: _BannerAction.orders,
+      image: 'assets/images/lumpia_diego.png',
+    ),
+    _InfoBanner(
+      tag: 'UNTUK ACARA',
+      title: 'Atur Waktu Ambil',
+      subtitle:
+          'Pilih tanggal & jam ambil hingga 7 hari ke depan untuk acaramu.',
+      cta: 'Tanya AI →',
+      action: _BannerAction.assistant,
+      image: 'assets/images/banner_promo.png',
+    ),
   ];
+
+  /// Jalankan aksi tombol banner. Pesanan (tab 1) dan Asisten AI (tab 2) dibuka sebagai
+  /// tab di MainNavigationScreen; bila Home dibuka sendiri (tanpa [HomeScreen.onTabChange]), lewat rute biasa.
+  void _onBannerTap(_BannerAction action) {
+    final tab = widget.onTabChange;
+    switch (action) {
+      case _BannerAction.search:
+        Navigator.pushNamed(context, AppRoutes.search);
+      case _BannerAction.orders:
+        if (tab != null) {
+          tab(1);
+        } else {
+          Navigator.pushNamed(context, AppRoutes.orders);
+        }
+      case _BannerAction.assistant:
+        if (tab != null) {
+          tab(2);
+        } else {
+          Navigator.pushNamed(context, AppRoutes.aiAssistant);
+        }
+    }
+  }
+
+  late final AuthProvider _auth;
+  late bool _wasLoggedIn;
+
+  /// Daftar titik temu aktif (GET /meta/pickup-points) untuk nama favorit.
+  List<PickupPoint> _pickupPoints = const [];
+  /// Sedang menyimpan titik temu favorit; ketukan berikutnya diabaikan.
+  bool _savingPickup = false;
 
   @override
   void initState() {
     super.initState();
-    _loadMeetingPoint();
-    // _load memakai context.read, jadi dijalankan setelah frame pertama selesai dibangun.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _load());
+    _auth = context.read<AuthProvider>();
+    _wasLoggedIn = _auth.isLoggedIn;
+    _auth.addListener(_onAuthChanged);
+    // Muat setelah frame pertama; daftar titik temu hanya perlu bila sudah ada favorit (untuk namanya).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _load();
+      if (_auth.user?.favoritePickupPointId != null) _ensurePickupPoints();
+    });
   }
 
   @override
   void dispose() {
+    _auth.removeListener(_onAuthChanged);
     _bannerController.dispose();
     super.dispose();
   }
 
-  /// Membaca nama titik temu terakhir yang disimpan lokal di SettingsStore.
-  Future<void> _loadMeetingPoint() async {
-    final point = await SettingsStore.loadMeetingPoint();
-    if (!mounted) return;
-    setState(() => _meetingPoint = point);
-  }
-
-  /// Membuka LocationPickerScreen mulai dari koordinat tersimpan; bila pengguna memilih
-  /// lokasi, lokasi itu disimpan ke SettingsStore dan nama titik temu di layar diperbarui.
-  Future<void> _pickMeetingPoint() async {
-    final (lat, lng) = await SettingsStore.loadMeetingCoordinates();
-    if (!mounted) return;
-    final result = await Navigator.push<DeliveryLocation>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => LocationPickerScreen(
-          currentLocationName: _meetingPoint,
-          initialLat: lat,
-          initialLng: lng,
-        ),
-      ),
-    );
-    if (result != null) {
-      await SettingsStore.saveMeetingPoint(
-        result.name,
-        fullAddress: result.fullAddress,
-        latitude: result.latitude,
-        longitude: result.longitude,
-      );
-      setState(() => _meetingPoint = result.name);
+  /// Masuk/keluar: muat ulang menu supaya `is_favorite` milik sesi yang benar.
+  void _onAuthChanged() {
+    final now = _auth.isLoggedIn;
+    if (now == _wasLoggedIn || !mounted) return;
+    _wasLoggedIn = now;
+    _load();
+    if (now && _auth.user?.favoritePickupPointId != null) {
+      _ensurePickupPoints();
     }
   }
 
-  /// Memuat kategori (hanya sekali, lalu dipakai ulang) dan daftar menu sesuai kategori terpilih
-  /// dari backend. ApiException menampilkan pesan dari server; galat lain memakai pesan umum.
+  /// Ambil daftar titik temu aktif (GET /meta/pickup-points) sekali saja, lalu pakai ulang.
+  /// Mengembalikan null bila gagal dimuat.
+  Future<List<PickupPoint>?> _ensurePickupPoints() async {
+    if (_pickupPoints.isNotEmpty) return _pickupPoints;
+    final repo = context.read<CatalogRepository>();
+    try {
+      final pts = await repo.pickupPoints();
+      if (mounted) setState(() => _pickupPoints = pts);
+      return pts;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Tampilkan snackbar, menggantikan snackbar yang sedang tampil.
+  void _snack(String text) => ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(text)));
+
+  /// Buka pemilih titik temu favorit lalu simpan pilihan ke profil (PATCH /me); titik ini dipilih
+  /// otomatis saat checkout bila dilayani toko. Tamu diminta masuk dulu. Galat ditampilkan sebagai snackbar.
+  Future<void> _pickPickupPoint() async {
+    if (_savingPickup) return;
+    if (!_auth.isLoggedIn) {
+      _snack('Masuk dulu untuk menyimpan titik temu favorit.');
+      if (!await requireLogin(context) || !mounted) return;
+    }
+    final pts = await _ensurePickupPoints();
+    if (!mounted) return;
+    if (pts == null) {
+      _snack('Gagal memuat titik temu. Coba lagi.');
+      return;
+    }
+    final current = _auth.user?.favoritePickupPointId;
+    final picked = await Navigator.push<PickupPoint>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PickupPointPickerScreen(
+          points: pts,
+          selectedId: current,
+          title: 'Titik Temu Favorit',
+          note: 'Dipilih otomatis saat checkout bila titik ini dilayani '
+              'toko. Pesanan diambil sendiri di titik temu.',
+          emptyText: 'Belum ada titik temu yang aktif.',
+        ),
+      ),
+    );
+    // Batal memilih, atau memilih titik yang sama: tidak ada yang disimpan.
+    if (picked == null || !mounted || picked.id == current) return;
+    setState(() => _savingPickup = true);
+    try {
+      await _auth.setFavoritePickupPoint(picked.id);
+      if (mounted) _snack('Titik temu favorit: ${picked.name}');
+    } on ApiException catch (e) {
+      if (mounted) _snack(e.field('favorite_pickup_point_id') ?? e.message);
+    } catch (_) {
+      if (mounted) _snack('Titik temu gagal disimpan. Coba lagi.');
+    } finally {
+      if (mounted) setState(() => _savingPickup = false);
+    }
+  }
+
+  /// Teks di bawah judul aplikasi. Bila daftar titik temu belum termuat, nama titik belum diketahui.
+  String _pickupLabel(int? favoriteId) {
+    if (favoriteId == null) return 'Pilih titik temu favorit';
+    for (final p in _pickupPoints) {
+      if (p.id == favoriteId) return 'Titik temu: ${p.name}';
+    }
+    return 'Titik temu favorit';
+  }
+
+  /// Muat kategori (sekali, GET /meta/categories) dan halaman pertama menu (GET /menus, 20 menu)
+  /// untuk kategori terpilih. Galat disimpan di [_error] dan ditampilkan dengan tombol Coba lagi.
   Future<void> _load() async {
     if (!mounted) return;
     final repo = context.read<CatalogRepository>();
@@ -235,6 +355,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final products = _products;
+    // Titik temu favorit hanya ditampilkan untuk pengguna yang sudah masuk.
+    final favoritePickupId = context.select<AuthProvider, int?>(
+        (a) => a.isLoggedIn ? a.user?.favoritePickupPointId : null);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -265,14 +388,15 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 2),
                         GestureDetector(
-                          onTap: _pickMeetingPoint,
+                          key: const ValueKey('home-pickup-point'),
+                          onTap: _pickPickupPoint,
                           child: Row(
                             children: [
                               const Icon(Icons.location_on, size: 14, color: AppColors.primary),
                               const SizedBox(width: 4),
                               Flexible(
                                 child: Text(
-                                  '$_meetingPoint ▾',
+                                  '${_pickupLabel(favoritePickupId)} ▾',
                                   overflow: TextOverflow.ellipsis,
                                   style: AppTextStyles.bodySmall.copyWith(
                                     color: AppColors.textSecondary,
@@ -289,50 +413,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   // Ikon keranjang dengan lencana jumlah item; diketuk membuka Checkout.
                   const CartButton(),
                   const SizedBox(width: 8),
-                  // Notification icon with badge dot
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      Navigator.pushNamed(context, AppRoutes.notifications);
-                    },
-                    child: Stack(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: AppColors.surface,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: AppColors.cardBorder.withValues(alpha: 0.8)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.04),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Icon(
-                            Icons.notifications_outlined,
-                            color: AppColors.textPrimary,
-                            size: 22,
-                          ),
-                        ),
-                        Positioned(
-                          top: 10,
-                          right: 12,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: AppColors.danger,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  // Lonceng dengan lencana jumlah belum dibaca
+                  const NotificationBell(),
                 ],
               ),
               const SizedBox(height: 20),
@@ -425,6 +507,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     return Padding(
                       padding: const EdgeInsets.only(right: 10),
                       child: GestureDetector(
+                        // Mengetuk kategori yang sudah aktif mengembalikan filter ke "Semua".
                         onTap: () {
                           _selectCategory(isSelected ? null : cat);
                         },
@@ -463,18 +546,18 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const SizedBox(height: 20),
 
-              // ---------------- PROMO BANNER CAROUSEL (FIGMA) ----------------
+              // ---------------- BANNER INFO LAYANAN ----------------
               SizedBox(
                 width: double.infinity,
                 height: 172,
                 child: PageView.builder(
                   controller: _bannerController,
-                  itemCount: _promoBanners.length,
+                  itemCount: _infoBanners.length,
                   onPageChanged: (index) {
                     setState(() => _currentBannerIndex = index);
                   },
                   itemBuilder: (context, index) {
-                    final banner = _promoBanners[index];
+                    final banner = _infoBanners[index];
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 2),
                       decoration: BoxDecoration(
@@ -494,7 +577,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(20),
                               child: Image.asset(
-                                banner['image'] as String,
+                                banner.image,
                                 fit: BoxFit.cover,
                                 errorBuilder: (context, error, stackTrace) => Container(
                                   color: AppColors.primary,
@@ -535,7 +618,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     borderRadius: BorderRadius.circular(8),
                                   ),
                                   child: Text(
-                                    banner['tag'] as String,
+                                    banner.tag,
                                     style: AppTextStyles.badge.copyWith(
                                       color: Colors.white,
                                       fontSize: 10,
@@ -546,7 +629,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  banner['title'] as String,
+                                  banner.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                   style: AppTextStyles.h2.copyWith(
                                     color: Colors.white,
                                     fontSize: 22,
@@ -555,40 +640,38 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  banner['subtitle'] as String,
+                                  banner.subtitle,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
                                   style: AppTextStyles.bodySmall.copyWith(
                                     color: const Color(0xFFFEF3C7),
                                     fontWeight: FontWeight.w500,
                                     fontSize: 12,
                                   ),
                                 ),
-                                const SizedBox(height: 12),
-                                GestureDetector(
-                                  onTap: () {
-                                    Navigator.pushNamed(
-                                        context, AppRoutes.search);
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: Colors.white,
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          banner['cta'] as String,
-                                          style: AppTextStyles.bodySmall.copyWith(
-                                            color: AppColors.primary,
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 11,
-                                          ),
+                                if (banner.cta != null &&
+                                    banner.action != null) ...[
+                                  const SizedBox(height: 12),
+                                  GestureDetector(
+                                    onTap: () => _onBannerTap(banner.action!),
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 14, vertical: 6),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Text(
+                                        banner.cta!,
+                                        style: AppTextStyles.bodySmall.copyWith(
+                                          color: AppColors.primary,
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 11,
                                         ),
-                                      ],
+                                      ),
                                     ),
                                   ),
-                                ),
+                                ],
                               ],
                             ),
                           ),
@@ -602,7 +685,7 @@ class _HomeScreenState extends State<HomeScreen> {
               // Dots Indicator
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(_promoBanners.length, (index) {
+                children: List.generate(_infoBanners.length, (index) {
                   final isSelected = _currentBannerIndex == index;
                   return AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
@@ -619,26 +702,14 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 18),
 
               // ---------------- DAFTAR MENU HEADER ----------------
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _selectedCategory == 'Semua'
-                        ? 'Daftar Menu (${products.length})'
-                        : '$_selectedCategory (${products.length})',
-                    style: AppTextStyles.h3.copyWith(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  Text(
-                    'Semua halal & higienis',
-                    style: AppTextStyles.bodySmall.copyWith(
-                      color: AppColors.textMuted,
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
+              Text(
+                _selectedCategory == 'Semua'
+                    ? 'Daftar Menu (${products.length})'
+                    : '$_selectedCategory (${products.length})',
+                style: AppTextStyles.h3.copyWith(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
               const SizedBox(height: 14),
 

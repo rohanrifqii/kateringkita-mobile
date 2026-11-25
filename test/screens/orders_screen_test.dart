@@ -84,6 +84,7 @@ Widget _wrap(
   _FakeAuth? auth,
   CartProvider? cart,
   Map<String, WidgetBuilder> routes = const {},
+  Widget home = const OrdersScreen(),
 }) {
   final api = ApiClient(
       baseUrl: 'https://x.test/api/v1', client: MockClient(handler));
@@ -95,11 +96,24 @@ Widget _wrap(
       ChangeNotifierProvider<AuthProvider>.value(
           value: auth ?? _FakeAuth(loggedIn)),
     ],
-    child: MaterialApp(home: const OrdersScreen(), routes: routes),
+    child: MaterialApp(home: home, routes: routes),
   );
 }
 
 void main() {
+  testWidgets('dibuka dari notifikasi: tab & kode pesanan awal dipakai',
+      (tester) async {
+    final seen = <Uri>[];
+    await tester.pumpWidget(_wrap((req) async {
+      seen.add(req.url);
+      return _json({'data': [], 'meta': {'total': 0}});
+    }, home: const OrdersScreen(initialTab: 'cancelled', initialQuery: 'KK-9')));
+    await tester.pumpAndSettle();
+    expect(seen.first.queryParameters['tab'], 'cancelled');
+    expect(seen.first.queryParameters['q'], 'KK-9');
+    expect(find.widgetWithText(TextField, 'KK-9'), findsOneWidget);
+  });
+
   testWidgets('tab Aktif memuat ?tab=active; tombol sesuai can_cancel/complete',
       (tester) async {
     final seen = <Uri>[];
