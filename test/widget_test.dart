@@ -64,6 +64,83 @@ void main() {
     expect(_currentRoute(), AppRoutes.mainNav);
   });
 
+  testWidgets('web dimuat ulang di /order-chat/<kode>: Chat tetap terbuka', (
+    tester,
+  ) async {
+    tester.binding.platformDispatcher.defaultRouteNameTestValue =
+        '/order-chat/ABC123';
+    addTearDown(
+      tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+    );
+    await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Splash menyingkir; Chat tetap di atas dengan tab Pesanan di bawahnya.
+    final routeNames = <String?>[];
+    appNavigatorKey.currentState!.popUntil((route) {
+      routeNames.add(route.settings.name);
+      return route.isFirst;
+    });
+    expect(routeNames, ['/order-chat/ABC123', AppRoutes.mainNav]);
+    expect(find.text('ABC123'), findsOneWidget);
+  });
+
+  testWidgets('web dimuat ulang di /notifications: beranda di bawahnya', (
+    tester,
+  ) async {
+    tester.binding.platformDispatcher.defaultRouteNameTestValue =
+        AppRoutes.notifications;
+    addTearDown(
+      tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+    );
+    await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    // Splash diganti beranda: [beranda, Notifikasi].
+    expect(_currentRoute(), AppRoutes.notifications);
+    expect(appNavigatorKey.currentState!.canPop(), isTrue);
+
+    // Kembali dari Notifikasi mendarat di beranda, navigator tidak kosong.
+    appNavigatorKey.currentState!.pop();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(_currentRoute(), AppRoutes.mainNav);
+    expect(appNavigatorKey.currentState!.canPop(), isFalse);
+  });
+
+  /// Nama semua rute di navigator, dari teratas ke terbawah.
+  List<String?> stackNames() {
+    final names = <String?>[];
+    appNavigatorKey.currentState!.popUntil((route) {
+      names.add(route.settings.name);
+      return true;
+    });
+    return names;
+  }
+
+  for (final (initialRoute, label) in [
+    (AppRoutes.mainNav, 'beranda'),
+    ('/order-chat/', 'alamat Chat tanpa kode'),
+  ]) {
+    testWidgets('web dimuat ulang di $label: hanya satu beranda/tab', (
+      tester,
+    ) async {
+      tester.binding.platformDispatcher.defaultRouteNameTestValue =
+          initialRoute;
+      addTearDown(
+        tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+      );
+      await _pump(tester, (r) async => _err(401, 'UNAUTHORIZED', 'x'));
+      await tester.pump(const Duration(seconds: 3));
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(stackNames(), [AppRoutes.mainNav]);
+      expect(appNavigatorKey.currentState!.canPop(), isFalse);
+    });
+  }
+
   testWidgets('expired token at splash: guest continues to main nav', (
     tester,
   ) async {

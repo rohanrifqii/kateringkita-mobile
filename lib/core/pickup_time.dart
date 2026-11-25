@@ -1,5 +1,6 @@
 // Aturan dan format waktu ambil pesanan dalam zona WIB, dipakai layar checkout untuk memilih dan
 // memeriksa waktu ambil sebelum pesanan dikirim ke backend (yang menyimpan waktu dalam UTC).
+// Fungsi format jamnya juga dipakai Lacak Pesanan dan Chat pesanan untuk menampilkan jam WIB.
 
 /// Selisih zona WIB dari UTC: +7 jam, tanpa pergeseran musim panas (DST).
 const Duration wibOffset = Duration(hours: 7);
@@ -42,12 +43,41 @@ const _months = [
   'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des',
 ];
 
+/// Angka dua digit dengan nol di depan, mis. 5 → "05".
 String _two(int v) => v.toString().padLeft(2, '0');
 
 /// Tanggal WIB dari instan [utc], mis. "Sab, 14 Nov 2026".
 String formatWibDate(DateTime utc) {
   final w = toWibWallClock(utc);
   return '${_days[w.weekday - 1]}, ${w.day} ${_months[w.month - 1]} ${w.year}';
+}
+
+/// Jam dinding WIB berformat "HH:mm", mis. "09:05".
+///
+/// @param utc waktu yang ditampilkan; waktu lokal juga diterima karena
+///   diubah ke UTC lebih dulu.
+/// @returns jam dan menit WIB dua digit, dipisah titik dua, tanpa tanggal.
+String formatWibClock(DateTime utc) {
+  final wallClock = toWibWallClock(utc);
+  return '${_two(wallClock.hour)}:${_two(wallClock.minute)}';
+}
+
+/// Jam langkah pesanan dalam WIB: "09:15" bila terjadi hari ini (tanggal
+/// WIB), selain itu tanggal + jam, mis. "23 Nov 09:15".
+///
+/// @param utc waktu langkah itu terjadi.
+/// @param nowUtc waktu sekarang untuk menentukan "hari ini"; null berarti
+///   jam perangkat (diisi test supaya hasilnya tetap).
+/// @returns jam saja untuk hari ini, atau tanggal, bulan singkat, dan jam.
+String formatWibStepTime(DateTime utc, {DateTime? nowUtc}) {
+  final wallClock = toWibWallClock(utc);
+  final today = toWibWallClock(nowUtc ?? DateTime.now());
+  final isToday = wallClock.year == today.year &&
+      wallClock.month == today.month &&
+      wallClock.day == today.day;
+  final clock = formatWibClock(utc);
+  if (isToday) return clock;
+  return '${wallClock.day} ${_months[wallClock.month - 1]} $clock';
 }
 
 /// Tanggal dan jam WIB dari instan [utc], mis. "Sab, 14 Nov 2026 · 10:00 WIB".

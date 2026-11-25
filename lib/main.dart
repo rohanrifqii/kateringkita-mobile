@@ -1,6 +1,6 @@
 // Titik masuk aplikasi: membaca pilihan tema tersimpan, lalu memasang semua provider (tema, keranjang, ApiClient,
-// auth, katalog, pesanan, favorit, voucher, konten promo, notifikasi, tiket Bantuan, Asisten AI, riwayat AI)
-// di atas seluruh layar.
+// auth, katalog, pesanan, chat pesanan, favorit, voucher, konten promo, notifikasi, tiket Bantuan, Asisten AI,
+// riwayat AI) di atas seluruh layar.
 // Layar membaca provider ini untuk mengakses data: layar → provider → repository → ApiClient → backend.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,6 +21,7 @@ import 'data/favorite_repository.dart';
 import 'data/voucher_repository.dart';
 import 'data/promo_content_repository.dart';
 import 'data/notification_repository.dart';
+import 'data/order_chat_repository.dart';
 import 'data/order_repository.dart';
 import 'data/ticket_repository.dart';
 import 'data/token_store.dart';
@@ -116,7 +117,11 @@ Widget buildAppProviders({
   final promoContentRepo = PromoContentRepository(api);
   final favorites = FavoritesProvider(favoriteRepo);
   final notificationRepo = NotificationRepository(api);
-  final notifications = NotificationProvider(notificationRepo);
+  // Repository chat dipakai bersama: oleh layar Chat dan oleh NotificationProvider
+  // (jumlah chat pesanan yang belum dibaca).
+  final orderChatRepo = OrderChatRepository(api);
+  final notifications =
+      NotificationProvider(notificationRepo, chatRepository: orderChatRepo);
   final ticketRepo = TicketRepository(api);
   final ticketUnread = TicketUnreadProvider(ticketRepo);
   var wasLoggedIn = false;
@@ -139,6 +144,7 @@ Widget buildAppProviders({
       ChangeNotifierProvider<AuthProvider>.value(value: auth),
       Provider<CatalogRepository>.value(value: CatalogRepository(api)),
       Provider<OrderRepository>.value(value: OrderRepository(api)),
+      Provider<OrderChatRepository>.value(value: orderChatRepo),
       Provider<FavoriteRepository>.value(value: favoriteRepo),
       Provider<VoucherRepository>.value(value: voucherRepo),
       Provider<PromoContentRepository>.value(value: promoContentRepo),
@@ -155,7 +161,7 @@ Widget buildAppProviders({
 }
 
 /// Widget akar aplikasi: membuat [MaterialApp] dengan tema terang/gelap dari [ThemeProvider]
-/// dan daftar rute dari [AppRouter]. Setiap layar dibungkus [PhoneFrame] (di web dengan layar
+/// dan daftar rute dari [AppRouter] (termasuk `onGenerateRoute` untuk Lacak Pesanan dan Chat). Setiap layar dibungkus [PhoneFrame] (di web dengan layar
 /// lebih lebar dari ponsel, aplikasi tampil selebar ponsel di tengah).
 ///
 /// Widget ini dibangun ulang setiap kali tema berubah, dan saat itu juga menyalin status
@@ -177,6 +183,7 @@ class KateringKitaApp extends StatelessWidget {
       themeMode: themeProvider.themeMode,
       initialRoute: AppRouter.initialRoute,
       routes: AppRouter.routes,
+      onGenerateRoute: AppRouter.onGenerateRoute,
       builder: (context, child) => PhoneFrame(child: child ?? const SizedBox.shrink()),
     );
   }

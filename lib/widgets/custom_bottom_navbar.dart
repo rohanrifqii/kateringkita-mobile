@@ -1,10 +1,23 @@
+// Bilah navigasi bawah mengambang (Home, Orders, AI, Liked, Profile) milik MainNavigationScreen, beserta
+// ikon Home dan AI yang digambar manual dari desain Figma. Tab Orders memberi badge jumlah chat penjual
+// yang belum dibaca, dibaca dari NotificationProvider.
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../core/app_colors.dart';
 import '../core/app_text_styles.dart';
+import '../providers/notification_provider.dart';
 
+/// Bilah navigasi bawah lima tab dengan latar buram (blur) dan sudut membulat.
+///
+/// Tab yang aktif digambar sebagai lingkaran oranye berlabel; tab lain hanya
+/// ikon. Tab Orders (indeks 1) diberi badge angka merah bila
+/// [NotificationProvider.chatUnreadCount] lebih dari nol.
 class CustomBottomNavbar extends StatelessWidget {
+  /// Indeks tab yang sedang tampil (0 Home … 4 Profile).
   final int currentIndex;
+
+  /// Dipanggil dengan indeks tab yang diketuk; layar induk yang berpindah tab.
   final ValueChanged<int> onTap;
 
   const CustomBottomNavbar({
@@ -16,6 +29,9 @@ class CustomBottomNavbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Pesan chat penjual yang belum dibaca, ikut cek berkala lonceng beranda.
+    final chatUnreadCount = context.select<NotificationProvider, int>(
+        (notifications) => notifications.chatUnreadCount);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
@@ -66,6 +82,7 @@ class CustomBottomNavbar extends StatelessWidget {
                   isDark: isDark,
                   index: 1,
                   label: 'Orders',
+                  badgeCount: chatUnreadCount,
                   iconBuilder: (color, size) => Icon(
                     Icons.assignment_outlined,
                     color: color,
@@ -111,13 +128,23 @@ class CustomBottomNavbar extends StatelessWidget {
     );
   }
 
+  /// Satu tombol tab: lingkaran oranye + label bila [index] sedang aktif,
+  /// selain itu ikon saja. [badgeCount] > 0 menampilkan badge angka.
   Widget _buildNavItem({
     required bool isDark,
     required int index,
     required String label,
     required Widget Function(Color color, double size) iconBuilder,
+    int badgeCount = 0,
   }) {
     final isSelected = currentIndex == index;
+    // Ikon dengan badge angka merah bila [badgeCount] lebih dari nol.
+    Widget badgedIcon(Color color, double size) => Badge.count(
+          count: badgeCount,
+          isLabelVisible: badgeCount > 0,
+          backgroundColor: AppColors.danger,
+          child: iconBuilder(color, size),
+        );
     final inactiveColor = isDark
         ? AppColors.darkTextSecondary
         : const Color(0xFF2E2A27);
@@ -149,7 +176,7 @@ class CustomBottomNavbar extends StatelessWidget {
                         ],
                       ),
                       child: Center(
-                        child: iconBuilder(Colors.white, 20),
+                        child: badgedIcon(Colors.white, 20),
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -168,7 +195,7 @@ class CustomBottomNavbar extends StatelessWidget {
               : Container(
                   height: 56,
                   alignment: Alignment.center,
-                  child: iconBuilder(inactiveColor, 24),
+                  child: badgedIcon(inactiveColor, 24),
                 ),
         ),
       ),
@@ -176,7 +203,7 @@ class CustomBottomNavbar extends StatelessWidget {
   }
 }
 
-/// Custom vector painter representing the exact Home icon from Figma
+/// Ikon Home sesuai desain Figma, digambar dengan [CustomPaint] (garis, bukan isian).
 class FigmaHomeIcon extends StatelessWidget {
   final Color color;
   final double size;
@@ -200,6 +227,7 @@ class FigmaHomeIcon extends StatelessWidget {
   }
 }
 
+/// Penggambar garis ikon Home pada kanvas 24×24 yang diskalakan ke ukuran ikon.
 class _FigmaHomeIconPainter extends CustomPainter {
   final Color color;
 
@@ -220,13 +248,13 @@ class _FigmaHomeIconPainter extends CustomPainter {
     final sx = w / 24.0;
     final sy = h / 24.0;
 
-    // 1. Top curved arc
+    // 1. Lengkung kecil di atas atap.
     final topArc = Path();
     topArc.moveTo(7.5 * sx, 4.2 * sy);
     topArc.quadraticBezierTo(12.0 * sx, 1.8 * sy, 16.5 * sx, 4.2 * sy);
     canvas.drawPath(topArc, paint);
 
-    // 2. Main dome structure with arched door notch at the bottom center
+    // 2. Badan berbentuk kubah dengan lekuk pintu melengkung di tengah bawah.
     final body = Path();
     body.moveTo(10.0 * sx, 20.5 * sy);
     body.lineTo(5.5 * sx, 20.5 * sy);
@@ -248,7 +276,8 @@ class _FigmaHomeIconPainter extends CustomPainter {
   }
 }
 
-/// Custom vector painter representing the upright, centered AI lightbulb icon with '+' sparkle
+/// Ikon AI sesuai desain Figma: bola lampu tegak dengan tanda '+' berkilau di kanan atas,
+/// digambar dengan [CustomPaint].
 class FigmaAiIcon extends StatelessWidget {
   final Color color;
   final double size;
@@ -272,6 +301,7 @@ class FigmaAiIcon extends StatelessWidget {
   }
 }
 
+/// Penggambar garis ikon AI pada kanvas 24×24 yang diskalakan ke ukuran ikon.
 class _FigmaAiIconPainter extends CustomPainter {
   final Color color;
 
@@ -292,11 +322,11 @@ class _FigmaAiIconPainter extends CustomPainter {
     final sx = w / 24.0;
     final sy = h / 24.0;
 
-    // Centered bulb body: cx = 11.2 keeps the whole composition (bulb + plus sign) centered at 12.0
+    // Pusat bola lampu di x = 11.2 (bukan 12) supaya bola lampu + tanda '+' bersama-sama tampil di tengah.
     const cx = 11.2;
     const r = 4.8;
 
-    // 1. Bulb dome and neck
+    // 1. Kubah dan leher bola lampu.
     final bulbPath = Path();
     bulbPath.moveTo((cx - 2.2) * sx, 15.6 * sy);
     bulbPath.lineTo((cx - 2.6) * sx, 12.8 * sy);
@@ -310,20 +340,20 @@ class _FigmaAiIconPainter extends CustomPainter {
     bulbPath.lineTo((cx - 2.2) * sx, 15.6 * sy);
     canvas.drawPath(bulbPath, paint);
 
-    // 2. Base screw ridge
+    // 2. Garis ulir di pangkal.
     canvas.drawLine(
       Offset((cx - 1.6) * sx, 17.6 * sy),
       Offset((cx + 1.6) * sx, 17.6 * sy),
       paint,
     );
 
-    // 3. Bottom rounded cap
+    // 3. Tutup bawah yang membulat.
     final cap = Path();
     cap.moveTo((cx - 1.0) * sx, 19.3 * sy);
     cap.quadraticBezierTo(cx * sx, 20.6 * sy, (cx + 1.0) * sx, 19.3 * sy);
     canvas.drawPath(cap, paint);
 
-    // 4. Upright '+' sparkle at top-right
+    // 4. Tanda '+' tegak di kanan atas.
     const plusX = 17.6;
     const plusY = 5.2;
     canvas.drawLine(

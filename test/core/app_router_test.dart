@@ -1,0 +1,76 @@
+// Test rute yang alamatnya memuat kode pesanan (Lacak Pesanan dan Chat):
+// kode terbaca dari alamat supaya tahan muat ulang web, bentuk lama dengan
+// argumen tetap jalan, dan kode kosong jatuh ke tab Pesanan.
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:kateringkita_pbl/core/app_router.dart';
+import 'package:kateringkita_pbl/core/app_routes.dart';
+import 'package:kateringkita_pbl/screens/navigation/main_navigation_screen.dart';
+import 'package:kateringkita_pbl/screens/orders/order_chat_screen.dart';
+import 'package:kateringkita_pbl/screens/orders/order_tracking_screen.dart';
+
+void main() {
+  /// Halaman yang dibuat [AppRouter.onGenerateRoute] untuk [name].
+  Future<Widget> pageFor(
+    WidgetTester tester,
+    String name, {
+    Object? arguments,
+  }) async {
+    await tester.pumpWidget(const SizedBox());
+    final route = AppRouter.onGenerateRoute(
+      RouteSettings(name: name, arguments: arguments),
+    ) as MaterialPageRoute;
+    return route.builder(tester.element(find.byType(SizedBox)));
+  }
+
+  testWidgets('/order-chat/ABC123 membuka Chat untuk ABC123', (tester) async {
+    final page = await pageFor(tester, AppRoutes.orderChatFor('ABC123'));
+    expect(AppRoutes.orderChatFor('ABC123'), '/order-chat/ABC123');
+    expect((page as OrderChatScreen).orderCode, 'ABC123');
+  });
+
+  testWidgets('/order-tracking/<kode> membuka Lacak Pesanan untuk kode itu', (
+    tester,
+  ) async {
+    final page = await pageFor(
+      tester,
+      AppRoutes.orderTrackingFor('KK-20261124-0001'),
+    );
+    expect((page as OrderTrackingScreen).orderCode, 'KK-20261124-0001');
+  });
+
+  testWidgets('bentuk lama: alamat tanpa kode + kode sebagai argumen', (
+    tester,
+  ) async {
+    final page = await pageFor(tester, AppRoutes.orderChat, arguments: 'KK-7');
+    expect((page as OrderChatScreen).orderCode, 'KK-7');
+  });
+
+  for (final name in [
+    '/order-chat/',
+    '/order-chat',
+    '/order-tracking/%20',
+    '/order-chat/a%2Fb',
+    '/order-chat/%E0',
+  ]) {
+    testWidgets('kode kosong/tidak sah ($name) jatuh ke tab Pesanan', (
+      tester,
+    ) async {
+      final route = AppRouter.onGenerateRoute(RouteSettings(name: name))!;
+      expect(route.settings.name, AppRoutes.mainNav);
+      final page = await pageFor(tester, name);
+      expect(
+        (page as MainNavigationScreen).initialIndex,
+        AppRouter.ordersTabIndex,
+      );
+    });
+  }
+
+  test('rute lain tidak ditangani', () {
+    expect(AppRouter.onGenerateRoute(const RouteSettings(name: '/x')), isNull);
+    expect(
+      AppRouter.onGenerateRoute(const RouteSettings(name: '/order-chatty/1')),
+      isNull,
+    );
+  });
+}

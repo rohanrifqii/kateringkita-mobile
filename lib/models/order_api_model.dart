@@ -1,6 +1,7 @@
-// Model pesanan, pembayaran, dan rincian harga (quote) sebagaimana dikirim backend REST KateringKita.
-// Dibuat oleh OrderRepository dan dipakai layar checkout, pembayaran, daftar pesanan, ulasan, dan form tiket.
-// Semua nominal uang berupa bilangan bulat Rupiah.
+// Model pesanan, pembayaran, rincian harga (quote), jam tiap langkah status, dan keadaan chat sebagaimana
+// dikirim backend REST KateringKita. Dibuat oleh OrderRepository dan dipakai layar checkout, pembayaran, daftar
+// pesanan, Lacak Pesanan, Chat, ulasan, dan form tiket. Semua nominal uang berupa bilangan bulat Rupiah.
+import 'chat_message.dart';
 import 'pickup_point.dart';
 import 'product_model.dart';
 import 'voucher.dart';
@@ -132,7 +133,43 @@ class OrderPayment {
       );
 }
 
-/// Satu pesanan lengkap dari backend, dipakai layar pesanan, pembayaran, dan WhatsApp.
+/// Jam tiap perubahan status pesanan dari server (`timeline`), dalam UTC.
+///
+/// Setiap jam bernilai null bila langkah itu belum terjadi, atau bila server
+/// lama belum mengirim `timeline` sama sekali.
+class OrderTimeline {
+  final DateTime? confirmedAt;
+  final DateTime? cookingAt;
+  final DateTime? readyAt;
+  final DateTime? completedAt;
+  final DateTime? cancelledAt;
+
+  const OrderTimeline({
+    this.confirmedAt,
+    this.cookingAt,
+    this.readyAt,
+    this.completedAt,
+    this.cancelledAt,
+  });
+
+  /// Membaca objek `timeline` dari server.
+  ///
+  /// @param json objek berkunci `confirmed_at`, `cooking_at`, `ready_at`,
+  ///   `completed_at`, dan `cancelled_at`; tiap nilai string ISO UTC atau
+  ///   null. Kunci yang hilang dianggap null.
+  /// @returns jam tiap langkah; null untuk langkah yang belum terjadi.
+  /// @throws FormatException bila sebuah nilai bukan tanggal ISO yang sah.
+  factory OrderTimeline.fromJson(Map<String, dynamic> json) => OrderTimeline(
+        confirmedAt: _dt(json['confirmed_at']),
+        cookingAt: _dt(json['cooking_at']),
+        readyAt: _dt(json['ready_at']),
+        completedAt: _dt(json['completed_at']),
+        cancelledAt: _dt(json['cancelled_at']),
+      );
+}
+
+/// Satu pesanan lengkap dari backend, dipakai layar pesanan, Lacak Pesanan, Chat, pembayaran,
+/// dan WhatsApp.
 ///
 /// [OrderApiModel.fromJson] mengubah objek JSON pesanan menjadi kelas ini; data toko diambil
 /// dari objek `merchant` di dalam JSON tersebut.
@@ -185,6 +222,12 @@ class OrderApiModel {
   /// Rincian pembayaran; null bila backend tidak mengirimnya.
   final OrderPayment? payment;
 
+  /// Jam tiap langkah status; kosong bila server tidak mengirimnya.
+  final OrderTimeline timeline;
+
+  /// Keadaan chat pesanan untuk pembeli; null bila server tidak mengirimnya.
+  final ChatState? chat;
+
   const OrderApiModel({
     required this.code,
     required this.status,
@@ -211,11 +254,20 @@ class OrderApiModel {
     required this.canComplete,
     required this.canReview,
     this.payment,
+    this.timeline = const OrderTimeline(),
+    this.chat,
   });
 
   /// True bila [paymentStatus] bernilai `'paid'` (pesanan sudah dibayar).
   bool get isPaid => paymentStatus == 'paid';
 
+  /// True bila pesanan sudah berakhir (selesai, dibatalkan, atau kedaluwarsa)
+  /// sehingga statusnya tidak akan berubah lagi.
+  bool get isFinished =>
+      status == 'completed' || status == 'cancelled' || status == 'expired';
+
+  /// Membaca satu pesanan dari JSON server. `timeline` yang tidak dikirim menjadi
+  /// [OrderTimeline] kosong, `chat` yang tidak dikirim menjadi null.
   factory OrderApiModel.fromJson(Map<String, dynamic> json) {
     final merchant = json['merchant'] as Map<String, dynamic>;
     return OrderApiModel(
@@ -249,6 +301,12 @@ class OrderApiModel {
       payment: json['payment'] == null
           ? null
           : OrderPayment.fromJson(json['payment'] as Map<String, dynamic>),
+      timeline: json['timeline'] == null
+          ? const OrderTimeline()
+          : OrderTimeline.fromJson(json['timeline'] as Map<String, dynamic>),
+      chat: json['chat'] == null
+          ? null
+          : ChatState.fromJson(json['chat'] as Map<String, dynamic>),
     );
   }
 }

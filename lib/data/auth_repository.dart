@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import '../api/api_client.dart';
 import '../api/api_exception.dart';
 import '../models/api_user.dart';
+import 'presigned_upload.dart';
 import 'token_store.dart';
 
 /// Akun pelanggan lewat REST backend. Token & email sesi disimpan di
@@ -21,19 +22,9 @@ class AuthRepository {
   /// aplikasi). null: klien baru per unggahan.
   final http.Client? _uploadClient;
 
-  /// Batas ukuran foto profil, sama dengan server.
-  static const int avatarMaxBytes = 5242880;
-
-  /// Ekstensi berkas yang diterima → content type yang dikirim ke server.
-  static const _avatarTypes = {
-    'jpg': 'image/jpeg',
-    'jpeg': 'image/jpeg',
-    'png': 'image/png',
-    'webp': 'image/webp',
-  };
-
-  static const _uploadTimeout = Duration(seconds: 60);
-  static const _uploadFailed = 'Gagal mengunggah foto. Coba lagi.';
+  /// Batas ukuran foto profil (5 MB), sama dengan server; diambil dari
+  /// [photoMaxBytes] yang juga dipakai foto chat.
+  static const int avatarMaxBytes = photoMaxBytes;
 
   /// Dipanggil saat [currentUser] mendapati sesi tidak valid (401) dan token
   /// sudah dihapus, supaya status login aplikasi ikut dibersihkan. Hanya
@@ -189,15 +180,12 @@ class AuthRepository {
   }
 
   /// Content type foto dari ekstensi [fileName], atau null bila bukan
-  /// JPG/PNG/WebP.
-  static String? avatarContentType(String fileName) {
-    final dot = fileName.lastIndexOf('.');
-    if (dot < 0) return null;
-    return _avatarTypes[fileName.substring(dot + 1).toLowerCase()];
-  }
+  /// JPG/PNG/WebP. Meneruskan ke [photoContentType] di presigned_upload.dart.
+  static String? avatarContentType(String fileName) =>
+      photoContentType(fileName);
 
   /// Ganti foto profil: minta URL presign (POST /me/avatar), PUT berkas ke
-  /// penyimpanan, lalu simpan public_url ke profil (PATCH /me). Tipe & ukuran
+  /// penyimpanan lewat [putToPresignedUrl], lalu simpan public_url ke profil (PATCH /me). Tipe & ukuran
   /// dicek dulu tanpa jaringan. Galat berupa [ApiException] dengan pesan siap
   /// tampil.
   Future<ApiUser> uploadAvatar({
@@ -218,7 +206,9 @@ class AuthRepository {
       const ['content_type', 'size'],
     );
     final data = res.data as Map<String, dynamic>;
-    await _putToStorage(Uri.parse(data['upload_url'] as String), type, bytes);
+    await putToPresignedUrl(
+        Uri.parse(data['upload_url'] as String), type, bytes,
+        client: _uploadClient);
     return _setAvatarUrl(data['public_url'] as String);
   }
 
@@ -231,29 +221,6 @@ class AuthRepository {
         () => _api.patch('/me', body: {'avatar_url': url}),
         const ['avatar_url'],
       ));
-
-  /// PUT mentah ke URL presign. Content-Type & Content-Length ikut
-  /// ditandatangani, jadi harus persis [type] dan panjang [bytes].
-  Future<void> _putToStorage(Uri url, String type, Uint8List bytes) async {
-    final client = _uploadClient ?? http.Client();
-    final req = http.Request('PUT', url)
-      ..headers['Content-Type'] = type
-      ..bodyBytes = bytes;
-    var status = 0;
-    try {
-      final res = await client.send(req).timeout(_uploadTimeout);
-      await res.stream.drain<void>();
-      status = res.statusCode;
-    } catch (_) {
-      // Jaringan putus / waktu habis: sama dengan gagal unggah.
-    } finally {
-      if (_uploadClient == null) client.close();
-    }
-    if (status < 200 || status >= 300) {
-      throw ApiException(
-          status: status, code: 'UPLOAD_FAILED', message: _uploadFailed);
-    }
-  }
 
   /// Galat validasi server memakai pesan kolom pertama dari [keys], lebih
   /// jelas daripada "Data tidak valid.".
